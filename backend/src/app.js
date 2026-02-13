@@ -8,6 +8,7 @@ const requestId = require('./middleware/requestId');
 const requestLogger = require('./middleware/requestLogger');
 const errorHandler = require('./middleware/errorHandler');
 const { authRequired } = require('./middleware/auth');
+const pool = require('./db');
 
 const dashboardRoutes = require('./routes/dashboard');
 const masterRoutes = require('./routes/master');
@@ -35,7 +36,19 @@ app.use(express.urlencoded({ extended: false }));
 app.use(requestId);
 app.use(requestLogger);
 
-app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ ok: true, db: true });
+  } catch (e) {
+    res.status(503).json({
+      ok: false,
+      db: false,
+      message: 'Database tidak terkoneksi.',
+      code: e.code || 'DB_UNAVAILABLE'
+    });
+  }
+});
 
 app.use('/api/auth', authRoutes);
 

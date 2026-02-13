@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import api from '../api';
+import { toast } from '../utils/toast';
 
 const AuthContext = createContext(null);
 
@@ -19,6 +20,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        await api.get('/health', { skipToast: true });
+      } catch (e) {
+        const message = e?.response?.data?.message || 'Database tidak terkoneksi.';
+        toast.error(message);
+      }
+    };
+    checkHealth();
     loadMe();
   }, []);
 

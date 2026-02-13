@@ -15,7 +15,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Username atau password salah.' });
     }
     res.cookie(TOKEN_COOKIE, result.token, buildCookieOptions());
-    res.json({ success: true, user: result.user });
+    res.json({ success: true, message: 'Login berhasil.', user: result.user });
   } catch (e) {
     next(e);
   }
