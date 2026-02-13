@@ -3,7 +3,9 @@ import api from '../api';
 import { toast } from '../utils/toast';
 
 const AuthContext = createContext(null);
-const isBypassEnabled = String(import.meta.env.VITE_AUTH_BYPASS || '').toLowerCase() === 'true';
+const isBypassEnabled =
+  !import.meta.env.PROD &&
+  String(import.meta.env.VITE_AUTH_BYPASS || '').toLowerCase() === 'true';
 const BYPASS_USER = { id: 0, username: 'admin', role: 'admin', display_name: 'Administrator' };
 
 export const AuthProvider = ({ children }) => {

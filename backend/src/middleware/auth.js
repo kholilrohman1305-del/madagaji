@@ -3,7 +3,9 @@ const { getUserById } = require('../services/authService');
 const { TOKEN_COOKIE } = require('../services/authService');
 
 function isAuthBypassEnabled() {
-  return String(process.env.AUTH_BYPASS || '').toLowerCase() === 'true';
+  const bypass = String(process.env.AUTH_BYPASS || '').toLowerCase() === 'true';
+  const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+  return bypass && !isProduction;
 }
 
 async function authRequired(req, res, next) {
