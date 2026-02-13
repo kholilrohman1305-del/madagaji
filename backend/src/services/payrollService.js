@@ -1,4 +1,5 @@
 const pool = require('../db');
+const masterPool = pool.master;
 const { monthKey } = require('../utils/date');
 const { TTLCache } = require('../utils/cache');
 
@@ -152,7 +153,6 @@ async function deleteOtherExpense(id) {
 
 async function getTeacherAttendanceSummary(startDate, endDate) {
   const configMap = await getConfigMap();
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
 
   const TARIFFS = {
     RATE_MENGAJAR: parseFloat(configMap.get('RATE_MENGAJAR')) || 0,
@@ -187,13 +187,18 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     return 'NON SERTIFIKASI';
   };
 
-  const [teacherTasksRows] = await pool.query(
-    `SELECT tt.id, tt.teacher_id, tt.title, r.nominal
-     FROM ${masterDb}.teacher_tasks tt
-     LEFT JOIN ${process.env.DB_NAME}.teacher_task_rates r ON r.task_id = tt.id
-     WHERE tt.status = 'aktif'
-     ORDER BY tt.teacher_id, tt.id`
+  const [teacherTasksRowsRaw] = await masterPool.query(
+    `SELECT id, teacher_id, title
+     FROM teacher_tasks
+     WHERE status = 'aktif'
+     ORDER BY teacher_id, id`
   );
+  const [taskRates] = await pool.query('SELECT task_id, nominal FROM teacher_task_rates');
+  const taskRateMap = new Map(taskRates.map(r => [String(r.task_id), Number(r.nominal || 0)]));
+  const teacherTasksRows = teacherTasksRowsRaw.map(r => ({
+    ...r,
+    nominal: taskRateMap.get(String(r.id)) || 0
+  }));
   const teacherTasksMap = new Map();
   teacherTasksRows.forEach(r => {
     const key = String(r.teacher_id);
@@ -221,7 +226,7 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
   );
   const activityMap = new Map(activityRows.map(r => [String(r.guru_id), parseInt(r.total) || 0]));
 
-  const [guruRows] = await pool.query(`SELECT id, name, tmt, classification FROM ${masterDb}.teachers WHERE is_active=1`);
+  const [guruRows] = await masterPool.query('SELECT id, name, tmt, classification FROM teachers WHERE is_active=1');
   const guruMap = new Map();
   guruRows.forEach(r => {
     const tmtYear = (() => {

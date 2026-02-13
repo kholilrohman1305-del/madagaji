@@ -1,4 +1,5 @@
 const pool = require('../db');
+const masterPool = pool.master;
 const { TTLCache } = require('../utils/cache');
 
 const masterCacheTtl = Number(process.env.MASTER_CACHE_TTL_MS || 5000);
@@ -21,7 +22,6 @@ async function getAllMasterData() {
   const cached = masterCache.get(CACHE_KEYS.MASTER);
   if (cached) return cached;
 
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
   const [
     [guruRows],
     [tugasRows],
@@ -30,10 +30,10 @@ async function getAllMasterData() {
     [piketRows],
     [kategoriRows]
   ] = await Promise.all([
-    pool.query(`SELECT id AS id, name AS nama FROM ${masterDb}.teachers WHERE is_active=1 ORDER BY name`),
+    masterPool.query('SELECT id AS id, name AS nama FROM teachers WHERE is_active=1 ORDER BY name'),
     pool.query('SELECT tugas_id AS id, nama FROM honor_tugas ORDER BY nama'),
-    pool.query(`SELECT id AS id, name AS nama FROM ${masterDb}.subjects WHERE is_active=1 ORDER BY name`),
-    pool.query(`SELECT id, name AS nama FROM ${masterDb}.classes ORDER BY name`),
+    masterPool.query('SELECT id AS id, name AS nama FROM subjects WHERE is_active=1 ORDER BY name'),
+    masterPool.query('SELECT id, name AS nama FROM classes ORDER BY name'),
     pool.query('SELECT nama FROM piket ORDER BY nama'),
     pool.query('SELECT nama FROM kategori_pengeluaran ORDER BY nama')
   ]);
@@ -51,12 +51,11 @@ async function getAllMasterData() {
 }
 
 async function getAllTeachers() {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  const [rows] = await pool.query(
+  const [rows] = await masterPool.query(
     `SELECT t.id, t.name, t.classification, t.tmt,
             GROUP_CONCAT(tt.title ORDER BY tt.id SEPARATOR ', ') AS tugas_tambahan
-     FROM ${masterDb}.teachers t
-     LEFT JOIN ${masterDb}.teacher_tasks tt
+     FROM teachers t
+     LEFT JOIN teacher_tasks tt
        ON tt.teacher_id = t.id AND tt.status = 'aktif'
      WHERE t.is_active=1
      GROUP BY t.id, t.name, t.classification, t.tmt
@@ -79,9 +78,8 @@ async function addTeacher(data) {
 }
 
 async function updateTeacher(data) {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  await pool.query(
-    `UPDATE ${masterDb}.teachers SET name=?, classification=?, tmt=? WHERE id=?`,
+  await masterPool.query(
+    'UPDATE teachers SET name=?, classification=?, tmt=? WHERE id=?',
     [data.nama, data.klasifikasi || null, data.tmt || null, data.guruId]
   );
   invalidateMasterCache();
@@ -130,17 +128,15 @@ async function deleteTugas(id) {
 }
 
 async function getAllMapel() {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  const [rows] = await pool.query(
-    `SELECT id, code, name FROM ${masterDb}.subjects WHERE is_active=1 ORDER BY name`
+  const [rows] = await masterPool.query(
+    'SELECT id, code, name FROM subjects WHERE is_active=1 ORDER BY name'
   );
   return rows.map((r, idx) => ({ rowId: idx + 1, id: r.id, kode: r.code, nama: r.name }));
 }
 
 async function addMapel(data) {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  await pool.query(
-    `INSERT INTO ${masterDb}.subjects (code, name, is_active) VALUES (?,?,1)`,
+  await masterPool.query(
+    'INSERT INTO subjects (code, name, is_active) VALUES (?,?,1)',
     [data.kode, data.nama]
   );
   invalidateMasterCache();
@@ -148,23 +144,20 @@ async function addMapel(data) {
 }
 
 async function updateMapel(data) {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  await pool.query(`UPDATE ${masterDb}.subjects SET code=?, name=? WHERE id=?`, [data.kode, data.nama, data.id]);
+  await masterPool.query('UPDATE subjects SET code=?, name=? WHERE id=?', [data.kode, data.nama, data.id]);
   invalidateMasterCache();
   return { success: true, message: 'Data mapel berhasil diperbarui.' };
 }
 
 async function deleteMapel(id) {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  await pool.query(`UPDATE ${masterDb}.subjects SET is_active=0 WHERE id=?`, [id]);
+  await masterPool.query('UPDATE subjects SET is_active=0 WHERE id=?', [id]);
   invalidateMasterCache();
   return { success: true, message: 'Mapel dinonaktifkan di master.' };
 }
 
 async function getOtherData(type) {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
   if (type === 'Kelas') {
-    const [rows] = await pool.query(`SELECT id, name AS nama FROM ${masterDb}.classes ORDER BY name`);
+    const [rows] = await masterPool.query('SELECT id, name AS nama FROM classes ORDER BY name');
     return rows.map(r => ({ rowId: r.id, nama: r.nama }));
   }
   if (type === 'Piket') {
@@ -179,8 +172,7 @@ async function getOtherData(type) {
 }
 
 async function addOtherData(type, name) {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  if (type === 'Kelas') await pool.query(`INSERT INTO ${masterDb}.classes (name) VALUES (?)`, [name]);
+  if (type === 'Kelas') await masterPool.query('INSERT INTO classes (name) VALUES (?)', [name]);
   if (type === 'Piket') await pool.query('INSERT INTO piket (nama) VALUES (?)', [name]);
   if (type === 'Kategori_Pengeluaran') await pool.query('INSERT INTO kategori_pengeluaran (nama) VALUES (?)', [name]);
   invalidateMasterCache();
@@ -188,8 +180,7 @@ async function addOtherData(type, name) {
 }
 
 async function updateOtherData(type, id, name) {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  if (type === 'Kelas') await pool.query(`UPDATE ${masterDb}.classes SET name=? WHERE id=?`, [name, id]);
+  if (type === 'Kelas') await masterPool.query('UPDATE classes SET name=? WHERE id=?', [name, id]);
   if (type === 'Piket') await pool.query('UPDATE piket SET nama=? WHERE id=?', [name, id]);
   if (type === 'Kategori_Pengeluaran') await pool.query('UPDATE kategori_pengeluaran SET nama=? WHERE id=?', [name, id]);
   invalidateMasterCache();
@@ -222,18 +213,17 @@ async function updateBisyarohSettings(settings) {
 }
 
 async function getTeacherTasksWithRates() {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  const localDb = process.env.DB_NAME;
-  const [rows] = await pool.query(
+  const [tasks] = await masterPool.query(
     `SELECT tt.id, tt.teacher_id, tt.title, tt.description, tt.start_date, tt.end_date, tt.status,
-            t.name AS teacher_name,
-            r.nominal
-     FROM ${masterDb}.teacher_tasks tt
-     LEFT JOIN ${masterDb}.teachers t ON t.id = tt.teacher_id
-     LEFT JOIN ${localDb}.teacher_task_rates r ON r.task_id = tt.id
+            t.name AS teacher_name
+     FROM teacher_tasks tt
+     LEFT JOIN teachers t ON t.id = tt.teacher_id
      WHERE tt.status = 'aktif'
      ORDER BY tt.id DESC`
   );
+  const [rates] = await pool.query('SELECT task_id, nominal FROM teacher_task_rates');
+  const rateMap = new Map(rates.map(r => [String(r.task_id), Number(r.nominal || 0)]));
+  const rows = tasks.map(t => ({ ...t, nominal: rateMap.get(String(t.id)) ?? 0 }));
   return rows.map(r => ({
     id: r.id,
     teacherId: r.teacher_id,

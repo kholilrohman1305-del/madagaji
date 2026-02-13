@@ -1,4 +1,5 @@
 const pool = require('../db');
+const masterPool = pool.master;
 const { TTLCache } = require('../utils/cache');
 
 const scheduleCacheTtl = Number(process.env.SCHEDULE_CACHE_TTL_MS || 5000);
@@ -16,7 +17,6 @@ function invalidateScheduleCache() {
 }
 
 async function getSchedule(filters = {}) {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
   const key = cacheKey(filters);
   const cached = scheduleCache.get(key);
   if (cached) return cached;
@@ -37,18 +37,30 @@ async function getSchedule(filters = {}) {
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-  const [rows] = await pool.query(
-    `SELECT j.id, j.hari, j.jam_ke, j.kelas, j.mapel_id, j.guru_id,
-            m.name AS nama_mapel, g.name AS nama_guru, c.name AS nama_kelas
-     FROM jadwal j
-     LEFT JOIN ${masterDb}.subjects m ON m.id = j.mapel_id
-     LEFT JOIN ${masterDb}.teachers g ON g.id = j.guru_id
-     LEFT JOIN ${masterDb}.classes c ON c.id = j.kelas
-     ${whereSql}
-     ORDER BY j.hari, j.jam_ke, j.kelas`,
-    params
-  );
-  const result = rows.map((r, idx) => ({
+  const [rows, teachers, subjects, classes] = await Promise.all([
+    pool.query(
+      `SELECT j.id, j.hari, j.jam_ke, j.kelas, j.mapel_id, j.guru_id
+       FROM jadwal j
+       ${whereSql}
+       ORDER BY j.hari, j.jam_ke, j.kelas`,
+      params
+    ),
+    masterPool.query('SELECT id, name FROM teachers WHERE is_active=1'),
+    masterPool.query('SELECT id, name FROM subjects WHERE is_active=1'),
+    masterPool.query('SELECT id, name FROM classes')
+  ]);
+
+  const teacherMap = new Map(teachers[0].map(r => [String(r.id), r.name]));
+  const subjectMap = new Map(subjects[0].map(r => [String(r.id), r.name]));
+  const classMap = new Map(classes[0].map(r => [String(r.id), r.name]));
+
+  const mergedRows = rows[0].map(r => ({
+    ...r,
+    nama_mapel: subjectMap.get(String(r.mapel_id)) || String(r.mapel_id),
+    nama_guru: teacherMap.get(String(r.guru_id)) || String(r.guru_id),
+    nama_kelas: classMap.get(String(r.kelas)) || String(r.kelas)
+  }));
+  const result = mergedRows.map((r, idx) => ({
     rowId: idx + 1,
     id: r.id,
     hari: r.hari,

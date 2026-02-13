@@ -1,4 +1,5 @@
 const pool = require('../db');
+const masterPool = pool.master;
 const { TTLCache } = require('../utils/cache');
 const { formatDateToYMD, monthKey } = require('../utils/date');
 
@@ -30,23 +31,33 @@ async function clearHoliday(dateString) {
 async function getScheduleAndAttendance(dateString) {
   const targetDate = new Date(dateString);
   const dayName = DAY_NAMES[targetDate.getDay()];
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
 
   const holiday = await getHoliday(formatDateToYMD(targetDate));
 
   let scheduleRows = scheduleDayCache.get(dayName);
   if (!scheduleRows) {
-    const [rows] = await pool.query(
-      `SELECT j.id, j.hari, j.jam_ke, j.kelas, j.mapel_id, j.guru_id,
-              g.name AS nama_guru, m.name AS nama_mapel, c.name AS nama_kelas
-       FROM jadwal j
-       LEFT JOIN ${masterDb}.teachers g ON g.id = j.guru_id
-       LEFT JOIN ${masterDb}.subjects m ON m.id = j.mapel_id
-       LEFT JOIN ${masterDb}.classes c ON c.id = j.kelas
-       WHERE j.hari = ?`,
-      [dayName]
-    );
-    scheduleRows = rows;
+    const [rows, teachers, subjects, classes] = await Promise.all([
+      pool.query(
+        `SELECT id, hari, jam_ke, kelas, mapel_id, guru_id
+         FROM jadwal
+         WHERE hari = ?`,
+        [dayName]
+      ),
+      masterPool.query('SELECT id, name FROM teachers WHERE is_active=1'),
+      masterPool.query('SELECT id, name FROM subjects WHERE is_active=1'),
+      masterPool.query('SELECT id, name FROM classes')
+    ]);
+
+    const teacherMap = new Map(teachers[0].map(r => [String(r.id), r.name]));
+    const subjectMap = new Map(subjects[0].map(r => [String(r.id), r.name]));
+    const classMap = new Map(classes[0].map(r => [String(r.id), r.name]));
+
+    scheduleRows = rows[0].map(r => ({
+      ...r,
+      nama_guru: teacherMap.get(String(r.guru_id)) || String(r.guru_id),
+      nama_mapel: subjectMap.get(String(r.mapel_id)) || String(r.mapel_id),
+      nama_kelas: classMap.get(String(r.kelas)) || String(r.kelas)
+    }));
     scheduleDayCache.set(dayName, scheduleRows, scheduleDayCacheTtl);
   }
 
@@ -153,8 +164,7 @@ async function getMonitorData(dateString) {
 }
 
 async function getTeacherStatistics(startDateString, endDateString) {
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  const [guruRows] = await pool.query(`SELECT id, name FROM ${masterDb}.teachers WHERE is_active=1 ORDER BY name`);
+  const [guruRows] = await masterPool.query('SELECT id, name FROM teachers WHERE is_active=1 ORDER BY name');
   const allTeachers = guruRows.map(r => ({ guruId: String(r.id), nama: r.name }));
 
   const [jadwalRows] = await pool.query('SELECT hari, guru_id FROM jadwal');

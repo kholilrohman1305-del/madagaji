@@ -2,6 +2,7 @@ const { getScheduleAndAttendance } = require('./attendanceService');
 const { getFinancialSummary } = require('./payrollService');
 const { TTLCache } = require('../utils/cache');
 const pool = require('../db');
+const masterPool = pool.master;
 
 const dashCache = new TTLCache(5000);
 const CACHE_KEY = 'dashboard';
@@ -39,9 +40,8 @@ async function getDashboardData() {
   const absentCount = new Set(absentTeachersList.map(item => item.guruId)).size;
   const presentCount = new Set(presentTeachersList.map(item => item.guruId)).size;
 
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  const [[{ totalGuru }]] = await pool.query(`SELECT COUNT(*) AS totalGuru FROM ${masterDb}.teachers WHERE is_active=1`);
-  const [[{ totalKelas }]] = await pool.query(`SELECT COUNT(*) AS totalKelas FROM ${masterDb}.classes`);
+  const [[{ totalGuru }]] = await masterPool.query('SELECT COUNT(*) AS totalGuru FROM teachers WHERE is_active=1');
+  const [[{ totalKelas }]] = await masterPool.query('SELECT COUNT(*) AS totalKelas FROM classes');
 
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);

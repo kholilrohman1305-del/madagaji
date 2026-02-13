@@ -1,4 +1,5 @@
 const pool = require('../../db');
+const masterPool = pool.master;
 const { TTLCache } = require('../../utils/cache');
 
 const metaCacheTtl = Number(process.env.SCHEDULER_META_CACHE_TTL_MS || 30000);
@@ -19,8 +20,7 @@ function invalidateMetaCache() {
 async function getTeachers() {
   const cached = cacheGet('teachers');
   if (cached) return cached;
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  const [rows] = await pool.query(`SELECT id, name FROM ${masterDb}.teachers WHERE is_active=1 ORDER BY name`);
+  const [rows] = await masterPool.query('SELECT id, name FROM teachers WHERE is_active=1 ORDER BY name');
   cacheSet('teachers', rows);
   return rows;
 }
@@ -28,8 +28,7 @@ async function getTeachers() {
 async function getSubjects() {
   const cached = cacheGet('subjects');
   if (cached) return cached;
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  const [rows] = await pool.query(`SELECT id, code, name FROM ${masterDb}.subjects WHERE is_active=1 ORDER BY name`);
+  const [rows] = await masterPool.query('SELECT id, code, name FROM subjects WHERE is_active=1 ORDER BY name');
   cacheSet('subjects', rows);
   return rows;
 }
@@ -37,8 +36,7 @@ async function getSubjects() {
 async function getClasses() {
   const cached = cacheGet('classes');
   if (cached) return cached;
-  const masterDb = process.env.DB_MASTER_NAME || process.env.DB_NAME;
-  const [rows] = await pool.query(`SELECT id, name FROM ${masterDb}.classes ORDER BY name`);
+  const [rows] = await masterPool.query('SELECT id, name FROM classes ORDER BY name');
   cacheSet('classes', rows);
   return rows;
 }
