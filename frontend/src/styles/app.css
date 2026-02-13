@@ -877,22 +877,98 @@ input[type="checkbox"] {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background:
-    radial-gradient(circle at 20% 20%, #dbeafe 0%, transparent 35%),
-    radial-gradient(circle at 80% 10%, #fbcfe8 0%, transparent 35%),
-    radial-gradient(circle at 50% 80%, #d1fae5 0%, transparent 40%),
-    linear-gradient(135deg, #eef2ff 0%, #f8fafc 60%, #e2e8f0 100%);
-  padding: 24px;
+  background: linear-gradient(135deg, #0b122b 0%, #10193d 45%, #162459 100%);
+  padding: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(8px);
+  opacity: 0.45;
+  animation: loginFloat 10s ease-in-out infinite;
+}
+
+.login-orb-a {
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle at 30% 30%, #3b82f6 0%, #2563eb 42%, transparent 70%);
+  top: -120px;
+  left: -80px;
+}
+
+.login-orb-b {
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle at 30% 30%, #06b6d4 0%, #14b8a6 45%, transparent 72%);
+  right: -150px;
+  bottom: -180px;
+  animation-delay: -4s;
+}
+
+.login-grid {
+  width: min(1040px, 100%);
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 28px;
+  align-items: center;
+  z-index: 1;
+}
+
+.login-hero {
+  color: #e2e8f0;
+  padding: 12px 8px;
+}
+
+.login-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(15, 23, 42, 0.35);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  margin-bottom: 16px;
+}
+
+.login-hero h1 {
+  margin: 0 0 12px;
+  font-family: 'Sora', sans-serif;
+  font-size: clamp(38px, 6vw, 60px);
+  line-height: 1.02;
+  color: #f8fafc;
+}
+
+.login-hero p {
+  margin: 0 0 22px;
+  max-width: 520px;
+  color: #cbd5e1;
+  line-height: 1.65;
+}
+
+.login-feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  color: #e2e8f0;
+  font-weight: 600;
 }
 
 .login-card {
-  width: min(420px, 100%);
-  background: rgba(255, 255, 255, 0.92);
-  border-radius: 22px;
-  padding: 30px;
-  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.15);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  backdrop-filter: blur(6px);
+  width: min(460px, 100%);
+  justify-self: end;
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: 26px;
+  padding: 30px 28px;
+  box-shadow: 0 26px 70px rgba(2, 6, 23, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  backdrop-filter: blur(12px);
+  animation: loginEnter 420ms ease-out both;
 }
 
 .login-title {
@@ -901,27 +977,100 @@ input[type="checkbox"] {
   gap: 10px;
   font-weight: 700;
   font-size: 20px;
-  margin-bottom: 20px;
-  color: #1e293b;
+  margin-bottom: 16px;
+  color: #0f172a;
 }
 
 .login-form {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+}
+
+.login-form label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #475569;
 }
 
 .login-form input {
   width: 100%;
-  border-radius: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 13px 14px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.login-form input:focus {
+  outline: none;
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
 }
 
 .login-form button {
-  margin-top: 8px;
-  border-radius: 12px;
+  margin-top: 10px;
+  border-radius: 14px;
   padding: 12px 16px;
-  font-weight: 600;
+  font-weight: 700;
+  border: none;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 52%, #0ea5e9 100%);
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.35);
+  cursor: pointer;
+}
+
+.login-form button:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.login-footnote {
+  margin: 14px 4px 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+@keyframes loginFloat {
+  0%, 100% {
+    transform: translateY(0) translateX(0) scale(1);
+  }
+  50% {
+    transform: translateY(-12px) translateX(8px) scale(1.03);
+  }
+}
+
+@keyframes loginEnter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 980px) {
+  .login-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .login-hero {
+    text-align: center;
+  }
+
+  .login-chip {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .login-card {
+    justify-self: center;
+  }
 }
 
 .profile-grid {
