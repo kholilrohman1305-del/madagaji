@@ -3,21 +3,16 @@ import api from '../api';
 import { toast } from '../utils/toast';
 
 const AuthContext = createContext(null);
+const BYPASS_USER = {
+  id: 0,
+  username: 'admin',
+  role: 'admin',
+  display_name: 'Administrator'
+};
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const loadMe = async () => {
-    try {
-      const res = await api.get('/auth/me', { skipToast: true });
-      setUser(res.data?.user || null);
-    } catch {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [user, setUser] = useState(BYPASS_USER);
+  const [loading] = useState(false);
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -29,18 +24,15 @@ export const AuthProvider = ({ children }) => {
       }
     };
     checkHealth();
-    loadMe();
   }, []);
 
   const login = async (username, password) => {
-    const res = await api.post('/auth/login', { username, password });
-    setUser(res.data?.user || null);
-    return res;
+    setUser(BYPASS_USER);
+    return { data: { success: true, message: 'Login dilewati.', user: BYPASS_USER } };
   };
 
   const logout = async () => {
-    await api.post('/auth/logout', {}, { skipToast: true });
-    setUser(null);
+    setUser(BYPASS_USER);
   };
 
   const value = useMemo(() => ({
