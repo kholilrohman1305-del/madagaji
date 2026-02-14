@@ -1,9 +1,15 @@
-# App Administration (Scaffold)
+# App Administration
 
 Fungsi fase ini:
-- Endpoint health
+- Endpoint health + DB check
 - Validasi JWT shared
-- Contoh route admin
+- Modul Surat:
+  - `GET|POST|PUT|DELETE /api/letters`
+- Modul Inventaris:
+  - `GET|POST|PUT|DELETE /api/inventory`
+- Modul Peminjaman:
+  - `GET|POST /api/borrowing`
+  - `POST /api/borrowing/:id/return`
 
 Run:
 ```bash

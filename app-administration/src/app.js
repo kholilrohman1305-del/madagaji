@@ -4,6 +4,10 @@ const cors = require('cors');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const { validateJWT, requireRole } = require('../../shared-lib/src');
+const { db1 } = require('./db');
+const lettersRoutes = require('./routes/letters');
+const inventoryRoutes = require('./routes/inventory');
+const borrowingRoutes = require('./routes/borrowing');
 
 const app = express();
 
@@ -29,13 +33,31 @@ app.use(cors({
 app.use(cookieParser());
 app.use(express.json());
 
-app.get('/api/health', (req, res) => res.json({ ok: true, app: 'administration' }));
+app.get('/api/health', async (req, res) => {
+  let dbMain = false;
+  try {
+    await db1.query('SELECT 1');
+    dbMain = true;
+    res.json({ ok: true, app: 'administration', dbMain });
+  } catch (e) {
+    res.status(503).json({
+      ok: false,
+      app: 'administration',
+      dbMain,
+      message: 'Database tidak terkoneksi.',
+      code: e.code || 'DB_UNAVAILABLE'
+    });
+  }
+});
 
 app.use('/api', validateJWT);
 app.get('/api/me', (req, res) => res.json({ success: true, user: req.auth }));
 app.get('/api/tu-admin', requireRole('admin'), (req, res) => {
   res.json({ success: true, message: 'Administration admin route active.' });
 });
+app.use('/api/letters', lettersRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/borrowing', borrowingRoutes);
 
 app.use((err, req, res, next) => {
   res.status(err.status || 500).json({

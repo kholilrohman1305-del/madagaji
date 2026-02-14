@@ -35,16 +35,23 @@ Next coding:
 - connect finance frontend menus to app-finance base URL
 
 ## Phase 5 - Administration App
-Status: `bootstrap done`
+Status: `in progress`
 
 Deliverables:
 - `app-administration/` scaffold
 - shared JWT validation from `shared-lib`
 - health endpoint and protected sample route
+- APIs added:
+  - `GET|POST|PUT|DELETE /api/letters`
+  - `GET|POST|PUT|DELETE /api/inventory`
+  - `GET|POST /api/borrowing`
+  - `POST /api/borrowing/:id/return`
+- DB migration file:
+  - `sql/migration_administration_phase5.sql`
 
 Next coding:
-- surat masuk/keluar module
-- inventaris and peminjaman module
+- connect administration frontend pages to app-administration API
+- add report endpoints (surat, inventaris, peminjaman)
 
 ## Phase 6 - Testing & Launch
 Status: `ops checklist prepared`
