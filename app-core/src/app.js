@@ -9,6 +9,7 @@ const { authRequired } = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const masterRoutes = require('./routes/master');
+const platformRoutes = require('./routes/platform');
 
 function normalizeOrigin(origin) {
   return String(origin || '').trim().replace(/\/+$/, '');
@@ -65,6 +66,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', authRequired);
 app.use('/api/users', userRoutes);
 app.use('/api/master', masterRoutes);
+app.use('/api/platform', platformRoutes);
 
 app.use((err, req, res, next) => {
   const status = err.status || 500;

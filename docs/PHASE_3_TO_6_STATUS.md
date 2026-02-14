@@ -54,11 +54,15 @@ Next coding:
 - add report endpoints (surat, inventaris, peminjaman)
 
 ## Phase 6 - Testing & Launch
-Status: `ops checklist prepared`
+Status: `in progress`
 
 Deliverables:
 - `deploy/nginx/sekolah.conf` reverse proxy template
 - health contract across apps (core + domain apps)
+- `app-core` aggregate health endpoint:
+  - `GET /api/platform/health` (admin)
+- runbook:
+  - `docs/PHASE_6_RUNBOOK.md`
 
 Go-live checklist:
 1. Set same JWT env on all apps (`JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE`)
