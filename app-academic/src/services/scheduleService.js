@@ -45,4 +45,61 @@ async function listSchedule({ hari = '', kelas = '', guruId = '' } = {}) {
   }));
 }
 
-module.exports = { listSchedule };
+async function addSchedule(data) {
+  if (!Array.isArray(data.jamKe) || data.jamKe.length === 0) {
+    throw new Error('Tidak ada jam pelajaran yang dipilih.');
+  }
+  const jamList = data.jamKe.map(j => String(j));
+
+  const [classConflicts] = await db1.query(
+    'SELECT jam_ke FROM jadwal WHERE hari=? AND kelas=? AND jam_ke IN (?)',
+    [data.hari, data.kelas, jamList]
+  );
+  if (classConflicts.length > 0) {
+    throw new Error(`Jadwal bentrok untuk kelas ${data.kelas} pada hari ${data.hari}, jam ke-${classConflicts[0].jam_ke}.`);
+  }
+
+  const [last] = await db1.query('SELECT id FROM jadwal ORDER BY id DESC LIMIT 1');
+  let idNum = parseInt(String(last[0]?.id || 'J000').substring(1), 10) || 0;
+  const values = jamList.map(jam => {
+    idNum += 1;
+    return [`J${String(idNum).padStart(3, '0')}`, data.hari, jam, data.kelas, data.mapelId, data.guruId];
+  });
+
+  try {
+    await db1.query('INSERT INTO jadwal (id, hari, jam_ke, kelas, mapel_id, guru_id) VALUES ?', [values]);
+  } catch (e) {
+    if (e.code === 'ER_DUP_ENTRY') throw new Error('Jadwal bentrok. Periksa kelas pada hari dan jam yang sama.');
+    throw e;
+  }
+
+  return { success: true, message: `${values.length} jadwal berhasil ditambahkan.` };
+}
+
+async function updateSchedule(data) {
+  const [classConflicts] = await db1.query(
+    'SELECT id FROM jadwal WHERE id<>? AND hari=? AND jam_ke=? AND kelas=? LIMIT 1',
+    [data.id, data.hari, data.jamKe, data.kelas]
+  );
+  if (classConflicts.length > 0) {
+    throw new Error(`Jadwal bentrok. Kelas ${data.kelas} sudah memiliki jadwal lain pada hari ${data.hari}, jam ke-${data.jamKe}.`);
+  }
+
+  try {
+    await db1.query(
+      'UPDATE jadwal SET hari=?, jam_ke=?, kelas=?, mapel_id=?, guru_id=? WHERE id=?',
+      [data.hari, data.jamKe, data.kelas, data.mapelId, data.guruId, data.id]
+    );
+  } catch (e) {
+    if (e.code === 'ER_DUP_ENTRY') throw new Error('Jadwal bentrok. Periksa kelas pada hari dan jam yang sama.');
+    throw e;
+  }
+  return { success: true, message: 'Jadwal berhasil diperbarui.' };
+}
+
+async function deleteSchedule(id) {
+  await db1.query('DELETE FROM jadwal WHERE id=?', [id]);
+  return { success: true, message: 'Jadwal berhasil dihapus.' };
+}
+
+module.exports = { listSchedule, addSchedule, updateSchedule, deleteSchedule };

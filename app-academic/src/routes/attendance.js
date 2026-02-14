@@ -35,7 +35,8 @@ router.get('/schedule', async (req, res, next) => {
 
 router.post('/bulk', async (req, res, next) => {
   try {
-    await saveBulkAttendance(req.body?.items || []);
+    const payload = Array.isArray(req.body) ? req.body : (req.body?.items || []);
+    await saveBulkAttendance(payload);
     res.json({ success: true, message: 'Kehadiran berhasil disimpan.' });
   } catch (e) {
     next(e);
