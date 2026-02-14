@@ -6,6 +6,7 @@ const {
   upsertHoliday,
   deleteHoliday
 } = require('../services/attendanceService');
+const { getTeacherStatistics } = require('../services/attendanceService');
 
 const router = express.Router();
 
@@ -20,10 +21,35 @@ router.get('/day', async (req, res, next) => {
   }
 });
 
+// compatibility with existing frontend endpoint
+router.get('/schedule', async (req, res, next) => {
+  try {
+    const date = req.query.date;
+    if (!date) return res.status(400).json({ success: false, message: 'date wajib.' });
+    const data = await getDaySchedule(date);
+    res.json(data);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.post('/bulk', async (req, res, next) => {
   try {
     await saveBulkAttendance(req.body?.items || []);
     res.json({ success: true, message: 'Kehadiran berhasil disimpan.' });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/statistics', async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query || {};
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, message: 'startDate dan endDate wajib.' });
+    }
+    const data = await getTeacherStatistics(startDate, endDate);
+    res.json(data);
   } catch (e) {
     next(e);
   }

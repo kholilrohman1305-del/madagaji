@@ -41,4 +41,18 @@ export const academicApi = attachInterceptors(axios.create({ baseURL: academicBa
 export const financeApi = attachInterceptors(axios.create({ baseURL: financeBaseURL, withCredentials: true }));
 export const adminApi = attachInterceptors(axios.create({ baseURL: adminBaseURL, withCredentials: true }));
 
+function pickBaseUrl(url = '') {
+  if (url.startsWith('/schedule') || url.startsWith('/attendance')) return academicBaseURL;
+  if (url.startsWith('/payroll/expenses')) return financeBaseURL;
+  if (url.startsWith('/letters') || url.startsWith('/inventory') || url.startsWith('/borrowing')) return adminBaseURL;
+  return coreBaseURL;
+}
+
+api.interceptors.request.use((config) => {
+  if (config?.baseURL) return config;
+  const next = { ...config };
+  next.baseURL = pickBaseUrl(String(config?.url || ''));
+  return next;
+});
+
 export default api;

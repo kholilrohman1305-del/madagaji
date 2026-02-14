@@ -68,3 +68,18 @@ Auth flow:
 
 Role check:
 - call admin route with guru token => must return `403`.
+
+## 6) Smoke Test Script (local/CI)
+
+```bash
+node scripts/smoke-multi-app.mjs
+```
+
+Optional custom URLs:
+```bash
+CORE_URL=http://127.0.0.1:4100 \
+ACADEMIC_URL=http://127.0.0.1:4200 \
+FINANCE_URL=http://127.0.0.1:4300 \
+ADMIN_URL=http://127.0.0.1:4400 \
+node scripts/smoke-multi-app.mjs
+```

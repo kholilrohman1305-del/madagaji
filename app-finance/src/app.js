@@ -58,6 +58,7 @@ app.get('/api/finance-admin', requireRole('admin'), (req, res) => {
   res.json({ success: true, message: 'Finance admin route active.' });
 });
 app.use('/api/expenses', expenseRoutes);
+app.use('/api/payroll/expenses', expenseRoutes);
 
 app.use((err, req, res, next) => {
   res.status(err.status || 500).json({
