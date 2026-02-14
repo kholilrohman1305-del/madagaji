@@ -24,10 +24,30 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
+function normalizeOrigin(origin) {
+  return String(origin || '').trim().replace(/\/+$/, '');
+}
+
+function parseAllowedOrigins(rawValue) {
+  const fallback = 'http://localhost:5173';
+  const values = String(rawValue || fallback)
+    .split(',')
+    .map(normalizeOrigin)
+    .filter(Boolean);
+  return values.length > 0 ? values : [fallback];
+}
+
+const allowedOrigins = parseAllowedOrigins(process.env.FRONTEND_ORIGIN);
+
 app.use(helmet());
 app.use(compression({ level: Number(process.env.HTTP_COMPRESSION_LEVEL || 6) }));
 app.use(cors({
-  origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    const incoming = normalizeOrigin(origin);
+    if (allowedOrigins.includes(incoming)) return callback(null, true);
+    return callback(new Error('CORS origin not allowed'));
+  },
   credentials: true
 }));
 app.use(cookieParser());
@@ -37,13 +57,29 @@ app.use(requestId);
 app.use(requestLogger);
 
 app.get('/api/health', async (req, res) => {
+  let mainDb = false;
+  let masterDb = false;
   try {
     await pool.query('SELECT 1');
-    res.json({ ok: true, db: true });
+    mainDb = true;
+    if (pool.master) {
+      await pool.master.query('SELECT 1');
+      masterDb = true;
+    } else {
+      masterDb = true;
+    }
+    res.json({
+      ok: true,
+      db: true,
+      dbMain: mainDb,
+      dbMaster: masterDb
+    });
   } catch (e) {
     res.status(503).json({
       ok: false,
       db: false,
+      dbMain: mainDb,
+      dbMaster: masterDb,
       message: 'Database tidak terkoneksi.',
       code: e.code || 'DB_UNAVAILABLE'
     });
