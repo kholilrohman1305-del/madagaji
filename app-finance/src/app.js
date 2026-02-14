@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const { validateJWT, requireRole } = require('../../shared-lib/src');
 const { db1, db2 } = require('./db');
 const expenseRoutes = require('./routes/expenses');
+const payrollRoutes = require('./routes/payroll');
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.get('/api/finance-admin', requireRole('admin'), (req, res) => {
 });
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/payroll/expenses', expenseRoutes);
+app.use('/api/payroll', payrollRoutes);
 
 app.use((err, req, res, next) => {
   res.status(err.status || 500).json({

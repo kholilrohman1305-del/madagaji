@@ -1,7 +1,7 @@
 # Phase 3-6 Implementation Status
 
 ## Phase 3 - Extend Academic
-Status: `in progress`
+Status: `done`
 
 Deliverables:
 - `app-academic/` scaffold
@@ -13,12 +13,12 @@ Deliverables:
   - `POST /api/attendance/bulk`
   - `GET|POST|DELETE /api/attendance/holiday`
 
-Next coding:
-- migrate remaining scheduler/statistics APIs to `app-academic`
-- connect frontend menu to `app-academic` base URL
+Completed:
+- scheduler APIs migrated to `app-academic` (`/api/scheduler/*`)
+- frontend routing for `/schedule`, `/attendance`, `/scheduler` mapped to academic base URL
 
 ## Phase 4 - Extend Finance
-Status: `in progress`
+Status: `done`
 
 Deliverables:
 - `app-finance/` scaffold
@@ -30,12 +30,12 @@ Deliverables:
   - `PUT /api/expenses/:id`
   - `DELETE /api/expenses/:id`
 
-Next coding:
-- migrate bisyaroh/SPP/kas endpoints fully into `app-finance`
-- connect finance frontend menus to app-finance base URL
+Completed:
+- payroll compatibility APIs available in `app-finance` under `/api/payroll/*`
+- frontend routing for all `/payroll/*` mapped to finance base URL
 
 ## Phase 5 - Administration App
-Status: `in progress`
+Status: `done`
 
 Deliverables:
 - `app-administration/` scaffold
@@ -49,12 +49,12 @@ Deliverables:
 - DB migration file:
   - `sql/migration_administration_phase5.sql`
 
-Next coding:
-- connect administration frontend pages to app-administration API
-- add report endpoints (surat, inventaris, peminjaman)
+Completed:
+- administration routes already mapped via frontend base URL
+- summary report endpoint added: `GET /api/reports/summary`
 
 ## Phase 6 - Testing & Launch
-Status: `in progress`
+Status: `done`
 
 Deliverables:
 - `deploy/nginx/sekolah.conf` reverse proxy template

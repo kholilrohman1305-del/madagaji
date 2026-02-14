@@ -8,6 +8,7 @@ const { db1 } = require('./db');
 const lettersRoutes = require('./routes/letters');
 const inventoryRoutes = require('./routes/inventory');
 const borrowingRoutes = require('./routes/borrowing');
+const reportsRoutes = require('./routes/reports');
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.get('/api/tu-admin', requireRole('admin'), (req, res) => {
 app.use('/api/letters', lettersRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/borrowing', borrowingRoutes);
+app.use('/api/reports', reportsRoutes);
 
 app.use((err, req, res, next) => {
   res.status(err.status || 500).json({
