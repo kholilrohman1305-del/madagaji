@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import api from '../api';
-import useMasterData from '../hooks/useMasterData';
+import api, { financeApi } from '../api';
 import { Wallet, Calendar, Plus, Save, Trash2, X, Edit3 } from 'lucide-react';
 
 export default function PengeluaranLain() {
@@ -26,11 +25,23 @@ export default function PengeluaranLain() {
     nominal: 0,
     keterangan: ''
   });
-  const { data: master } = useMasterData();
+  const withFinanceFallback = async (financeCall, legacyCall) => {
+    try {
+      return await financeCall();
+    } catch (e) {
+      const status = e?.response?.status;
+      const isNetwork = e?.code === 'ERR_NETWORK';
+      if (status === 404 || isNetwork) return legacyCall();
+      throw e;
+    }
+  };
 
   const load = async (range) => {
     const params = range || { startDate, endDate };
-    const res = await api.get('/payroll/expenses', { params });
+    const res = await withFinanceFallback(
+      () => financeApi.get('/expenses', { params }),
+      () => api.get('/payroll/expenses', { params })
+    );
     const rows = res.data || [];
     const seen = new Set();
     const unique = rows.filter(r => {
@@ -47,14 +58,18 @@ export default function PengeluaranLain() {
 
   const add = async () => {
     const tanggal = `${form.periode}-01`;
-    await api.post('/payroll/expenses', {
+    const payload = {
       tanggal,
       kategori: form.kategori,
       penerima: '',
       jumlah: form.jumlah,
       nominal: form.nominal,
       keterangan: `Periode ${form.periode}`
-    });
+    };
+    await withFinanceFallback(
+      () => financeApi.post('/expenses', payload),
+      () => api.post('/payroll/expenses', payload)
+    );
     setForm({ ...form, kategori: '', jumlah: 1, nominal: 0 });
     setShowModal(false);
     const firstDay = `${form.periode}-01`;
@@ -78,16 +93,20 @@ export default function PengeluaranLain() {
   };
 
   const saveEdit = async () => {
-    await api.put(`/payroll/expenses/${editForm.id}`, {
-      ...editForm,
-      tanggal: editForm.tanggal
-    });
+    const payload = { ...editForm, tanggal: editForm.tanggal };
+    await withFinanceFallback(
+      () => financeApi.put(`/expenses/${editForm.id}`, payload),
+      () => api.put(`/payroll/expenses/${editForm.id}`, payload)
+    );
     setShowEditModal(false);
     load();
   };
 
   const del = async (id) => {
-    await api.delete(`/payroll/expenses/${id}`);
+    await withFinanceFallback(
+      () => financeApi.delete(`/expenses/${id}`),
+      () => api.delete(`/payroll/expenses/${id}`)
+    );
     load();
   };
 

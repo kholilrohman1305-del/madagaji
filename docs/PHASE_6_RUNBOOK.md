@@ -21,6 +21,14 @@ Set per app:
 - DB credentials (`DB1_*`, `DB2_*`)
 - `FRONTEND_ORIGIN`
 
+Frontend env (`frontend/.env`):
+```env
+VITE_CORE_API_BASE_URL=/api
+VITE_ACADEMIC_API_BASE_URL=/academic/api
+VITE_FINANCE_API_BASE_URL=/finance/api
+VITE_ADMIN_API_BASE_URL=/admin/api
+```
+
 `app-core` optional:
 - `ACADEMIC_BASE_URL`
 - `FINANCE_BASE_URL`
