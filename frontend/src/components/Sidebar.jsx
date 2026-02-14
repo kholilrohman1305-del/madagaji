@@ -17,6 +17,9 @@ import {
   School,
   BookOpen,
   ClipboardList,
+  BookMarked,
+  Landmark,
+  Building2,
   Sparkles,
   User,
   LogOut,
@@ -74,9 +77,13 @@ export default function Sidebar({ hidden, onToggle }) {
         <div className="nav-section">
           <div className="nav-title">Master Data</div>
           <LinkItem to="/data-guru" label="Data Guru" icon={Users} />
+          <LinkItem to="/data-siswa" label="Data Siswa" icon={GraduationCap} />
           <LinkItem to="/data-kelas" label="Data Kelas" icon={School} />
           <LinkItem to="/data-mapel" label="Data Mapel" icon={BookOpen} />
           <LinkItem to="/tugas-tambahan" label="Tugas Tambahan" icon={ClipboardList} />
+          <LinkItem to="/akademik-lanjutan" label="Akademik Lanjutan" icon={BookMarked} />
+          <LinkItem to="/keuangan-sekolah" label="Keuangan Sekolah" icon={Landmark} />
+          <LinkItem to="/administrasi-sekolah" label="Administrasi Sekolah" icon={Building2} />
           <LinkItem to="/users" label="User & Admin" icon={Users} />
         </div>
       )}

@@ -8,6 +8,7 @@ const { db1, db2 } = require('./db');
 const scheduleRoutes = require('./routes/schedule');
 const attendanceRoutes = require('./routes/attendance');
 const schedulerRoutes = require('./routes/scheduler');
+const academicCrudRoutes = require('./routes/academicCrud');
 
 const app = express();
 
@@ -66,6 +67,7 @@ app.get('/api/admin-only', requireRole('admin'), (req, res) => {
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/scheduler', schedulerRoutes);
+app.use('/api', academicCrudRoutes);
 
 app.use((err, req, res, next) => {
   res.status(err.status || 500).json({

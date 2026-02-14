@@ -9,6 +9,7 @@ const lettersRoutes = require('./routes/letters');
 const inventoryRoutes = require('./routes/inventory');
 const borrowingRoutes = require('./routes/borrowing');
 const reportsRoutes = require('./routes/reports');
+const adminCrudRoutes = require('./routes/adminCrud');
 
 const app = express();
 
@@ -60,6 +61,7 @@ app.use('/api/letters', lettersRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/borrowing', borrowingRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api', adminCrudRoutes);
 
 app.use((err, req, res, next) => {
   res.status(err.status || 500).json({

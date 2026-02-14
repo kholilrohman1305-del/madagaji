@@ -1,5 +1,5 @@
 const express = require('express');
-const { getTeachers, getClasses, getSubjects } = require('../services/masterService');
+const { getTeachers, getClasses, getSubjects, getStudents, getEmployees, getAcademicYears } = require('../services/masterService');
 
 const router = express.Router();
 
@@ -22,6 +22,30 @@ router.get('/classes', async (req, res, next) => {
 router.get('/subjects', async (req, res, next) => {
   try {
     res.json(await getSubjects());
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/students', async (req, res, next) => {
+  try {
+    res.json(await getStudents());
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/employees', async (req, res, next) => {
+  try {
+    res.json(await getEmployees());
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/academic-years', async (req, res, next) => {
+  try {
+    res.json(await getAcademicYears());
   } catch (e) {
     next(e);
   }

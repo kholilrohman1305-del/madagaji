@@ -16,6 +16,7 @@ import SlipGaji from './pages/SlipGaji.jsx';
 import PengeluaranLain from './pages/PengeluaranLain.jsx';
 import TotalBisyaroh from './pages/TotalBisyaroh.jsx';
 import DataGuru from './pages/DataGuru.jsx';
+import DataSiswa from './pages/DataSiswa.jsx';
 import DataKelas from './pages/DataKelas.jsx';
 import DataMapel from './pages/DataMapel.jsx';
 import TugasTambahan from './pages/TugasTambahan.jsx';
@@ -27,6 +28,9 @@ import CetakBisyaroh from './pages/CetakBisyaroh.jsx';
 import Login from './pages/Login.jsx';
 import Profile from './pages/Profile.jsx';
 import Users from './pages/Users.jsx';
+import AkademikLanjutan from './pages/AkademikLanjutan.jsx';
+import KeuanganSekolah from './pages/KeuanganSekolah.jsx';
+import AdministrasiSekolah from './pages/AdministrasiSekolah.jsx';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -69,9 +73,13 @@ export default function App() {
                   <Route path="/pengeluaran-lain" element={<RoleRoute roles={['admin']}><PengeluaranLain /></RoleRoute>} />
                   <Route path="/total-bisyaroh" element={<RoleRoute roles={['admin']}><TotalBisyaroh /></RoleRoute>} />
                   <Route path="/data-guru" element={<RoleRoute roles={['admin']}><DataGuru /></RoleRoute>} />
+                  <Route path="/data-siswa" element={<RoleRoute roles={['admin']}><DataSiswa /></RoleRoute>} />
                   <Route path="/data-kelas" element={<RoleRoute roles={['admin']}><DataKelas /></RoleRoute>} />
                   <Route path="/data-mapel" element={<RoleRoute roles={['admin']}><DataMapel /></RoleRoute>} />
                   <Route path="/tugas-tambahan" element={<RoleRoute roles={['admin']}><TugasTambahan /></RoleRoute>} />
+                  <Route path="/akademik-lanjutan" element={<RoleRoute roles={['admin']}><AkademikLanjutan /></RoleRoute>} />
+                  <Route path="/keuangan-sekolah" element={<RoleRoute roles={['admin']}><KeuanganSekolah /></RoleRoute>} />
+                  <Route path="/administrasi-sekolah" element={<RoleRoute roles={['admin']}><AdministrasiSekolah /></RoleRoute>} />
                   <Route path="/auto-schedule" element={<RoleRoute roles={['admin']}><AutoSchedule /></RoleRoute>} />
                   <Route path="/jadwal-guru" element={<JadwalGuru />} />
                   <Route path="/jadwal-kelas" element={<JadwalKelas />} />
