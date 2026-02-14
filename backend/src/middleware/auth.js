@@ -8,6 +8,10 @@ function isAuthBypassEnabled() {
   return bypass && !isProduction;
 }
 
+function trustTokenUserEnabled() {
+  return String(process.env.AUTH_TRUST_TOKEN_USER || '').toLowerCase() === 'true';
+}
+
 async function authRequired(req, res, next) {
   try {
     if (isAuthBypassEnabled()) {
@@ -22,8 +26,23 @@ async function authRequired(req, res, next) {
 
     const token = req.cookies?.[TOKEN_COOKIE];
     if (!token) return res.status(401).json({ success: false, message: 'Unauthorized.' });
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await getUserById(payload.id);
+    const payload = jwt.verify(token, process.env.JWT_SECRET, {
+      issuer: process.env.JWT_ISSUER || 'mada-core',
+      audience: process.env.JWT_AUDIENCE || 'mada-apps'
+    });
+
+    if (trustTokenUserEnabled()) {
+      req.user = {
+        id: Number(payload.sub || payload.id || 0),
+        username: payload.username || '',
+        role: payload.role || 'guru',
+        display_name: payload.display_name || ''
+      };
+      return next();
+    }
+
+    const userId = payload.id || payload.sub;
+    const user = await getUserById(userId);
     if (!user) return res.status(401).json({ success: false, message: 'Unauthorized.' });
     req.user = user;
     next();

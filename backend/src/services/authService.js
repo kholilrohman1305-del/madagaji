@@ -6,7 +6,9 @@ const TOKEN_COOKIE = 'auth_token';
 
 function signToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    issuer: process.env.JWT_ISSUER || 'mada-core',
+    audience: process.env.JWT_AUDIENCE || 'mada-apps'
   });
 }
 
