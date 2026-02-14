@@ -4,6 +4,9 @@ const cors = require('cors');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const { validateJWT, requireRole } = require('../../shared-lib/src');
+const { db1, db2 } = require('./db');
+const scheduleRoutes = require('./routes/schedule');
+const attendanceRoutes = require('./routes/attendance');
 
 const app = express();
 
@@ -33,13 +36,34 @@ app.use(cors({
 app.use(cookieParser());
 app.use(express.json());
 
-app.get('/api/health', (req, res) => res.json({ ok: true, app: 'academic' }));
+app.get('/api/health', async (req, res) => {
+  let dbMain = false;
+  let dbMaster = false;
+  try {
+    await db1.query('SELECT 1');
+    dbMain = true;
+    await db2.query('SELECT 1');
+    dbMaster = true;
+    res.json({ ok: true, app: 'academic', dbMain, dbMaster });
+  } catch (e) {
+    res.status(503).json({
+      ok: false,
+      app: 'academic',
+      dbMain,
+      dbMaster,
+      message: 'Database tidak terkoneksi.',
+      code: e.code || 'DB_UNAVAILABLE'
+    });
+  }
+});
 
 app.use('/api', validateJWT);
 app.get('/api/me', (req, res) => res.json({ success: true, user: req.auth }));
 app.get('/api/admin-only', requireRole('admin'), (req, res) => {
   res.json({ success: true, message: 'Academic admin route active.' });
 });
+app.use('/api/schedule', scheduleRoutes);
+app.use('/api/attendance', attendanceRoutes);
 
 app.use((err, req, res, next) => {
   res.status(err.status || 500).json({

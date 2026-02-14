@@ -1,0 +1,65 @@
+const express = require('express');
+const {
+  getDaySchedule,
+  saveBulkAttendance,
+  getHoliday,
+  upsertHoliday,
+  deleteHoliday
+} = require('../services/attendanceService');
+
+const router = express.Router();
+
+router.get('/day', async (req, res, next) => {
+  try {
+    const date = req.query.date;
+    if (!date) return res.status(400).json({ success: false, message: 'date wajib.' });
+    const data = await getDaySchedule(date);
+    res.json(data);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/bulk', async (req, res, next) => {
+  try {
+    await saveBulkAttendance(req.body?.items || []);
+    res.json({ success: true, message: 'Kehadiran berhasil disimpan.' });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/holiday', async (req, res, next) => {
+  try {
+    const date = req.query.date;
+    if (!date) return res.status(400).json({ success: false, message: 'date wajib.' });
+    const data = await getHoliday(date);
+    res.json({ success: true, data });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/holiday', async (req, res, next) => {
+  try {
+    const { date, reason } = req.body || {};
+    if (!date || !reason) return res.status(400).json({ success: false, message: 'date dan reason wajib.' });
+    await upsertHoliday(date, reason);
+    res.json({ success: true, message: 'Hari libur disimpan.' });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete('/holiday', async (req, res, next) => {
+  try {
+    const date = req.query.date;
+    if (!date) return res.status(400).json({ success: false, message: 'date wajib.' });
+    await deleteHoliday(date);
+    res.json({ success: true, message: 'Hari libur dihapus.' });
+  } catch (e) {
+    next(e);
+  }
+});
+
+module.exports = router;
