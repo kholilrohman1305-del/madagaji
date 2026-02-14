@@ -1,0 +1,10 @@
+{
+  "name": "mada-shared-lib",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.js",
+  "type": "commonjs",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2"
+  }
+}
