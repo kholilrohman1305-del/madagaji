@@ -1,0 +1,308 @@
+﻿<div class="space-y-6">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-800">Pengeluaran Cabang</h2>
+            <p class="text-sm text-gray-500">Catat biaya operasional cabang agar laporan pemasukan lebih akurat.</p>
+        </div>
+        <div id="expense-action-wrap" class="flex items-center gap-2">
+            <button onclick="openExpenseExportModal()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-sm transition text-sm font-semibold border border-emerald-200">
+                <i class="fas fa-file-export"></i>
+                <span>Export Laporan</span>
+            </button>
+            <div id="expense-write-actions" class="flex items-center gap-2">
+                <button onclick="openCategoryModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-sm transition text-sm font-semibold border border-slate-200">
+                    <i class="fas fa-tags"></i>
+                    <span>Tambah Kategori</span>
+                </button>
+                <button onclick="openExpenseModal()" class="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 shadow-sm transition text-sm font-semibold">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Tambah Pengeluaran</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+            <p class="text-xs text-gray-500 uppercase font-semibold">Total Pengeluaran</p>
+            <p id="expense-total-nominal" class="text-2xl font-extrabold text-rose-600">Rp 0</p>
+        </div>
+        <div class="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+            <p class="text-xs text-gray-500 uppercase font-semibold">Jumlah Transaksi</p>
+            <p id="expense-total-items" class="text-2xl font-extrabold text-slate-700">0</p>
+        </div>
+        <div class="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+            <p class="text-xs text-gray-500 uppercase font-semibold">Periode Filter</p>
+            <p id="expense-period-label" class="text-sm font-bold text-slate-600 mt-1">Semua Tanggal</p>
+        </div>
+    </div>
+
+    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-end">
+        <div class="w-full md:w-1/3">
+            <label class="text-xs font-semibold text-gray-500 uppercase">Search</label>
+            <input id="expense-search" type="text" placeholder="Cari kategori / deskripsi..." class="mt-1 w-full p-2 border rounded-lg" oninput="renderExpenseTable()">
+        </div>
+        <div class="w-full md:w-auto">
+            <label class="text-xs font-semibold text-gray-500 uppercase">Dari Tanggal</label>
+            <input id="expense-date-from" type="date" class="mt-1 w-full p-2 border rounded-lg" onchange="loadExpenses()">
+        </div>
+        <div class="w-full md:w-auto">
+            <label class="text-xs font-semibold text-gray-500 uppercase">Sampai Tanggal</label>
+            <input id="expense-date-to" type="date" class="mt-1 w-full p-2 border rounded-lg" onchange="loadExpenses()">
+        </div>
+        <div id="expense-branch-filter-wrap" class="hidden w-full md:w-auto">
+            <label class="text-xs font-semibold text-gray-500 uppercase">Cabang</label>
+            <select id="expense-branch-filter" class="mt-1 w-full p-2 border rounded-lg" onchange="loadExpenses()">
+                <option value="">Semua Cabang</option>
+            </select>
+        </div>
+        <button onclick="resetExpenseFilter()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200">
+            <i class="fas fa-rotate-left"></i> Reset
+        </button>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                    <tr>
+                        <th class="px-6 py-4">Tanggal</th>
+                        <th class="px-6 py-4">Cabang</th>
+                        <th class="px-6 py-4">Kategori</th>
+                        <th class="px-6 py-4">Deskripsi</th>
+                        <th class="px-6 py-4 text-center">Tipe</th>
+                        <th class="px-6 py-4">Penanggung Jawab</th>
+                        <th class="px-6 py-4 text-center">Status Laporan</th>
+                        <th class="px-6 py-4 text-right">Nominal</th>
+                        <th class="px-6 py-4 text-center">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="expense-table-body" class="divide-y divide-gray-100">
+                    <tr><td colspan="9" class="text-center py-8 text-gray-400">Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <p id="expense-page-info" class="text-xs text-gray-500">Menampilkan 0 - 0 dari 0 data</p>
+            <div class="flex items-center gap-2">
+                <select id="expense-rows-per-page" class="rounded-lg border border-gray-200 px-2 py-1.5 text-sm" onchange="changeExpenseRowsPerPage()">
+                    <option value="10">10 baris</option>
+                    <option value="25">25 baris</option>
+                    <option value="50">50 baris</option>
+                    <option value="all">All</option>
+                </select>
+                <button id="btn-prev-expense" type="button" onclick="prevExpensePage()" class="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+                    <i class="fas fa-chevron-left text-xs"></i>
+                </button>
+                <button id="btn-next-expense" type="button" onclick="nextExpensePage()" class="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+                    <i class="fas fa-chevron-right text-xs"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="expense-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 z-0 bg-gray-900/60 backdrop-blur-sm" onclick="closeExpenseModal()"></div>
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+        <div class="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden">
+            <div class="px-5 py-4 border-b flex items-center justify-between">
+                <h3 id="expense-modal-title" class="text-lg font-bold text-gray-800">Tambah Pengeluaran</h3>
+                <button onclick="closeExpenseModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <form id="expense-form" class="p-5 space-y-4">
+                <input type="hidden" id="expense-id">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">Tanggal</label>
+                        <input id="expense-tanggal" type="date" class="mt-1 w-full p-2 border rounded-lg" required>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">Kategori</label>
+                        <select id="expense-category-id" class="mt-1 w-full p-2 border rounded-lg" required></select>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700">Deskripsi</label>
+                    <input id="expense-deskripsi" type="text" class="mt-1 w-full p-2 border rounded-lg" placeholder="Contoh: Pembelian alat tulis kantor" required>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700">Nominal (Rp)</label>
+                    <input id="expense-nominal" type="number" min="1" class="mt-1 w-full p-2 border rounded-lg" placeholder="0" required>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700">Penanggung Jawab (Guru)</label>
+                    <select id="expense-penanggung-jawab" class="mt-1 w-full p-2 border rounded-lg" required></select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input id="expense-recurring" type="checkbox" class="h-4 w-4">
+                    <label for="expense-recurring" class="text-sm text-gray-700">Berulang bulanan (aktif sampai dinonaktifkan)</label>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input id="expense-active" type="checkbox" class="h-4 w-4" checked>
+                    <label for="expense-active" class="text-sm text-gray-700">Aktif</label>
+                </div>
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeExpenseModal()" class="px-4 py-2 rounded-lg border text-gray-600 hover:bg-gray-50">Batal</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold">
+                        <i class="fas fa-save mr-1"></i> Simpan
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="expense-items-manage-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 z-0 bg-gray-900/60 backdrop-blur-sm" onclick="closeExpenseItemsManageModal()"></div>
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+        <div class="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden">
+            <div class="px-5 py-4 border-b flex items-center justify-between">
+                <h3 class="text-lg font-bold text-gray-800">Tambah Rincian Pengeluaran</h3>
+                <button onclick="closeExpenseItemsManageModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div id="expense-items-manage-head" class="text-sm text-gray-600"></div>
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-gray-500">Tambahkan rincian item untuk transaksi ini.</p>
+                    <button type="button" onclick="addManageExpenseItemRow()" class="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">
+                        <i class="fas fa-plus mr-1"></i> Tambah Baris
+                    </button>
+                </div>
+                <div class="overflow-x-auto border border-gray-100 rounded-lg">
+                    <table class="w-full text-xs">
+                        <thead class="bg-gray-50 text-gray-500 uppercase">
+                            <tr>
+                                <th class="px-2 py-2 text-center w-10">No</th>
+                                <th class="px-2 py-2 text-left">Item</th>
+                                <th class="px-2 py-2 text-left">Deskripsi</th>
+                                <th class="px-2 py-2 text-right">Nominal</th>
+                                <th class="px-2 py-2 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expense-items-manage-body"></tbody>
+                    </table>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <p id="expense-items-manage-empty" class="text-gray-400">Belum ada rincian.</p>
+                    <p class="font-bold text-rose-600">Total Rincian: <span id="expense-items-manage-total">Rp 0</span></p>
+                </div>
+                <div class="pt-3 border-t flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="exportManageExpenseItemsExcel()" class="px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold">
+                            <i class="fas fa-file-excel mr-1"></i> Export Excel
+                        </button>
+                        <button type="button" onclick="exportManageExpenseItemsPdf()" class="px-3 py-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 text-sm font-semibold">
+                            <i class="fas fa-file-pdf mr-1"></i> Export PDF
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                    <button type="button" onclick="closeExpenseItemsManageModal()" class="px-4 py-2 rounded-lg border text-gray-600 hover:bg-gray-50">Batal</button>
+                    <button type="button" onclick="saveExpenseItemsDetail()" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                        <i class="fas fa-save mr-1"></i> Simpan Rincian
+                    </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="expense-export-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 z-0 bg-gray-900/60 backdrop-blur-sm" onclick="closeExpenseExportModal()"></div>
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+        <div class="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div class="px-5 py-4 border-b flex items-center justify-between">
+                <h3 class="text-lg font-bold text-gray-800">Export Laporan Pengeluaran</h3>
+                <button onclick="closeExpenseExportModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <form id="expense-export-form" class="p-5 space-y-4">
+                <div class="space-y-2">
+                    <label class="text-sm font-semibold text-gray-700">Pilih Jenis Laporan</label>
+                    <label class="flex items-center gap-2 rounded-lg border border-gray-200 p-3 hover:bg-gray-50">
+                        <input type="radio" name="expense_export_type" value="summary" checked>
+                        <span>
+                            <span class="block font-semibold text-gray-700">Ringkasan per Kategori</span>
+                            <span class="block text-xs text-gray-500">Total transaksi dan nominal per kategori.</span>
+                        </span>
+                    </label>
+                    <label class="flex items-center gap-2 rounded-lg border border-gray-200 p-3 hover:bg-gray-50">
+                        <input type="radio" name="expense_export_type" value="detail">
+                        <span>
+                            <span class="block font-semibold text-gray-700">Detail Transaksi</span>
+                            <span class="block text-xs text-gray-500">Semua baris pengeluaran sesuai filter aktif.</span>
+                        </span>
+                    </label>
+                    <label class="flex items-center gap-2 rounded-lg border border-gray-200 p-3 hover:bg-gray-50">
+                        <input type="radio" name="expense_export_type" value="detail_items">
+                        <span>
+                            <span class="block font-semibold text-gray-700">Detail + Rincian Item</span>
+                            <span class="block text-xs text-gray-500">Termasuk rincian item per transaksi.</span>
+                        </span>
+                    </label>
+                </div>
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeExpenseExportModal()" class="px-4 py-2 rounded-lg border text-gray-600 hover:bg-gray-50">Batal</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                        <i class="fas fa-download mr-1"></i> Download CSV
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="expense-items-view-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 z-0 bg-gray-900/60 backdrop-blur-sm" onclick="closeExpenseItemsViewModal()"></div>
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+        <div class="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden">
+            <div class="px-5 py-4 border-b flex items-center justify-between">
+                <h3 class="text-lg font-bold text-gray-800">Rincian Pengeluaran</h3>
+                <button onclick="closeExpenseItemsViewModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="p-5 space-y-3">
+                <div id="expense-items-view-head" class="text-sm text-gray-600"></div>
+                <div class="overflow-x-auto border border-gray-100 rounded-lg">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+                            <tr>
+                                <th class="px-3 py-2 text-left">Item</th>
+                                <th class="px-3 py-2 text-left">Deskripsi</th>
+                                <th class="px-3 py-2 text-right">Nominal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expense-items-view-body"></tbody>
+                    </table>
+                </div>
+                <div class="text-right font-bold text-rose-600">Total: <span id="expense-items-view-total">Rp 0</span></div>
+                <div class="pt-3 border-t flex justify-end">
+                    <button type="button" onclick="closeExpenseItemsViewModal()" class="px-4 py-2 rounded-lg border text-gray-600 hover:bg-gray-50">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="expense-category-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 z-0 bg-gray-900/60 backdrop-blur-sm" onclick="closeCategoryModal()"></div>
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+        <div class="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div class="px-5 py-4 border-b flex items-center justify-between">
+                <h3 class="text-lg font-bold text-gray-800">Tambah Kategori Pengeluaran</h3>
+                <button onclick="closeCategoryModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <form id="expense-category-form" class="p-5 space-y-4">
+                <div>
+                    <label class="text-sm font-medium text-gray-700">Nama Kategori</label>
+                    <input id="expense-category-name" type="text" class="mt-1 w-full p-2 border rounded-lg" placeholder="Contoh: Operasional" required>
+                </div>
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeCategoryModal()" class="px-4 py-2 rounded-lg border text-gray-600 hover:bg-gray-50">Batal</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-800 text-white font-bold">
+                        <i class="fas fa-save mr-1"></i> Simpan Kategori
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

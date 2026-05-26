@@ -13,6 +13,10 @@ router.get('/teachers', async (req, res, next) => {
   try { res.json(await master.getAllTeachers()); } catch (e) { next(e); }
 });
 
+router.get('/students', async (req, res, next) => {
+  try { res.json(await master.getAllStudents()); } catch (e) { next(e); }
+});
+
 router.post('/teachers', async (req, res, next) => {
   res.status(405).json({ success: false, message: 'Tambah guru dinonaktifkan.' });
 });

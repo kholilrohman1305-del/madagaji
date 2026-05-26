@@ -1,0 +1,23 @@
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.env
+.env.*
+
+logs/
+*.log
+
+coverage/
+.nyc_output/
+
+dist/
+build/
+
+.DS_Store
+Thumbs.db
+
+# Local uploads/cache (adjust if you intentionally commit these)
+public/uploads/

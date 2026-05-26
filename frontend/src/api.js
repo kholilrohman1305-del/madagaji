@@ -1,13 +1,6 @@
 import axios from 'axios';
 import { toast } from './utils/toast';
 
-function resolveBaseUrl(envName, prodDefault, devFallback) {
-  const fromEnv = import.meta.env[envName];
-  if (fromEnv) return fromEnv;
-  if (import.meta.env.PROD) return prodDefault;
-  return devFallback;
-}
-
 function attachInterceptors(instance) {
   instance.interceptors.response.use(
     (response) => {
@@ -31,28 +24,12 @@ function attachInterceptors(instance) {
   return instance;
 }
 
-const coreBaseURL = resolveBaseUrl('VITE_CORE_API_BASE_URL', '/api', import.meta.env.VITE_API_BASE_URL || '/api');
-const academicBaseURL = resolveBaseUrl('VITE_ACADEMIC_API_BASE_URL', '/academic/api', '/academic/api');
-const financeBaseURL = resolveBaseUrl('VITE_FINANCE_API_BASE_URL', '/finance/api', '/finance/api');
-const adminBaseURL = resolveBaseUrl('VITE_ADMIN_API_BASE_URL', '/admin/api', '/admin/api');
+const baseURL = import.meta.env.VITE_CORE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '/api';
 
-const api = attachInterceptors(axios.create({ baseURL: coreBaseURL, withCredentials: true }));
-export const academicApi = attachInterceptors(axios.create({ baseURL: academicBaseURL, withCredentials: true }));
-export const financeApi = attachInterceptors(axios.create({ baseURL: financeBaseURL, withCredentials: true }));
-export const adminApi = attachInterceptors(axios.create({ baseURL: adminBaseURL, withCredentials: true }));
+const api = attachInterceptors(axios.create({ baseURL, withCredentials: true }));
 
-function pickBaseUrl(url = '') {
-  if (url.startsWith('/schedule') || url.startsWith('/attendance') || url.startsWith('/scheduler')) return academicBaseURL;
-  if (url.startsWith('/payroll')) return financeBaseURL;
-  if (url.startsWith('/letters') || url.startsWith('/inventory') || url.startsWith('/borrowing')) return adminBaseURL;
-  return coreBaseURL;
-}
-
-api.interceptors.request.use((config) => {
-  if (config?.baseURL) return config;
-  const next = { ...config };
-  next.baseURL = pickBaseUrl(String(config?.url || ''));
-  return next;
-});
+export const academicApi = api;
+export const financeApi = api;
+export const adminApi = api;
 
 export default api;

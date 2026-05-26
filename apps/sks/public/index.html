@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SKS Admin - Sistem Keuangan Sekolah</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Sidebar Transition Animation */
+        .sidebar-transition { transition: transform 0.3s ease-in-out, margin 0.3s ease-in-out; }
+        
+        /* Nav Active State */
+        .nav-item.active { background-color: #eef2ff; color: #4f46e5; font-weight: 700; border-right: 3px solid #4f46e5; }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800 antialiased selection:bg-primary-100 selection:text-primary-700 overflow-x-hidden">
+
+    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-gray-900/50 z-40 hidden transition-opacity lg:hidden"></div>
+
+    <aside id="sidebar" class="fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-200 z-50 overflow-y-auto custom-scrollbar sidebar-transition transform -translate-x-full lg:translate-x-0">
+        
+        <div class="p-6 flex items-center justify-between sticky top-0 bg-white z-10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-primary-600 rounded-xl shadow-lg shadow-primary-200 flex items-center justify-center text-white text-lg">
+                    <i class="fas fa-school"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight text-gray-800">SKS Admin</h1>
+                    <p class="text-[10px] text-gray-400 font-bold tracking-wider uppercase">Keuangan</p>
+                </div>
+            </div>
+            <button onclick="toggleSidebar()" class="lg:hidden text-gray-400 hover:text-red-500 transition">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <nav class="px-4 space-y-1 pb-10" id="sidebar-nav">
+            <div class="px-4 pt-2 pb-2 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Menu Utama</div>
+            
+            <a href="#" onclick="loadPage('dashboard')" id="nav-dashboard" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-home w-5 text-center"></i> Dashboard
+            </a>
+            <a href="#" onclick="loadPage('ringkasan-cabang')" id="nav-ringkasan-cabang" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-chart-column w-5 text-center"></i> Ringkasan Cabang
+            </a>
+            <a href="#" onclick="loadPage('monitoring-tunggakan')" id="nav-monitoring-tunggakan" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-triangle-exclamation w-5 text-center"></i> Monitoring Tagihan
+            </a>
+            <a href="#" onclick="loadPage('tagihan')" id="nav-tagihan" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-file-invoice-dollar w-5 text-center"></i> Buat Tagihan
+            </a>
+            <button id="nav-penagihan" type="button" onclick="toggleSubmenu('submenu-penagihan', this)" class="nav-item w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <span class="flex items-center gap-3">
+                    <i class="fas fa-hand-holding-dollar w-5 text-center"></i> Penagihan & Pembayaran
+                </span>
+                <i class="fas fa-chevron-down text-xs transition-transform"></i>
+            </button>
+            <div id="submenu-penagihan" class="hidden ml-4 pl-3 border-l border-gray-100 space-y-1">
+                <a href="#" onclick="openPenagihanPage('pembayaran')" id="nav-pembayaran" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-cash-register w-5 text-center"></i> Pembayaran
+                </a>
+                <a href="#" onclick="openPenagihanPage('tunggakan','aktif')" id="nav-tunggakan-aktif" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-user-check w-5 text-center"></i> Siswa Aktif
+                </a>
+                <a href="#" onclick="openPenagihanPage('tunggakan','alumni')" id="nav-tunggakan-alumni" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-user-graduate w-5 text-center"></i> Alumni
+                </a>
+            </div>
+
+
+
+            <button id="nav-kas" type="button" onclick="toggleSubmenu('submenu-kas', this)" class="nav-item w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <span class="flex items-center gap-3">
+                    <i class="fas fa-wallet w-5 text-center"></i> Kas
+                </span>
+                <i class="fas fa-chevron-down text-xs transition-transform"></i>
+            </button>
+            <div id="submenu-kas" class="hidden ml-4 pl-3 border-l border-gray-100 space-y-1">
+                <a href="#" onclick="loadPage('pengeluaran')" id="nav-pengeluaran" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-arrow-up w-5 text-center"></i> Pengeluaran
+                </a>
+                <a href="#" onclick="loadPage('pemasukan-lain')" id="nav-pemasukan-lain" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-arrow-down w-5 text-center"></i> Pemasukan Lain
+                </a>
+                <a href="#" onclick="loadPage('arus-kas')" id="nav-arus-kas" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-wave-square w-5 text-center"></i> Arus Kas
+                </a>
+            </div>
+
+            <div class="px-4 pt-6 pb-2 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Master Data</div>
+
+            <a href="#" onclick="loadPage('kelas')" id="nav-kelas" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-shapes w-5 text-center"></i> Manajemen Kelas
+            </a>
+            <a href="#" onclick="loadPage('guru')" id="nav-guru" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-chalkboard-teacher w-5 text-center"></i> Data Guru
+            </a>
+            <button type="button" onclick="toggleSubmenu('submenu-siswa', this)" class="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <span class="flex items-center gap-3">
+                    <i class="fas fa-user-graduate w-5 text-center"></i> Data Siswa
+                </span>
+                <i class="fas fa-chevron-down text-xs transition-transform"></i>
+            </button>
+            <div id="submenu-siswa" class="hidden ml-4 pl-3 border-l border-gray-100 space-y-1">
+                <a href="#" onclick="loadPage('siswa-aktif')" id="nav-siswa-aktif" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-user-check w-5 text-center"></i> Siswa Aktif
+                </a>
+                <a href="#" onclick="loadPage('siswa-nonaktif')" id="nav-siswa-nonaktif" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-user-slash w-5 text-center"></i> Siswa Nonaktif
+                </a>
+                <a href="#" onclick="loadPage('siswa-alumni')" id="nav-siswa-alumni" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-user-graduate w-5 text-center"></i> Alumni
+                </a>
+            </div>
+            <a href="#" onclick="loadPage('kenaikan')" id="nav-kenaikan" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-level-up-alt w-5 text-center"></i> Kenaikan Kelas
+            </a>
+            <a href="#" onclick="loadPage('beasiswa')" id="nav-beasiswa" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-certificate w-5 text-center"></i> Beasiswa
+            </a>
+            <a href="#" onclick="loadPage('tahun-ajaran')" id="nav-tahun-ajaran" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-calendar-days w-5 text-center"></i> Tahun Ajaran
+            </a>
+
+            <div class="px-4 pt-6 pb-2 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Laporan</div>
+
+            <button id="nav-laporan" type="button" onclick="toggleSubmenu('submenu-laporan', this)" class="nav-item w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <span class="flex items-center gap-3">
+                    <i class="fas fa-chart-line w-5 text-center"></i> Laporan
+                </span>
+                <i class="fas fa-chevron-down text-xs transition-transform"></i>
+            </button>
+            <div id="submenu-laporan" class="hidden ml-4 pl-3 border-l border-gray-100 space-y-1">
+                <a href="#" onclick="loadPage('all-laporan')" id="nav-all-laporan" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-chart-pie w-5 text-center"></i> All Laporan
+                </a>
+                <a href="#" onclick="loadPage('laporan-grafik')" id="nav-laporan-grafik" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-chart-column w-5 text-center"></i> Grafik Laporan
+                </a>
+                <a href="#" onclick="loadPage('laporan-detail')" id="nav-laporan-detail" class="nav-item flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                    <i class="fas fa-table-list w-5 text-center"></i> Detail Laporan
+                </a>
+            </div>
+            <a href="#" onclick="loadPage('backup')" id="nav-backup" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-database w-5 text-center"></i> Backup Database
+            </a>
+
+            <div class="px-4 pt-6 pb-2 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">Lainnya</div>
+
+            <a href="#" onclick="loadPage('pengaturan')" id="nav-pengaturan" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-cog w-5 text-center"></i> Pengaturan Sekolah
+            </a>
+            <a href="#" onclick="loadPage('users')" id="nav-users" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-users-gear w-5 text-center"></i> Manajemen User
+            </a>
+            <a href="#" onclick="loadPage('profil')" id="nav-profil" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-id-badge w-5 text-center"></i> Profil
+            </a>
+            <a href="#" onclick="loadPage('device-sessions')" id="nav-device-sessions" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-mobile-screen-button w-5 text-center"></i> Device Session
+            </a>
+            <a href="#" onclick="loadPage('audit-log')" id="nav-audit-log" class="nav-item flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-primary-600 transition-all text-sm font-medium">
+                <i class="fas fa-clipboard-list w-5 text-center"></i> Audit Log
+            </a>
+        </nav>
+    </aside>
+
+    <main id="main-content" class="sidebar-transition flex flex-col min-h-screen ml-0 lg:ml-64 w-full lg:w-auto transition-all duration-300">
+        
+        <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4 sticky top-0 z-30 shadow-sm">
+            <button onclick="toggleSidebar()" class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 focus:outline-none transition active:bg-gray-200">
+                <i class="fas fa-bars text-xl"></i>
+            </button>
+            <h2 class="text-lg font-bold text-gray-700 hidden sm:block">Sistem Informasi Keuangan</h2>
+
+            <div class="ml-auto flex items-center gap-3">
+                <div id="active-period-chip" class="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl border border-blue-100 bg-blue-50 text-blue-700 text-xs font-bold">
+                    <i class="fas fa-calendar-check"></i>
+                    <span id="active-period-text">-</span>
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-sm text-gray-500">
+                    <span class="w-9 h-9 rounded-xl bg-primary-50 text-primary-700 flex items-center justify-center border border-primary-100">
+                        <i class="fas fa-user-shield"></i>
+                    </span>
+                    <div class="leading-tight">
+                        <div class="font-bold text-gray-700" id="current-admin-name">Admin</div>
+                        <div class="text-[11px] text-gray-400 font-semibold" id="current-admin-username">@admin</div>
+                    </div>
+                </div>
+                <button onclick="logout()" class="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-red-600 transition text-sm font-bold">
+                    <i class="fas fa-right-from-bracket mr-2"></i> Logout
+                </button>
+            </div>
+        </header>
+
+        <div id="page-container" class="p-4 sm:p-8 flex-grow overflow-x-hidden">
+            <div class="flex flex-col items-center justify-center h-[60vh] text-gray-400 animate-pulse">
+                <i class="fas fa-circle-notch fa-spin text-4xl mb-4 text-primary-500"></i>
+                <p class="font-medium">Memuat Sistem...</p>
+            </div>
+        </div>
+
+        <footer class="p-6 text-center border-t border-gray-100 bg-white mt-auto">
+            <p class="text-sm text-gray-400 font-medium">
+                &copy; <span id="copyright-year"></span> <span class="font-bold text-primary-600">KH Corp</span>. All rights reserved.
+            </p>
+            <p class="text-[10px] text-gray-300 mt-1">Version 2.0 Enterprise Edition</p>
+        </footer>
+
+    </main>
+
+    <script src="js/ui-feedback.js"></script>
+    <script src="js/print-helper.js"></script>
+    
+    <script src="js/dashboard.js"></script>
+    <script src="js/ringkasan-cabang.js"></script>
+    <script src="js/monitoring-tunggakan.js"></script>
+    <script src="js/laporan-eksekutif.js"></script>
+    <script src="js/pembayaran.js"></script>
+    <script src="js/tagihan.js"></script>
+    <script src="js/tunggakan.js"></script>
+    <script src="js/penagihan.js"></script>
+    <script src="js/kelas.js"></script>
+    <script src="js/guru.js"></script>
+    <script src="js/siswa.js"></script>
+    <script src="js/kenaikan.js"></script>
+    <script src="js/beasiswa.js"></script>
+    <script src="js/pengeluaran.js"></script>
+    <script src="js/pemasukan-lain.js"></script>
+    <script src="js/arus-kas.js"></script>
+    <script src="js/tahunajaran.js"></script>
+    <script src="js/laporan.js"></script>
+    <script src="js/all-laporan.js"></script>
+    <script src="js/laporan-detail.js"></script>
+    <script src="js/backup.js"></script>
+    <script src="js/security.js"></script>
+    <script src="js/pengaturan.js"></script>
+    <script src="js/users.js"></script>
+    <script src="js/profil.js"></script>
+    
+    <script src="js/app.js"></script>
+
+</body>
+</html>
+
+
+
+

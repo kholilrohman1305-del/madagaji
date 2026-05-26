@@ -1,0 +1,237 @@
+﻿<div class="space-y-6">
+    <div class="rounded-2xl border border-sky-100 bg-gradient-to-r from-sky-50 via-white to-indigo-50 p-5 md:p-6 shadow-sm">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-indigo-600 ring-1 ring-indigo-100">
+                    <i class="fas fa-graduation-cap"></i>
+                    <span>Master Data Siswa</span>
+                </div>
+                <h2 id="siswa-page-title" class="mt-3 text-2xl font-extrabold tracking-tight text-slate-800 md:text-3xl">Data Siswa</h2>
+                <p id="siswa-page-subtitle" class="mt-1 text-sm text-slate-500">Kelola data siswa aktif, alumni, dan status pembelajaran dalam tampilan modern.</p>
+            </div>
+
+            <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <button id="btn-siswa-import" type="button" onclick="openImportModal()" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:-translate-y-0.5 hover:bg-emerald-600">
+                    <i class="fas fa-file-circle-plus text-xs"></i>
+                    <span>Import Data Master</span>
+                </button>
+
+                <button id="btn-siswa-add" type="button" onclick="openModalSiswa()" class="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5 hover:from-indigo-600 hover:to-blue-600">
+                    <i class="fas fa-user-plus text-xs"></i>
+                    <span>Tambah Siswa</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="rounded-2xl border border-slate-100 bg-white/95 p-4 shadow-sm">
+        <div class="flex flex-col gap-3 md:flex-row">
+            <div class="relative md:w-56">
+                <i class="fas fa-layer-group pointer-events-none absolute left-3 top-3 text-slate-400"></i>
+                <select id="filter-kelas" class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-9 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-100" onchange="onSiswaFilterChanged()">
+                    <option value="">Semua Kelas</option>
+                </select>
+                <i class="fas fa-chevron-down pointer-events-none absolute right-3 top-3 text-xs text-slate-400"></i>
+            </div>
+
+            <div class="relative flex-1">
+                <i class="fas fa-search pointer-events-none absolute left-3 top-3 text-slate-400"></i>
+                <input type="text" id="search-siswa" placeholder="Cari nama, NIS, atau asal sekolah..." class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-100" onkeyup="onSiswaFilterChanged()">
+            </div>
+            <div class="flex items-center gap-2 md:w-auto">
+                <select id="siswa-rows-per-page" class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-100" onchange="changeSiswaRowsPerPage()">
+                    <option value="10">10 baris</option>
+                    <option value="25">25 baris</option>
+                    <option value="50">50 baris</option>
+                    <option value="all">All</option>
+                </select>
+                <button id="btn-prev-siswa" type="button" onclick="prevPageSiswa()" class="rounded-lg border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50">
+                    <i class="fas fa-chevron-left text-xs"></i>
+                </button>
+                <button id="btn-next-siswa" type="button" onclick="nextPageSiswa()" class="rounded-lg border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50">
+                    <i class="fas fa-chevron-right text-xs"></i>
+                </button>
+            </div>
+        </div>
+        <p id="siswa-page-info" class="mt-2 text-xs text-slate-500">Menampilkan 0 - 0 dari 0 data</p>
+        <div id="siswa-bulk-actions" class="mt-3 hidden items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2">
+            <div id="siswa-bulk-count" class="text-xs font-semibold text-indigo-700">0 siswa dipilih</div>
+            <div class="flex items-center gap-2">
+                <button id="btn-bulk-nonaktif" type="button" onclick="bulkNonaktifkanSelectedSiswa()" class="hidden rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600">Nonaktifkan Terpilih</button>
+                <button id="btn-bulk-aktif" type="button" onclick="bulkAktifkanSelectedSiswa()" class="hidden rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">Aktifkan Terpilih</button>
+                <button id="btn-bulk-hapus" type="button" onclick="bulkDeleteSelectedSiswa()" class="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700">Hapus Terpilih</button>
+                <button type="button" onclick="clearSiswaSelection()" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-left text-sm">
+                <thead class="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <tr id="siswa-table-head">
+                        <th class="px-6 py-4">NIS</th>
+                        <th class="px-6 py-4">Nama Siswa</th>
+                        <th class="px-6 py-4">Kelas</th>
+                        <th class="px-6 py-4">Tahun Masuk</th>
+                        <th class="px-6 py-4">Asal Sekolah</th>
+                        <th class="px-6 py-4">Status</th>
+                        <th class="px-6 py-4 text-center">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="table-siswa" class="divide-y divide-slate-100 bg-white">
+                    <tr><td colspan="7" class="p-10 text-center text-slate-400">Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="modal-status-confirm" class="fixed inset-0 z-[70] hidden" aria-modal="true" role="dialog">
+    <div class="absolute inset-0 z-0 bg-black/40 backdrop-blur-sm"></div>
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+        <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 class="text-lg font-bold text-slate-800">Konfirmasi Perubahan Status</h3>
+            <p id="status-confirm-message" class="mt-3 text-sm text-slate-600"></p>
+            <div class="mt-6 flex justify-end gap-2">
+                <button id="btn-status-cancel" type="button" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Batal</button>
+                <button id="btn-status-confirm" type="button" class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600">Nonaktifkan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-siswa" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" onclick="closeModalSiswa()"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-0 relative overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="p-5 border-b flex justify-between items-center bg-gray-50">
+                <h3 class="text-lg font-bold text-gray-800" id="modal-siswa-title">Tambah Siswa</h3>
+                <button onclick="closeModalSiswa()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto custom-scrollbar">
+                <form id="form-siswa" class="space-y-4">
+                    <input type="hidden" id="siswa-id">
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">NIS <span class="text-red-500">*</span></label>
+                            <input type="number" id="siswa-nis" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">NISN</label>
+                            <input type="number" id="siswa-nisn" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Nama Lengkap <span class="text-red-500">*</span></label>
+                        <input type="text" id="siswa-nama" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500" required>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">Kelas <span class="text-red-500">*</span></label>
+                            <select id="siswa-kelas" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500" required>
+                                </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">Status</label>
+                            <select id="siswa-status" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                                <option value="Aktif">Aktif</option>
+                                <option value="Nonaktif">Nonaktif</option>
+                                <option value="Lulus">Lulus</option>
+                                <option value="Pindah">Pindah</option>
+                                <option value="Keluar">Keluar</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Tahun Masuk</label>
+                        <input type="number" id="siswa-tahun-masuk" min="1900" max="2999" placeholder="Contoh: 2026" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                    </div>
+                    <div id="siswa-tahun-lulus-group">
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Tahun Lulus</label>
+                        <input type="number" id="siswa-tahun-lulus" min="1900" max="2999" placeholder="Contoh: 2029" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">Jenis Kelamin</label>
+                            <select id="siswa-jk" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                                <option value="L">Laki-laki</option>
+                                <option value="P">Perempuan</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-700">Tanggal Lahir</label>
+                            <input type="date" id="siswa-tgl" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Nama Wali</label>
+                        <input type="text" id="siswa-wali" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Asal Sekolah</label>
+                        <input type="text" id="siswa-asal-sekolah" class="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500" placeholder="Contoh: SMPN 1 Jakarta">
+                    </div>
+                </form>
+            </div>
+            
+            <div class="p-5 border-t bg-gray-50 flex justify-end gap-3">
+                <button type="button" onclick="closeModalSiswa()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">Batal</button>
+                <button type="button" onclick="handleSiswaSubmit()" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold text-sm shadow-md">Simpan Data</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-import" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" onclick="closeImportModal()"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+            
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Import Data Master</h3>
+            <p class="text-sm text-gray-500 mb-6">Upload file Excel (.xlsx) untuk import siswa, kelas, beasiswa, tagihan, dan pembayaran sekaligus.</p>
+
+            <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
+                <p class="text-xs font-bold text-blue-700 mb-2 uppercase">Langkah 1: Siapkan Data Master</p>
+                <p class="text-sm text-gray-600 mb-3">Unduh template master agar format kolom sesuai sistem.</p>
+                <a href="/api/students/template" id="download-template-link" target="_blank" class="inline-flex items-center gap-2 bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-50 transition">
+                    <i class="fas fa-download"></i> Template Master
+                </a>
+            </div>
+
+            <form id="form-import" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Langkah 2: Import Data Master</label>
+                    <input type="file" id="file-import" accept=".xlsx, .xls" class="w-full p-2 border border-gray-300 rounded-lg text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" required>
+                </div>
+
+                <div id="import-progress-wrap" class="hidden">
+                    <div class="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
+                        <span id="import-progress-text">Menunggu upload...</span>
+                        <span id="import-progress-percent">0%</span>
+                    </div>
+                    <div class="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div id="import-progress-bar" class="h-2 rounded-full bg-primary-600 transition-all duration-200" style="width:0%"></div>
+                    </div>
+                </div>
+
+                <div id="import-result" class="hidden p-3 bg-red-50 text-red-700 text-xs rounded border border-red-100 max-h-32 overflow-y-auto"></div>
+
+                <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+                    <button type="button" onclick="closeImportModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">Batal</button>
+                    <button type="submit" id="btn-import-submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold text-sm shadow-md">
+                        <i class="fas fa-upload mr-1"></i> Import Data Master
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

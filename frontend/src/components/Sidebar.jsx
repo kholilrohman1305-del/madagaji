@@ -17,9 +17,7 @@ import {
   School,
   BookOpen,
   ClipboardList,
-  BookMarked,
-  Landmark,
-  Building2,
+  ExternalLink,
   Sparkles,
   User,
   LogOut,
@@ -36,6 +34,26 @@ const LinkItem = ({ to, label, icon: Icon }) => (
 
 export default function Sidebar({ hidden, onToggle }) {
   const { user, logout } = useAuth();
+  const sameOriginSksUrl = typeof window !== 'undefined' ? `${window.location.origin}/sks/login.html` : '/sks/login.html';
+  const sameOriginPdmadaUrl = typeof window !== 'undefined' ? `${window.location.origin}/pdmada` : '/pdmada';
+  const normalizeExternalUrl = (rawValue, fallbackPath) => {
+    const value = String(rawValue || '').trim();
+    if (!value) return fallbackPath;
+    if (typeof window === 'undefined') return value;
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(value)) return fallbackPath;
+    return value;
+  };
+  const sksUrl = normalizeExternalUrl(import.meta.env.VITE_SKS_URL, sameOriginSksUrl);
+  const pdmadaUrl = normalizeExternalUrl(import.meta.env.VITE_PDMADA_URL, sameOriginPdmadaUrl);
+
+  const openSks = () => {
+    window.location.href = sksUrl;
+  };
+
+  const openPdMada = () => {
+    window.location.href = pdmadaUrl;
+  };
+
   return (
     <aside className={`sidebar ${hidden ? 'sidebar-hidden' : ''}`}>
       <div className="brand">
@@ -69,6 +87,8 @@ export default function Sidebar({ hidden, onToggle }) {
         {user?.role === 'admin' && <LinkItem to="/cetak-bisyaroh" label="Cetak Bisyaroh" icon={Printer} />}
         <LinkItem to="/slip-gaji" label="Slip Gaji" icon={FileText} />
         {user?.role === 'admin' && <LinkItem to="/pengeluaran-lain" label="Pengeluaran Lain" icon={Wallet} />}
+        {user?.role === 'admin' && <LinkItem to="/ekstrakurikuler" label="Ekstrakurikuler" icon={ClipboardList} />}
+        {user?.role === 'admin' && <LinkItem to="/kedisiplinan" label="Kedisiplinan" icon={ClipboardList} />}
         {user?.role === 'admin' && <LinkItem to="/total-bisyaroh" label="Total Bisyaroh" icon={PieChart} />}
         {user?.role === 'admin' && <LinkItem to="/setting-bisyaroh" label="Setting Bisyaroh" icon={Settings} />}
       </div>
@@ -81,12 +101,21 @@ export default function Sidebar({ hidden, onToggle }) {
           <LinkItem to="/data-kelas" label="Data Kelas" icon={School} />
           <LinkItem to="/data-mapel" label="Data Mapel" icon={BookOpen} />
           <LinkItem to="/tugas-tambahan" label="Tugas Tambahan" icon={ClipboardList} />
-          <LinkItem to="/akademik-lanjutan" label="Akademik Lanjutan" icon={BookMarked} />
-          <LinkItem to="/keuangan-sekolah" label="Keuangan Sekolah" icon={Landmark} />
-          <LinkItem to="/administrasi-sekolah" label="Administrasi Sekolah" icon={Building2} />
           <LinkItem to="/users" label="User & Admin" icon={Users} />
         </div>
       )}
+
+      <div className="nav-section">
+        <div className="nav-title">Integrasi</div>
+        <button className="nav-link" type="button" onClick={openSks}>
+          <ExternalLink className="nav-icon" size={20} />
+          <span>Sistem SKS</span>
+        </button>
+        <button className="nav-link" type="button" onClick={openPdMada}>
+          <ExternalLink className="nav-icon" size={20} />
+          <span>Sistem PDMADA</span>
+        </button>
+      </div>
 
       <div className="nav-section">
         <div className="nav-title">Akun</div>

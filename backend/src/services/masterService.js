@@ -73,6 +73,18 @@ async function getAllTeachers() {
   }));
 }
 
+async function getAllStudents() {
+  const [rows] = await masterPool.query('SELECT * FROM students ORDER BY id DESC LIMIT 1000');
+  return rows.map((r) => ({
+    id: r.id,
+    nisn: r.nisn || '',
+    nis: r.nis || '',
+    full_name: r.full_name || r.name || r.nama || '',
+    class_id: r.class_id || r.class || '',
+    status: r.status || 'active'
+  }));
+}
+
 async function addTeacher(data) {
   throw new Error('Tambah guru dinonaktifkan. Hanya edit yang diperbolehkan.');
 }
@@ -250,6 +262,7 @@ async function upsertTeacherTaskRate(taskId, nominal) {
 module.exports = {
   getAllMasterData,
   getAllTeachers,
+  getAllStudents,
   addTeacher,
   updateTeacher,
   deleteTeacher,

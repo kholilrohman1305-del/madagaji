@@ -1,0 +1,266 @@
+﻿<div class="space-y-6 animate-fade-in-up">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-800 tracking-tight">Manajemen User</h1>
+            <p class="text-gray-500 mt-1">Kelola akun, role, dan cabang dari satu halaman terpusat.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <button onclick="openUserCreateModal()" class="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-bold text-sm">
+                <i class="fas fa-user-plus mr-2"></i>Tambah User
+            </button>
+            <button onclick="openBranchCreateModal()" class="px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 font-bold text-sm">
+                <i class="fas fa-code-branch mr-2"></i>Tambah Cabang
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-white border border-gray-100 shadow-sm rounded-2xl p-6 overflow-hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+                <button id="users-tab-users" onclick="switchUserManagementTab('users')" class="px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-bold">Daftar User</button>
+                <button id="users-tab-branches" onclick="switchUserManagementTab('branches')" class="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-bold hover:bg-gray-50">Daftar Cabang</button>
+                <button id="users-tab-pin-requests" onclick="switchUserManagementTab('pin-requests')" class="px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-bold hover:bg-gray-50">Permintaan PIN</button>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="users-refresh-users" onclick="refreshUsers()" class="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition text-sm font-bold">
+                    <i class="fas fa-rotate mr-2"></i>Refresh User
+                </button>
+                <button id="users-refresh-branches" onclick="refreshBranches()" class="hidden px-3 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition text-sm font-bold">
+                    <i class="fas fa-rotate mr-2"></i>Refresh Cabang
+                </button>
+                <button id="users-refresh-pin-requests" onclick="refreshPinRequests()" class="hidden px-3 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition text-sm font-bold">
+                    <i class="fas fa-rotate mr-2"></i>Refresh Permintaan PIN
+                </button>
+            </div>
+        </div>
+
+        <div id="users-panel-users" class="mt-5 overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-500 border-b">
+                        <th class="py-3 pr-3 font-bold">ID</th>
+                        <th class="py-3 pr-3 font-bold">Username</th>
+                        <th class="py-3 pr-3 font-bold">Nama</th>
+                        <th class="py-3 pr-3 font-bold">Cabang</th>
+                        <th class="py-3 pr-3 font-bold">Role</th>
+                        <th class="py-3 pr-3 font-bold">Dibuat</th>
+                        <th class="py-3 text-right font-bold">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="users-tbody" class="divide-y">
+                    <tr><td colspan="7" class="py-10 text-center text-gray-400">Memuat...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="users-panel-branches" class="mt-5 overflow-x-auto hidden">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-500 border-b">
+                        <th class="py-3 pr-3 font-bold">ID</th>
+                        <th class="py-3 pr-3 font-bold">Kode</th>
+                        <th class="py-3 pr-3 font-bold">Nama</th>
+                        <th class="py-3 pr-3 font-bold">Status</th>
+                        <th class="py-3 text-right font-bold">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="branches-tbody" class="divide-y">
+                    <tr><td colspan="5" class="py-10 text-center text-gray-400">Memuat...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="users-panel-pin-requests" class="mt-5 overflow-x-auto hidden">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-500 border-b">
+                        <th class="py-3 pr-3 font-bold">ID</th>
+                        <th class="py-3 pr-3 font-bold">Admin</th>
+                        <th class="py-3 pr-3 font-bold">Cabang</th>
+                        <th class="py-3 pr-3 font-bold">Status</th>
+                        <th class="py-3 pr-3 font-bold">Diajukan</th>
+                        <th class="py-3 text-right font-bold">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="pin-requests-tbody" class="divide-y">
+                    <tr><td colspan="6" class="py-10 text-center text-gray-400">Memuat...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Create User Modal -->
+<div id="user-create-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-gray-900/50" onclick="closeUserCreateModal()"></div>
+    <div class="relative mx-auto mt-6 sm:mt-10 max-w-xl px-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+            <div class="px-6 py-4 border-b flex items-center justify-between">
+                <div>
+                    <div class="font-extrabold text-gray-800">Tambah User</div>
+                    <div class="text-xs text-gray-400 font-semibold">Super admin / admin cabang</div>
+                </div>
+                <button class="p-2 rounded-lg text-gray-400 hover:text-red-500 transition" onclick="closeUserCreateModal()"><i class="fas fa-times text-xl"></i></button>
+            </div>
+
+            <form id="user-create-form" class="p-6 space-y-4">
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Username</span>
+                    <input id="user-new-username" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition" placeholder="contoh: admin2">
+                </label>
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Nama Lengkap</span>
+                    <input id="user-new-name" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition" placeholder="opsional">
+                </label>
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Role</span>
+                    <select id="user-new-role" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition">
+                        <option value="admin">Admin Cabang</option>
+                        <option value="wali_kelas">Wali Kelas</option>
+                        <option value="super_admin">Super Admin</option>
+                    </select>
+                </label>
+                <label class="block hidden" id="user-new-homeroom-wrap">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Kelas Wali</span>
+                    <input id="user-new-homeroom-class" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition" placeholder="contoh: X.1">
+                </label>
+                <label class="block" id="user-new-branch-existing-wrap">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Pilih Cabang Existing (Opsional)</span>
+                    <select id="user-new-branch-existing" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition">
+                        <option value="">-- Buat cabang baru di bawah --</option>
+                    </select>
+                </label>
+                <label class="block" id="user-new-branch-name-wrap">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Nama Cabang</span>
+                    <input id="user-new-branch-name" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition" placeholder="contoh: Cabang Surabaya">
+                </label>
+                <label class="block" id="user-new-branch-code-wrap">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Kode Cabang (Opsional)</span>
+                    <input id="user-new-branch-code" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition" placeholder="contoh: SBY01">
+                </label>
+                <label class="block" id="user-new-branch-address-wrap">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Alamat Cabang (Opsional)</span>
+                    <input id="user-new-branch-address" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition" placeholder="alamat cabang">
+                </label>
+                <label class="block" id="user-new-branch-phone-wrap">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Telepon Cabang (Opsional)</span>
+                    <input id="user-new-branch-phone" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition" placeholder="08xxxxxxxxxx">
+                </label>
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Password</span>
+                    <input id="user-new-password" type="password" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition" placeholder="minimal 6 karakter">
+                </label>
+
+                <div id="user-create-alert" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"></div>
+                <div id="user-create-ok" class="hidden rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"></div>
+
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeUserCreateModal()" class="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 font-bold hover:bg-gray-50">Batal</button>
+                    <button class="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-extrabold transition"><i class="fas fa-user-plus mr-2"></i>Tambah User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Create Branch Modal -->
+<div id="branch-create-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-gray-900/50" onclick="closeBranchCreateModal()"></div>
+    <div class="relative mx-auto mt-10 sm:mt-16 max-w-lg px-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+            <div class="px-6 py-4 border-b flex items-center justify-between">
+                <div>
+                    <div class="font-extrabold text-gray-800">Tambah Cabang</div>
+                    <div class="text-xs text-gray-400 font-semibold">Buat cabang untuk operasional admin cabang</div>
+                </div>
+                <button class="p-2 rounded-lg text-gray-400 hover:text-red-500 transition" onclick="closeBranchCreateModal()"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <form id="branch-create-form" class="p-6 space-y-4">
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Kode Cabang</span>
+                    <input id="branch-new-code" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="contoh: SBY01">
+                </label>
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Nama Cabang</span>
+                    <input id="branch-new-name" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="contoh: Cabang Surabaya">
+                </label>
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Alamat</span>
+                    <input id="branch-new-address" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="opsional">
+                </label>
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Telepon</span>
+                    <input id="branch-new-phone" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="opsional">
+                </label>
+                <div id="branch-create-alert" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"></div>
+                <div id="branch-create-ok" class="hidden rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"></div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeBranchCreateModal()" class="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 font-bold hover:bg-gray-50">Batal</button>
+                    <button class="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-extrabold transition"><i class="fas fa-code-branch mr-2"></i>Tambah Cabang</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="user-edit-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-gray-900/50" onclick="closeUserEdit()"></div>
+    <div class="relative mx-auto mt-10 sm:mt-16 max-w-lg px-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+            <div class="px-6 py-4 border-b flex items-center justify-between">
+                <div>
+                    <div class="font-extrabold text-gray-800">Edit User</div>
+                    <div class="text-xs text-gray-400 font-semibold" id="user-edit-id"></div>
+                </div>
+                <button class="p-2 rounded-lg text-gray-400 hover:text-red-500 transition" onclick="closeUserEdit()">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="user-edit-form" class="p-6 space-y-4">
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Username</span>
+                    <input id="user-edit-username" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition">
+                </label>
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Nama Lengkap</span>
+                    <input id="user-edit-name" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition">
+                </label>
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Role</span>
+                    <select id="user-edit-role" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition">
+                        <option value="super_admin">Super Admin</option>
+                        <option value="admin">Admin Cabang</option>
+                        <option value="wali_kelas">Wali Kelas</option>
+                    </select>
+                </label>
+                <label class="block hidden" id="user-edit-homeroom-wrap">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Kelas Wali</span>
+                    <input id="user-edit-homeroom-class" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition" placeholder="contoh: X.1">
+                </label>
+                <label class="block" id="user-edit-branch-wrap">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Cabang</span>
+                    <select id="user-edit-branch-id" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition">
+                        <option value="">-- Pilih cabang --</option>
+                    </select>
+                </label>
+                <label class="block">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Password Baru (Opsional)</span>
+                    <input id="user-edit-password" type="password" class="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-primary-100 focus:border-primary-600 transition" placeholder="kosongkan jika tidak ganti">
+                </label>
+
+                <div id="user-edit-alert" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"></div>
+                <div id="user-edit-ok" class="hidden rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"></div>
+
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" class="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 font-bold hover:bg-gray-50" onclick="closeUserEdit()">
+                        Batal
+                    </button>
+                    <button class="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-extrabold transition">
+                        <i class="fas fa-save mr-2"></i> Simpan
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

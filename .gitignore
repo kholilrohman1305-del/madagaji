@@ -16,3 +16,13 @@ pnpm-debug.log*
 
 backend.zip
 nul
+
+# Google Service Account credentials — jangan pernah di-commit
+apps/sks/sks-admin.json
+**/sks-admin.json
+
+# File ZIP sementara
+MyMada.zip
+
+# File debug/temp
+query

@@ -1,0 +1,174 @@
+{
+  "info": {
+    "_postman_id": "8e47de17-6492-4c2f-9cb4-0fd67d0f0197",
+    "name": "SKS Mobile API v1",
+    "description": "Collection untuk pengujian endpoint /api/mobile/v1. Collection ini menggunakan session cookie dari login.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{base_url}}/api/mobile/v1/auth/login"
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/mobile/v1/auth/me"
+          }
+        },
+        {
+          "name": "PIN Status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/mobile/v1/auth/pin/status"
+          }
+        },
+        {
+          "name": "PIN Verify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pin\": \"{{pin}}\"\n}"
+            },
+            "url": "{{base_url}}/api/mobile/v1/auth/pin/verify"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/mobile/v1/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Dashboard",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/mobile/v1/dashboard"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Billing",
+      "item": [
+        {
+          "name": "Students (List)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/mobile/v1/billing/students?search=&kelas=&status=&page=1&limit=20"
+          }
+        },
+        {
+          "name": "Student Summary",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/mobile/v1/billing/student/{{student_id}}/summary"
+          }
+        },
+        {
+          "name": "Student Bills",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/mobile/v1/billing/student/{{student_id}}/bills?include_all=true"
+          }
+        },
+        {
+          "name": "Student Timeline",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/mobile/v1/billing/student/{{student_id}}/timeline"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Payment History",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/mobile/v1/payments/history?date_from=&date_to=&search=&page=1&limit=20"
+          }
+        },
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"student_id\": {{student_id}},\n  \"bill_id\": {{bill_id}},\n  \"amount\": 10000,\n  \"tanggal\": \"2026-02-25\",\n  \"penerima\": \"{{receiver_name}}\",\n  \"keterangan\": \"Pembayaran mobile\",\n  \"pin\": \"{{pin}}\"\n}"
+            },
+            "url": "{{base_url}}/api/mobile/v1/payments"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:4000/sks"
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "admin123"
+    },
+    {
+      "key": "pin",
+      "value": "123456"
+    },
+    {
+      "key": "student_id",
+      "value": "1"
+    },
+    {
+      "key": "bill_id",
+      "value": "1"
+    },
+    {
+      "key": "receiver_name",
+      "value": "Admin Cabang"
+    }
+  ]
+}

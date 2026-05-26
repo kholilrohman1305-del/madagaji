@@ -1,4 +1,5 @@
 const pool = require('../db');
+const { randomBytes } = require('crypto');
 const masterPool = pool.master;
 const { TTLCache } = require('../utils/cache');
 
@@ -14,6 +15,24 @@ function cacheKey(filters) {
 
 function invalidateScheduleCache() {
   scheduleCache.clear();
+}
+
+function createScheduleId() {
+  const time = Date.now().toString(36).slice(-6).toUpperCase().padStart(6, '0');
+  const rand = randomBytes(2).toString('hex').slice(0, 3).toUpperCase();
+  return `J${time}${rand}`;
+}
+
+function isPrimaryDuplicateError(err) {
+  if (!err || err.code !== 'ER_DUP_ENTRY') return false;
+  const msg = String(err.sqlMessage || '');
+  return msg.includes("for key 'PRIMARY'") || msg.includes('PRIMARY');
+}
+
+function isScheduleConflictError(err) {
+  if (!err || err.code !== 'ER_DUP_ENTRY') return false;
+  const msg = String(err.sqlMessage || '');
+  return msg.includes('uniq_jadwal_kelas') || msg.includes('hari') && msg.includes('jam_ke') && msg.includes('kelas');
 }
 
 async function getSchedule(filters = {}) {
@@ -92,31 +111,41 @@ async function addSchedule(data) {
     throw new Error(`Jadwal bentrok untuk kelas ${data.kelas} pada hari ${data.hari}, jam ke-${jam}.`);
   }
 
-  const rowsToAdd = [];
-  let lastIdNumber = 0;
-  const [last] = await pool.query('SELECT id FROM jadwal ORDER BY id DESC LIMIT 1');
-  const lastId = last[0]?.id || 'J000';
-  lastIdNumber = parseInt(String(lastId).substring(1)) || 0;
+  if (jamList.length > 0) {
+    let inserted = false;
+    let attempts = 0;
+    while (!inserted && attempts < 3) {
+      attempts += 1;
+      const rowsToAdd = jamList.map((jam) => [
+        createScheduleId(),
+        data.hari,
+        jam,
+        data.kelas,
+        data.mapelId,
+        data.guruId
+      ]);
 
-  for (const jam of jamList) {
-    lastIdNumber++;
-    const newId = `J${String(lastIdNumber).padStart(3, '0')}`;
-    rowsToAdd.push([newId, data.hari, jam, data.kelas, data.mapelId, data.guruId]);
-  }
-
-  if (rowsToAdd.length > 0) {
-    try {
-      await pool.query('INSERT INTO jadwal (id, hari, jam_ke, kelas, mapel_id, guru_id) VALUES ?', [rowsToAdd]);
-    } catch (e) {
-      if (e.code === 'ER_DUP_ENTRY') {
-        throw new Error('Jadwal bentrok. Periksa kelas pada hari dan jam yang sama.');
+      try {
+        await pool.query('INSERT INTO jadwal (id, hari, jam_ke, kelas, mapel_id, guru_id) VALUES ?', [rowsToAdd]);
+        inserted = true;
+      } catch (e) {
+        if (isPrimaryDuplicateError(e)) {
+          continue;
+        }
+        if (isScheduleConflictError(e)) {
+          throw new Error('Jadwal bentrok. Periksa kelas pada hari dan jam yang sama.');
+        }
+        throw e;
       }
-      throw e;
+    }
+
+    if (!inserted) {
+      throw new Error('Gagal menyimpan jadwal. Silakan coba lagi.');
     }
   }
 
   invalidateScheduleCache();
-  return { success: true, message: `${rowsToAdd.length} jadwal berhasil ditambahkan.` };
+  return { success: true, message: `${jamList.length} jadwal berhasil ditambahkan.` };
 }
 
 async function updateSchedule(data) {

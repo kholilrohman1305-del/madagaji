@@ -13,9 +13,21 @@ function hashPassword(password, salt = crypto.randomBytes(16)) {
 
 function verifyPassword(password, hash, salt) {
   if (!password || !hash || !salt) return false;
-  const derived = crypto.scryptSync(String(password), Buffer.from(String(salt), 'base64'), KEY_LENGTH, SCRYPT_OPTIONS);
-  const digest = derived.toString('base64');
-  return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(String(hash)));
+  let derived;
+  let stored;
+  try {
+    derived = crypto.scryptSync(
+      String(password),
+      Buffer.from(String(salt), 'base64'),
+      KEY_LENGTH,
+      SCRYPT_OPTIONS
+    );
+    stored = Buffer.from(String(hash), 'base64');
+  } catch {
+    return false;
+  }
+  if (!stored || stored.length !== derived.length) return false;
+  return crypto.timingSafeEqual(derived, stored);
 }
 
 module.exports = { hashPassword, verifyPassword };

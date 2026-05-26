@@ -4,51 +4,121 @@ const { monthKey } = require('../utils/date');
 const { TTLCache } = require('../utils/cache');
 
 const configCache = new TTLCache(30000);
+let expenseIdModeCache = null; // 'auto' | 'string'
 
-async function getOtherExpenses(startDate, endDate) {
+async function getExpenseIdMode() {
+  if (expenseIdModeCache) return expenseIdModeCache;
   const [rows] = await pool.query(
-    `SELECT id, tanggal, kategori, penerima, jumlah, nominal, keterangan
-     FROM pengeluaran_lain
-     WHERE tanggal BETWEEN ? AND ?
-     ORDER BY tanggal`,
-    [startDate, endDate]
+    `SELECT DATA_TYPE AS dataType, EXTRA AS extraInfo
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'pengeluaran_lain'
+       AND COLUMN_NAME = 'id'
+     LIMIT 1`
   );
+  const row = rows[0];
+  if (!row) {
+    expenseIdModeCache = 'string';
+    return expenseIdModeCache;
+  }
+  const dataType = String(row.dataType || '').toLowerCase();
+  const extraInfo = String(row.extraInfo || '').toLowerCase();
+  expenseIdModeCache = (extraInfo.includes('auto_increment') || ['int', 'bigint', 'smallint', 'tinyint', 'mediumint'].includes(dataType))
+    ? 'auto'
+    : 'string';
+  return expenseIdModeCache;
+}
 
-  if (rows.length === 0) {
-    const [prevMonthRow] = await pool.query(
-      `SELECT DATE_FORMAT(tanggal, '%Y-%m-01') AS month_start
-       FROM pengeluaran_lain
-       WHERE tanggal < ?
-       ORDER BY tanggal DESC
-       LIMIT 1`,
-      [startDate]
+function nextExpenseCode(lastId) {
+  const match = String(lastId || '').match(/(\d+)/);
+  const seq = match ? parseInt(match[1], 10) + 1 : 1;
+  return `P${String(seq).padStart(3, '0')}`;
+}
+
+async function clonePrevMonthExpensesTo(startDate, rows) {
+  if (!rows.length) return;
+  const idMode = await getExpenseIdMode();
+
+  if (idMode === 'auto') {
+    const values = rows.map((r) => [
+      startDate,
+      r.kategori,
+      r.penerima || '',
+      r.jumlah || 1,
+      r.nominal || 0,
+      r.keterangan || ''
+    ]);
+    await pool.query(
+      `INSERT INTO pengeluaran_lain (tanggal, kategori, penerima, jumlah, nominal, keterangan)
+       VALUES ?`,
+      [values]
     );
-    const prevMonthStart = prevMonthRow[0]?.month_start;
-    if (prevMonthStart) {
-      const [prevRows] = await pool.query(
-        `SELECT kategori, penerima, jumlah, nominal, keterangan
-         FROM pengeluaran_lain
-         WHERE tanggal BETWEEN ? AND LAST_DAY(?)`,
-        [prevMonthStart, prevMonthStart]
-      );
-      if (prevRows.length > 0) {
-        const values = prevRows.map(r => [
-          startDate,
-          r.kategori,
-          r.penerima || '',
-          r.jumlah || 1,
-          r.nominal || 0,
-          r.keterangan || ''
-        ]);
-        await pool.query(
-          `INSERT INTO pengeluaran_lain (tanggal, kategori, penerima, jumlah, nominal, keterangan)
-           VALUES ?`,
-          [values]
-        );
-      }
-    }
+    return;
   }
 
+  const [lastRows] = await pool.query('SELECT id FROM pengeluaran_lain ORDER BY id DESC LIMIT 1');
+  let currentId = lastRows[0]?.id || 'P000';
+  const values = rows.map((r) => {
+    currentId = nextExpenseCode(currentId);
+    return [
+      currentId,
+      startDate,
+      r.kategori,
+      r.penerima || '',
+      r.jumlah || 1,
+      r.nominal || 0,
+      r.keterangan || ''
+    ];
+  });
+  await pool.query(
+    `INSERT INTO pengeluaran_lain (id, tanggal, kategori, penerima, jumlah, nominal, keterangan)
+     VALUES ?`,
+    [values]
+  );
+}
+
+function expenseKey(row) {
+  return [
+    String(row.kategori || '').trim().toLowerCase(),
+    String(row.penerima || '').trim().toLowerCase(),
+    Number(row.jumlah || 1),
+    Number(row.nominal || 0),
+    String(row.keterangan || '').trim().toLowerCase()
+  ].join('|');
+}
+
+async function ensureRecurringExpensesForMonth(monthStartDate) {
+  const monthStart = String(monthStartDate).slice(0, 10);
+  const [prevMonthStartRows] = await pool.query(
+    `SELECT DATE_FORMAT(DATE_SUB(?, INTERVAL 1 MONTH), '%Y-%m-01') AS prev_month_start`,
+    [monthStart]
+  );
+  const prevMonthStart = prevMonthStartRows[0]?.prev_month_start;
+  if (!prevMonthStart) return;
+
+  const [prevRows] = await pool.query(
+    `SELECT kategori, penerima, jumlah, nominal, keterangan
+     FROM pengeluaran_lain
+     WHERE tanggal BETWEEN ? AND LAST_DAY(?)`,
+    [prevMonthStart, prevMonthStart]
+  );
+  if (!prevRows.length) return;
+
+  const [currentRows] = await pool.query(
+    `SELECT kategori, penerima, jumlah, nominal, keterangan
+     FROM pengeluaran_lain
+     WHERE tanggal BETWEEN ? AND LAST_DAY(?)`,
+    [monthStart, monthStart]
+  );
+
+  const currentKeys = new Set(currentRows.map(expenseKey));
+  const missingRows = prevRows.filter((row) => !currentKeys.has(expenseKey(row)));
+  if (!missingRows.length) return;
+
+  await clonePrevMonthExpensesTo(monthStart, missingRows);
+}
+
+async function getOtherExpenses(startDate, endDate) {
   const [finalRows] = await pool.query(
     `SELECT id, tanggal, kategori, penerima, jumlah, nominal, keterangan
      FROM pengeluaran_lain
@@ -117,17 +187,23 @@ async function getConfigMap() {
 }
 
 async function addOtherExpense(data) {
+  const idMode = await getExpenseIdMode();
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [rows] = await conn.query('SELECT id FROM pengeluaran_lain ORDER BY id DESC LIMIT 1 FOR UPDATE');
-    const lastId = rows[0]?.id || 'P000';
-    const num = parseInt(String(lastId).substring(1)) + 1;
-    const newId = `P${String(num).padStart(3, '0')}`;
-    await conn.query(
-      'INSERT INTO pengeluaran_lain (id, tanggal, kategori, penerima, jumlah, nominal, keterangan) VALUES (?,?,?,?,?,?,?)',
-      [newId, data.tanggal, data.kategori, data.penerima, data.jumlah || 1, data.nominal, data.keterangan]
-    );
+    if (idMode === 'auto') {
+      await conn.query(
+        'INSERT INTO pengeluaran_lain (tanggal, kategori, penerima, jumlah, nominal, keterangan) VALUES (?,?,?,?,?,?)',
+        [data.tanggal, data.kategori, data.penerima, data.jumlah || 1, data.nominal, data.keterangan]
+      );
+    } else {
+      const [rows] = await conn.query('SELECT id FROM pengeluaran_lain ORDER BY id DESC LIMIT 1 FOR UPDATE');
+      const newId = nextExpenseCode(rows[0]?.id || 'P000');
+      await conn.query(
+        'INSERT INTO pengeluaran_lain (id, tanggal, kategori, penerima, jumlah, nominal, keterangan) VALUES (?,?,?,?,?,?,?)',
+        [newId, data.tanggal, data.kategori, data.penerima, data.jumlah || 1, data.nominal, data.keterangan]
+      );
+    }
     await conn.commit();
     return { success: true, message: 'Pengeluaran berhasil ditambahkan.' };
   } catch (e) {
@@ -149,6 +225,489 @@ async function updateOtherExpense(data) {
 async function deleteOtherExpense(id) {
   await pool.query('DELETE FROM pengeluaran_lain WHERE id=?', [id]);
   return { success: true, message: 'Pengeluaran berhasil dihapus.' };
+}
+
+let extracurricularTableEnsured = false;
+async function ensureExtracurricularTable() {
+  if (extracurricularTableEnsured) return;
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS pengeluaran_ekstrakurikuler (
+      id BIGINT NOT NULL AUTO_INCREMENT,
+      tanggal DATE NOT NULL,
+      teacher_id BIGINT NOT NULL,
+      teacher_name VARCHAR(120) NOT NULL,
+      nama_ekstra VARCHAR(120) NOT NULL,
+      jumlah_hadir INT NOT NULL DEFAULT 1,
+      nominal DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+      keterangan TEXT NULL,
+      expense_id VARCHAR(50) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      INDEX idx_ekstra_tanggal (tanggal),
+      INDEX idx_ekstra_teacher (teacher_id),
+      INDEX idx_ekstra_expense (expense_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+  );
+  extracurricularTableEnsured = true;
+}
+
+async function getActiveTeachers() {
+  const [rows] = await masterPool.query(
+    'SELECT id, name FROM teachers WHERE is_active=1 ORDER BY name'
+  );
+  return rows.map((r) => ({ id: String(r.id), name: r.name }));
+}
+
+async function resolveExtracurricularTeacher(input) {
+  const rawTeacherId = input?.teacherId;
+  const manualName = String(input?.teacherNameManual || '').trim();
+  if (rawTeacherId !== undefined && rawTeacherId !== null && rawTeacherId !== '' && String(rawTeacherId) !== '0') {
+    const [teacherRows] = await masterPool.query(
+      'SELECT id, name FROM teachers WHERE id=? AND is_active=1 LIMIT 1',
+      [rawTeacherId]
+    );
+    const teacher = teacherRows[0];
+    if (!teacher) throw new Error('Guru tidak ditemukan atau tidak aktif.');
+    return { teacher_id: Number(teacher.id), teacher_name: teacher.name };
+  }
+  if (!manualName) throw new Error('Nama guru manual wajib diisi.');
+  return { teacher_id: 0, teacher_name: manualName };
+}
+
+async function ensureExtracurricularMonthRows(periode) {
+  await ensureExtracurricularTable();
+  const monthStart = `${periode}-01`;
+  const [currentRows] = await pool.query(
+    `SELECT id, teacher_id, teacher_name, nama_ekstra
+     FROM pengeluaran_ekstrakurikuler
+     WHERE tanggal BETWEEN ? AND LAST_DAY(?)`,
+    [monthStart, monthStart]
+  );
+  const currentKeys = new Set(
+    currentRows.map((r) =>
+      `${r.teacher_id}|${String(r.teacher_name || '').trim().toLowerCase()}|${String(r.nama_ekstra || '').trim().toLowerCase()}`
+    )
+  );
+
+  const [latestMonthRows] = await pool.query(
+    `SELECT DATE_FORMAT(MAX(tanggal), '%Y-%m') AS ym
+     FROM pengeluaran_ekstrakurikuler
+     WHERE tanggal < ?`,
+    [monthStart]
+  );
+  const latestYm = latestMonthRows[0]?.ym;
+  if (!latestYm) return;
+
+  const sourceStart = `${latestYm}-01`;
+  const [sourceRows] = await pool.query(
+    `SELECT teacher_id, teacher_name, nama_ekstra, nominal, keterangan
+     FROM pengeluaran_ekstrakurikuler
+     WHERE tanggal BETWEEN ? AND LAST_DAY(?)`,
+    [sourceStart, sourceStart]
+  );
+  if (!sourceRows.length) return;
+
+  const missing = sourceRows.filter((r) => {
+    const key = `${r.teacher_id}|${String(r.teacher_name || '').trim().toLowerCase()}|${String(r.nama_ekstra || '').trim().toLowerCase()}`;
+    return !currentKeys.has(key);
+  });
+  if (!missing.length) return;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const row of missing) {
+      const payload = {
+        tanggal: monthStart,
+        teacher_id: row.teacher_id,
+        teacher_name: row.teacher_name,
+        nama_ekstra: row.nama_ekstra,
+        jumlah_hadir: 0,
+        nominal: Number(row.nominal) || 0,
+        keterangan: row.keterangan || ''
+      };
+      await conn.query(
+        `INSERT INTO pengeluaran_ekstrakurikuler
+         (tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan, expense_id)
+         VALUES (?,?,?,?,?,?,?,?)`,
+        [
+          payload.tanggal,
+          payload.teacher_id,
+          payload.teacher_name,
+          payload.nama_ekstra,
+          payload.jumlah_hadir,
+          payload.nominal,
+          payload.keterangan || null,
+          null
+        ]
+      );
+    }
+    await conn.commit();
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+async function getExtracurricularExpenses(startDate, endDate) {
+  await ensureExtracurricularTable();
+  const [rows] = await pool.query(
+    `SELECT id, tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan, expense_id
+     FROM pengeluaran_ekstrakurikuler
+     WHERE tanggal BETWEEN ? AND ?
+     ORDER BY tanggal DESC, id DESC`,
+    [startDate, endDate]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    tanggal: r.tanggal,
+    teacherId: String(r.teacher_id),
+    teacherName: r.teacher_name,
+    namaEkstra: r.nama_ekstra,
+    jumlahHadir: parseInt(r.jumlah_hadir, 10) || 0,
+    nominal: Number(r.nominal) || 0,
+    jumlahDiterima: (parseInt(r.jumlah_hadir, 10) || 0) * (Number(r.nominal) || 0),
+    keterangan: r.keterangan || '',
+    expenseId: r.expense_id || null
+  }));
+}
+
+async function getExtracurricularMonthSheet(periode) {
+  if (!/^\d{4}-\d{2}$/.test(String(periode || ''))) throw new Error('Format periode tidak valid. Gunakan YYYY-MM.');
+  await ensureExtracurricularMonthRows(periode);
+  const startDate = `${periode}-01`;
+  const [rows] = await pool.query(
+    `SELECT id, tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan, expense_id
+     FROM pengeluaran_ekstrakurikuler
+     WHERE tanggal BETWEEN ? AND LAST_DAY(?)
+     ORDER BY teacher_name ASC, nama_ekstra ASC, id ASC`,
+    [startDate, startDate]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    tanggal: r.tanggal,
+    teacherId: String(r.teacher_id),
+    teacherName: r.teacher_name,
+    namaEkstra: r.nama_ekstra,
+    jumlahHadir: parseInt(r.jumlah_hadir, 10) || 0,
+    nominal: Number(r.nominal) || 0,
+    jumlahDiterima: (parseInt(r.jumlah_hadir, 10) || 0) * (Number(r.nominal) || 0),
+    keterangan: r.keterangan || '',
+    expenseId: r.expense_id || null
+  }));
+}
+
+async function saveExtracurricularBulk(periode, items) {
+  if (!Array.isArray(items)) throw new Error('Payload items harus berupa array.');
+  if (!/^\d{4}-\d{2}$/.test(String(periode || ''))) throw new Error('Format periode tidak valid. Gunakan YYYY-MM.');
+  const startDate = `${periode}-01`;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const row of items) {
+      const [currentRows] = await conn.query(
+        `SELECT id, teacher_id, teacher_name, nama_ekstra, keterangan, expense_id, tanggal
+         FROM pengeluaran_ekstrakurikuler
+         WHERE id=? AND tanggal BETWEEN ? AND LAST_DAY(?)
+         LIMIT 1`,
+        [row.id, startDate, startDate]
+      );
+      const current = currentRows[0];
+      if (!current) continue;
+
+      const jumlahHadir = parseInt(row.jumlahHadir, 10) || 0;
+      const nominal = Number(row.nominal) || 0;
+      await conn.query(
+        'UPDATE pengeluaran_ekstrakurikuler SET jumlah_hadir=?, nominal=? WHERE id=?',
+        [jumlahHadir, nominal, row.id]
+      );
+    }
+    await conn.commit();
+    return { success: true, message: 'Perubahan massal ekstrakurikuler berhasil disimpan.' };
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+async function addExtracurricularExpense(data) {
+  await ensureExtracurricularTable();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const resolvedTeacher = await resolveExtracurricularTeacher(data);
+
+    const payload = {
+      tanggal: data.tanggal,
+      teacher_id: resolvedTeacher.teacher_id,
+      teacher_name: resolvedTeacher.teacher_name,
+      nama_ekstra: String(data.namaEkstra || '').trim(),
+      jumlah_hadir: parseInt(data.jumlahHadir, 10) || 0,
+      nominal: Number(data.nominal) || 0,
+      keterangan: String(data.keterangan || '').trim()
+    };
+    if (!payload.nama_ekstra) throw new Error('Nama ekstrakurikuler wajib diisi.');
+    if (!payload.tanggal) throw new Error('Tanggal wajib diisi.');
+
+    await conn.query(
+      `INSERT INTO pengeluaran_ekstrakurikuler
+       (tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan, expense_id)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [
+        payload.tanggal,
+        payload.teacher_id,
+        payload.teacher_name,
+        payload.nama_ekstra,
+        payload.jumlah_hadir,
+        payload.nominal,
+        payload.keterangan || null,
+        null
+      ]
+    );
+
+    await conn.commit();
+    return {
+      success: true,
+      message: 'Pengeluaran ekstrakurikuler berhasil ditambahkan.'
+    };
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+async function updateExtracurricularExpense(data) {
+  await ensureExtracurricularTable();
+  const [rows] = await pool.query(
+    'SELECT * FROM pengeluaran_ekstrakurikuler WHERE id=? LIMIT 1',
+    [data.id]
+  );
+  if (!rows[0]) throw new Error('Data ekstrakurikuler tidak ditemukan.');
+
+  const resolvedTeacher = await resolveExtracurricularTeacher(data);
+
+  const payload = {
+    id: data.id,
+    tanggal: data.tanggal,
+    teacher_id: resolvedTeacher.teacher_id,
+    teacher_name: resolvedTeacher.teacher_name,
+    nama_ekstra: String(data.namaEkstra || '').trim(),
+    jumlah_hadir: parseInt(data.jumlahHadir, 10) || 0,
+    nominal: Number(data.nominal) || 0,
+    keterangan: String(data.keterangan || '').trim()
+  };
+  if (!payload.nama_ekstra) throw new Error('Nama ekstrakurikuler wajib diisi.');
+  if (!payload.tanggal) throw new Error('Tanggal wajib diisi.');
+
+  await pool.query(
+    `UPDATE pengeluaran_ekstrakurikuler
+     SET tanggal=?, teacher_id=?, teacher_name=?, nama_ekstra=?, jumlah_hadir=?, nominal=?, keterangan=?
+     WHERE id=?`,
+    [
+      payload.tanggal,
+      payload.teacher_id,
+      payload.teacher_name,
+      payload.nama_ekstra,
+      payload.jumlah_hadir,
+      payload.nominal,
+      payload.keterangan || null,
+      payload.id
+    ]
+  );
+
+  return { success: true, message: 'Pengeluaran ekstrakurikuler berhasil diperbarui.' };
+}
+
+async function deleteExtracurricularExpense(id) {
+  await ensureExtracurricularTable();
+  const [rows] = await pool.query(
+    'SELECT id, expense_id FROM pengeluaran_ekstrakurikuler WHERE id=? LIMIT 1',
+    [id]
+  );
+  const row = rows[0];
+  if (!row) throw new Error('Data ekstrakurikuler tidak ditemukan.');
+
+  await pool.query('DELETE FROM pengeluaran_ekstrakurikuler WHERE id=?', [id]);
+  return { success: true, message: 'Pengeluaran ekstrakurikuler berhasil dihapus.' };
+}
+
+let disciplineTableEnsured = false;
+async function ensureDisciplineTable() {
+  if (disciplineTableEnsured) return;
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS pengeluaran_kedisiplinan (
+      id BIGINT NOT NULL AUTO_INCREMENT,
+      tanggal DATE NOT NULL,
+      teacher_id BIGINT NOT NULL,
+      teacher_name VARCHAR(120) NOT NULL,
+      jumlah_hadir INT NOT NULL DEFAULT 0,
+      nominal DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+      keterangan TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      INDEX idx_disiplin_tanggal (tanggal),
+      INDEX idx_disiplin_teacher (teacher_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+  );
+  disciplineTableEnsured = true;
+}
+
+async function ensureDisciplineMonthRows(periode) {
+  await ensureDisciplineTable();
+  const monthStart = `${periode}-01`;
+  const [currentRows] = await pool.query(
+    `SELECT id, teacher_id, teacher_name
+     FROM pengeluaran_kedisiplinan
+     WHERE tanggal BETWEEN ? AND LAST_DAY(?)`,
+    [monthStart, monthStart]
+  );
+  const currentKeys = new Set(
+    currentRows.map((r) => `${r.teacher_id}|${String(r.teacher_name || '').trim().toLowerCase()}`)
+  );
+
+  const [latestMonthRows] = await pool.query(
+    `SELECT DATE_FORMAT(MAX(tanggal), '%Y-%m') AS ym
+     FROM pengeluaran_kedisiplinan
+     WHERE tanggal < ?`,
+    [monthStart]
+  );
+  const latestYm = latestMonthRows[0]?.ym;
+  if (!latestYm) return;
+
+  const sourceStart = `${latestYm}-01`;
+  const [sourceRows] = await pool.query(
+    `SELECT teacher_id, teacher_name, nominal, keterangan
+     FROM pengeluaran_kedisiplinan
+     WHERE tanggal BETWEEN ? AND LAST_DAY(?)`,
+    [sourceStart, sourceStart]
+  );
+  if (!sourceRows.length) return;
+
+  const missing = sourceRows.filter((r) => {
+    const key = `${r.teacher_id}|${String(r.teacher_name || '').trim().toLowerCase()}`;
+    return !currentKeys.has(key);
+  });
+  if (!missing.length) return;
+
+  const values = missing.map((r) => [
+    monthStart,
+    r.teacher_id,
+    r.teacher_name,
+    0,
+    Number(r.nominal) || 0,
+    r.keterangan || null
+  ]);
+  await pool.query(
+    `INSERT INTO pengeluaran_kedisiplinan
+     (tanggal, teacher_id, teacher_name, jumlah_hadir, nominal, keterangan)
+     VALUES ?`,
+    [values]
+  );
+}
+
+async function getDisciplineMonthSheet(periode) {
+  if (!/^\d{4}-\d{2}$/.test(String(periode || ''))) throw new Error('Format periode tidak valid. Gunakan YYYY-MM.');
+  await ensureDisciplineMonthRows(periode);
+  const startDate = `${periode}-01`;
+  const [rows] = await pool.query(
+    `SELECT id, tanggal, teacher_id, teacher_name, jumlah_hadir, nominal, keterangan
+     FROM pengeluaran_kedisiplinan
+     WHERE tanggal BETWEEN ? AND LAST_DAY(?)
+     ORDER BY teacher_name ASC, id ASC`,
+    [startDate, startDate]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    tanggal: r.tanggal,
+    teacherId: String(r.teacher_id),
+    teacherName: r.teacher_name,
+    jumlahHadir: parseInt(r.jumlah_hadir, 10) || 0,
+    nominal: Number(r.nominal) || 0,
+    jumlahDiterima: (parseInt(r.jumlah_hadir, 10) || 0) * (Number(r.nominal) || 0),
+    keterangan: r.keterangan || ''
+  }));
+}
+
+async function saveDisciplineBulk(periode, items) {
+  if (!Array.isArray(items)) throw new Error('Payload items harus berupa array.');
+  if (!/^\d{4}-\d{2}$/.test(String(periode || ''))) throw new Error('Format periode tidak valid. Gunakan YYYY-MM.');
+  const startDate = `${periode}-01`;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const row of items) {
+      await conn.query(
+        `UPDATE pengeluaran_kedisiplinan
+         SET jumlah_hadir=?, nominal=?
+         WHERE id=? AND tanggal BETWEEN ? AND LAST_DAY(?)`,
+        [parseInt(row.jumlahHadir, 10) || 0, Number(row.nominal) || 0, row.id, startDate, startDate]
+      );
+    }
+    await conn.commit();
+    return { success: true, message: 'Perubahan massal kedisiplinan berhasil disimpan.' };
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+async function addDisciplineExpense(data) {
+  await ensureDisciplineTable();
+  const resolvedTeacher = await resolveExtracurricularTeacher(data);
+  const tanggal = data.tanggal;
+  if (!tanggal) throw new Error('Tanggal wajib diisi.');
+  await pool.query(
+    `INSERT INTO pengeluaran_kedisiplinan
+     (tanggal, teacher_id, teacher_name, jumlah_hadir, nominal, keterangan)
+     VALUES (?,?,?,?,?,?)`,
+    [
+      tanggal,
+      resolvedTeacher.teacher_id,
+      resolvedTeacher.teacher_name,
+      parseInt(data.jumlahHadir, 10) || 0,
+      Number(data.nominal) || 0,
+      String(data.keterangan || '').trim() || null
+    ]
+  );
+  return { success: true, message: 'Pengeluaran kedisiplinan berhasil ditambahkan.' };
+}
+
+async function deleteDisciplineExpense(id) {
+  await ensureDisciplineTable();
+  await pool.query('DELETE FROM pengeluaran_kedisiplinan WHERE id=?', [id]);
+  return { success: true, message: 'Pengeluaran kedisiplinan berhasil dihapus.' };
+}
+
+async function getDisciplineExpenses(startDate, endDate) {
+  await ensureDisciplineTable();
+  const [rows] = await pool.query(
+    `SELECT id, tanggal, teacher_id, teacher_name, jumlah_hadir, nominal, keterangan
+     FROM pengeluaran_kedisiplinan
+     WHERE tanggal BETWEEN ? AND ?
+     ORDER BY tanggal DESC, id DESC`,
+    [startDate, endDate]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    tanggal: r.tanggal,
+    teacherId: String(r.teacher_id),
+    teacherName: r.teacher_name,
+    jumlahHadir: parseInt(r.jumlah_hadir, 10) || 0,
+    nominal: Number(r.nominal) || 0,
+    jumlahDiterima: (parseInt(r.jumlah_hadir, 10) || 0) * (Number(r.nominal) || 0),
+    keterangan: r.keterangan || ''
+  }));
 }
 
 async function getTeacherAttendanceSummary(startDate, endDate) {
@@ -379,10 +938,61 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     totalNominal: exp.totalNominal || ((exp.jumlah || 1) * (exp.nominal || 0)),
     totalBisyaroh: -Math.abs(exp.totalNominal || exp.nominal),
     isExpense: true,
+    expenseType: 'other',
     tanggal: exp.tanggal
   }));
 
-  const combined = teacherResults.concat(expenseItems);
+  const extracurricularExpenses = await getExtracurricularExpenses(startDate, endDate);
+  const extracurricularItems = extracurricularExpenses.map(exp => ({
+    nama: `Ekstrakurikuler - ${exp.namaEkstra} (${exp.teacherName})`,
+    tmt: '-',
+    bisyarohMengajar: '-',
+    totalHadir: '-',
+    totalTransportHari: '-',
+    totalTransportAcara: '-',
+    jumlahKegiatan: '-',
+    wiyathabakti: '-',
+    bisyarohTransport: '-',
+    bisyarohTransportKegiatan: '-',
+    tugasTambahan1: '-',
+    tugasTambahan2: '-',
+    tugasTambahan3: '-',
+    honorTugas: '-',
+    jumlah: exp.jumlahHadir || 0,
+    nominal: exp.nominal || 0,
+    totalNominal: exp.jumlahDiterima || ((exp.jumlahHadir || 0) * (exp.nominal || 0)),
+    totalBisyaroh: -Math.abs(exp.jumlahDiterima || exp.nominal || 0),
+    isExpense: true,
+    expenseType: 'extracurricular',
+    tanggal: exp.tanggal
+  }));
+
+  const disciplineExpenses = await getDisciplineExpenses(startDate, endDate);
+  const disciplineItems = disciplineExpenses.map(exp => ({
+    nama: `Kedisiplinan (${exp.teacherName})`,
+    tmt: '-',
+    bisyarohMengajar: '-',
+    totalHadir: '-',
+    totalTransportHari: '-',
+    totalTransportAcara: '-',
+    jumlahKegiatan: '-',
+    wiyathabakti: '-',
+    bisyarohTransport: '-',
+    bisyarohTransportKegiatan: '-',
+    tugasTambahan1: '-',
+    tugasTambahan2: '-',
+    tugasTambahan3: '-',
+    honorTugas: '-',
+    jumlah: exp.jumlahHadir || 0,
+    nominal: exp.nominal || 0,
+    totalNominal: exp.jumlahDiterima || ((exp.jumlahHadir || 0) * (exp.nominal || 0)),
+    totalBisyaroh: -Math.abs(exp.jumlahDiterima || exp.nominal || 0),
+    isExpense: true,
+    expenseType: 'discipline',
+    tanggal: exp.tanggal
+  }));
+
+  const combined = teacherResults.concat(expenseItems, extracurricularItems, disciplineItems);
   combined.sort((a, b) => {
     if (!a.isExpense && !b.isExpense) {
       const tmtA = Number(a.tmt) || 0;
@@ -420,7 +1030,15 @@ async function getTotalBisyarohBreakdown(startDate, endDate) {
   const transportKegiatan = teachers.reduce((t, i) => t + (Number(i.bisyarohTransportKegiatan) || 0), 0);
   const bisyarohKehadiran = transportKehadiran + transportKegiatan;
   const bisyarohTugasTambahan = teachers.reduce((t, i) => t + (Number(i.honorTugas) || 0), 0);
-  const pengeluaranLain = expenses.reduce((t, i) => t + Math.abs(Number(i.totalNominal || i.totalBisyaroh || 0)), 0);
+  const pengeluaranLain = expenses
+    .filter((i) => i.expenseType !== 'extracurricular' && i.expenseType !== 'discipline')
+    .reduce((t, i) => t + Math.abs(Number(i.totalNominal || i.totalBisyaroh || 0)), 0);
+  const pengeluaranEkstrakurikuler = expenses
+    .filter((i) => i.expenseType === 'extracurricular')
+    .reduce((t, i) => t + Math.abs(Number(i.totalNominal || i.totalBisyaroh || 0)), 0);
+  const pengeluaranKedisiplinan = expenses
+    .filter((i) => i.expenseType === 'discipline')
+    .reduce((t, i) => t + Math.abs(Number(i.totalNominal || i.totalBisyaroh || 0)), 0);
 
   const total = wiyathabakti + bisyarohMengajar + bisyarohKehadiran + bisyarohTugasTambahan;
 
@@ -432,6 +1050,8 @@ async function getTotalBisyarohBreakdown(startDate, endDate) {
     transportKehadiran,
     transportKegiatan,
     pengeluaranLain,
+    pengeluaranEkstrakurikuler,
+    pengeluaranKedisiplinan,
     total
   };
 }
@@ -474,6 +1094,57 @@ async function getManualTransportData(periode) {
 async function saveBulkManualTransport(transportData) {
   if (!Array.isArray(transportData) || transportData.length === 0) {
     return { success: true, message: 'Tidak ada data transport manual.' };
+  }
+
+  // Keep FK integrity: transport_manual.guru_id -> guru.guru_id
+  // Some flows now use teacher IDs from master table; create missing guru rows on-the-fly.
+  const guruIds = Array.from(new Set(transportData.map((item) => String(item.guruId || '').trim()).filter(Boolean)));
+  if (guruIds.length) {
+    const placeholders = guruIds.map(() => '?').join(',');
+    const [existingGuruRows] = await pool.query(
+      `SELECT guru_id FROM guru WHERE guru_id IN (${placeholders})`,
+      guruIds
+    );
+    const existing = new Set(existingGuruRows.map((r) => String(r.guru_id)));
+    const missing = guruIds.filter((id) => !existing.has(id));
+
+    if (missing.length) {
+      let teacherMap = new Map();
+      if (masterPool) {
+        const missingPlaceholders = missing.map(() => '?').join(',');
+        const [teacherRows] = await masterPool.query(
+          `SELECT id, name, classification, tmt
+           FROM teachers
+           WHERE id IN (${missingPlaceholders})`,
+          missing
+        );
+        teacherMap = new Map(teacherRows.map((r) => [String(r.id), r]));
+      }
+
+      const values = missing.map((id) => {
+        const teacher = teacherMap.get(id);
+        const tmtYear = (() => {
+          if (!teacher?.tmt) return null;
+          if (typeof teacher.tmt === 'number') return teacher.tmt;
+          const dt = new Date(teacher.tmt);
+          return Number.isNaN(dt.getTime()) ? null : dt.getFullYear();
+        })();
+        return [
+          id,
+          teacher?.name || `Guru ${id}`,
+          teacher?.classification || null,
+          tmtYear,
+          ''
+        ];
+      });
+
+      await pool.query(
+        `INSERT INTO guru (guru_id, nama, klasifikasi, tmt, tugas_ids)
+         VALUES ?
+         ON DUPLICATE KEY UPDATE nama = VALUES(nama), klasifikasi = VALUES(klasifikasi), tmt = VALUES(tmt)`,
+        [values]
+      );
+    }
   }
 
   const rows = transportData.map(item => [
@@ -572,9 +1243,20 @@ module.exports = {
   getPayslipData,
   getAllPayslipsData,
   getOtherExpenses,
+  getActiveTeachers,
+  getExtracurricularExpenses,
+  getExtracurricularMonthSheet,
+  getDisciplineMonthSheet,
   getActivities,
   addActivity,
   addOtherExpense,
   updateOtherExpense,
-  deleteOtherExpense
+  deleteOtherExpense,
+  addExtracurricularExpense,
+  saveExtracurricularBulk,
+  updateExtracurricularExpense,
+  deleteExtracurricularExpense,
+  addDisciplineExpense,
+  saveDisciplineBulk,
+  deleteDisciplineExpense
 };

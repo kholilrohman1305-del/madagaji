@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { LockKeyhole, Sparkles, ShieldCheck, ChartNoAxesCombined } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from '../utils/toast';
@@ -10,15 +10,18 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    setErrorMessage('');
     setLoading(true);
     try {
       await login(username, password);
       navigate('/dasbor', { replace: true });
     } catch (e) {
       const message = e?.response?.data?.message || 'Login gagal. Periksa username/password.';
+      setErrorMessage(message);
       toast.error(message);
     } finally {
       setLoading(false);
@@ -60,6 +63,12 @@ export default function Login() {
             <button type="submit" disabled={loading || !username || !password}>
               {loading ? 'Memproses...' : 'Masuk'}
             </button>
+            {errorMessage ? (
+              <div style={{ color: '#ef4444', fontSize: 13, marginTop: 4 }}>{errorMessage}</div>
+            ) : null}
+            <Link to="/" className="ghost" style={{ textAlign: 'center', textDecoration: 'none' }}>
+              Kembali ke Dashboard Sistem
+            </Link>
           </form>
           <p className="login-footnote">Akses hanya untuk pengguna terdaftar.</p>
         </div>

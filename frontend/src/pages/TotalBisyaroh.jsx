@@ -47,7 +47,9 @@ export default function TotalBisyaroh() {
     { no: 3, label: 'Transport Kehadiran', value: data.transportKehadiran || 0, color: 'var(--purple-500)' },
     { no: 4, label: 'Transport Kegiatan', value: data.transportKegiatan || 0, color: 'var(--cyan-500)' },
     { no: 5, label: 'Tugas Tambahan', value: data.bisyarohTugasTambahan || 0, color: 'var(--orange-500)' },
-    { no: 6, label: 'Pengeluaran Lain', value: data.pengeluaranLain || 0, color: 'var(--danger-500)' }
+    { no: 6, label: 'Pengeluaran Lain', value: data.pengeluaranLain || 0, color: 'var(--danger-500)' },
+    { no: 7, label: 'Ekstrakurikuler', value: data.pengeluaranEkstrakurikuler || 0, color: '#be123c' },
+    { no: 8, label: 'Kedisiplinan', value: data.pengeluaranKedisiplinan || 0, color: '#b45309' }
   ] : [];
 
   const maxValue = rows.reduce((m, r) => Math.max(m, r.value), 1);
@@ -67,7 +69,7 @@ export default function TotalBisyaroh() {
 
         {data && (
           <div style={{ marginTop: 24 }}>
-            <div className="stat-grid">
+            <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
               {rows.map(r => (
                 <div key={r.no} className="stat-card" style={{ background: `linear-gradient(135deg, ${r.color}15 0%, ${r.color}25 100%)` }}>
                   <div className="stat-label" style={{ color: r.color }}>{r.label}</div>

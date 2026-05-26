@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api';
+import { toast } from '../utils/toast';
 import { CalendarClock, Save, Clock } from 'lucide-react';
 
 const DAYS = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Ahad'];
@@ -12,6 +13,8 @@ export default function Penjadwalan() {
   const [hoursByDay, setHoursByDay] = useState({});
   const [effectiveDays, setEffectiveDays] = useState(DAYS);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [conflictAlert, setConflictAlert] = useState({ open: false, items: [] });
 
   useEffect(() => {
     let alive = true;
@@ -82,28 +85,110 @@ export default function Penjadwalan() {
   };
 
   const saveAll = async () => {
+    if (saving) return;
     const toSave = rows.filter(r => r.hari === day && r.mapelId && r.guruId);
-    const tasks = toSave.map(r => {
-      if (r.id) {
-        return api.put(`/schedule/${r.id}`, {
+    if (toSave.length === 0) {
+      toast.info('Tidak ada perubahan jadwal yang bisa disimpan.');
+      return;
+    }
+
+    const classNameById = new Map((meta?.classes || []).map(c => [String(c.id), c.name]));
+    const subjectNameById = new Map((meta?.subjects || []).map(s => [String(s.id), s.name]));
+
+    const collisions = [];
+    const assignmentBySlotGuru = new Map();
+    toSave.forEach((r) => {
+      const key = `${r.hari}|${r.jamKe}|${r.guruId}`;
+      const existing = assignmentBySlotGuru.get(key);
+      const payload = {
+        className: classNameById.get(String(r.kelas)) || r.kelas,
+        subjectName: subjectNameById.get(String(r.mapelId)) || r.mapelId
+      };
+      if (!existing) {
+        assignmentBySlotGuru.set(key, [payload]);
+      } else {
+        existing.push(payload);
+      }
+    });
+    assignmentBySlotGuru.forEach((items, key) => {
+      if (items.length < 2) return;
+      const [slotDay, slotHour] = key.split('|');
+      collisions.push(
+        `${slotDay} jam ${slotHour}: ${items.map(item => `${item.className} (${item.subjectName})`).join(' | ')}`
+      );
+    });
+
+    if (collisions.length > 0) {
+      setConflictAlert({
+        open: true,
+        items: collisions
+      });
+    }
+
+    const updates = toSave.filter(r => r.id);
+    const creates = toSave.filter(r => !r.id);
+
+    setSaving(true);
+    try {
+      const results = [];
+
+      // Update jadwal lama bisa paralel karena tidak membuat ID baru.
+      const updateResults = await Promise.allSettled(
+        updates.map(r => api.put(`/schedule/${r.id}`, {
           hari: r.hari,
           jamKe: r.jamKe,
           kelas: r.kelas,
           mapelId: r.mapelId,
           guruId: r.guruId
-        });
+        }, { skipToast: true }))
+      );
+      results.push(...updateResults);
+
+      // Insert jadwal baru harus serial untuk menghindari race ID Jxxx di backend.
+      // Jika paralel, beberapa request bisa membaca last ID yang sama.
+      for (const r of creates) {
+        // eslint-disable-next-line no-await-in-loop
+        const createResult = await api.post('/schedule', {
+          hari: r.hari,
+          jamKe: [r.jamKe],
+          kelas: r.kelas,
+          mapelId: r.mapelId,
+          guruId: r.guruId
+        }, { skipToast: true })
+          .then(value => ({ status: 'fulfilled', value }))
+          .catch(reason => ({ status: 'rejected', reason }));
+        results.push(createResult);
       }
-      return api.post('/schedule', {
-        hari: r.hari,
-        jamKe: [r.jamKe],
-        kelas: r.kelas,
-        mapelId: r.mapelId,
-        guruId: r.guruId
-      });
-    });
-    await Promise.all(tasks);
-    const res = await api.get('/schedule', { params: { hari: day } });
-    setRows(res.data || []);
+
+      const failed = results.filter(result => result.status === 'rejected');
+
+      if (failed.length > 0) {
+        const conflictError = failed.find(result => result.reason?.response?.status === 409);
+        if (conflictError) {
+          const message = conflictError.reason?.response?.data?.message || 'Jadwal bentrok. Periksa guru/jam yang sama.';
+          const nextItems = [message];
+          if (Array.isArray(conflictError.reason?.response?.data?.conflicts)) {
+            conflictError.reason.response.data.conflicts.forEach((item) => {
+              if (item) nextItems.push(String(item));
+            });
+          }
+          setConflictAlert({
+            open: true,
+            items: nextItems
+          });
+          toast.warn('Jadwal bentrok terdeteksi, tetapi proses simpan tetap dijalankan.');
+        } else {
+          toast.error('Sebagian jadwal gagal disimpan.', `Berhasil: ${results.length - failed.length}, gagal: ${failed.length}.`);
+        }
+      } else {
+        toast.success(`Berhasil menyimpan ${results.length} jadwal.`);
+      }
+
+      const res = await api.get('/schedule', { params: { hari: day }, skipToast: true });
+      setRows(res.data || []);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -123,11 +208,41 @@ export default function Penjadwalan() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: 14 }}>
             <Clock size={18} /> Jam per hari: <strong>{hours || '-'}</strong>
           </div>
-          <button className="secondary" onClick={saveAll}>
-            <Save size={18} /> Simpan Semua
+          <button className="secondary" onClick={saveAll} disabled={saving}>
+            <Save size={18} /> {saving ? 'Menyimpan...' : 'Simpan Semua'}
           </button>
         </div>
       </div>
+
+      {conflictAlert.open && (
+        <div className="conflict-alert-backdrop">
+          <div className="conflict-alert-modal">
+            <div className="conflict-alert-header">
+              <div className="conflict-alert-title-wrap">
+                <h3 className="conflict-alert-title">Alert Jadwal Bentrok</h3>
+                <p className="conflict-alert-subtitle">
+                  Jadwal tetap disimpan, tetapi ada bentrok pada poin berikut:
+                </p>
+              </div>
+              <button
+                type="button"
+                className="conflict-alert-close"
+                onClick={() => setConflictAlert({ open: false, items: [] })}
+              >
+                Tutup
+              </button>
+            </div>
+
+            <div className="conflict-alert-body">
+              <ol className="conflict-alert-list">
+                {conflictAlert.items.map((item, idx) => (
+                  <li key={`${item}-${idx}`}>{item}</li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="modern-table-card" style={{ marginTop: 24, overflowX: 'auto' }}>
         {(!meta || loading) && (

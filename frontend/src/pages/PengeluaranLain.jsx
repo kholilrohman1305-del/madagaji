@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
-import api, { financeApi } from '../api';
+import api from '../api';
 import { Wallet, Calendar, Plus, Save, Trash2, X, Edit3 } from 'lucide-react';
 
 export default function PengeluaranLain() {
   const today = new Date();
   const defaultStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-  const defaultEnd = today.toISOString().slice(0, 10);
+  const defaultEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
   const [items, setItems] = useState([]);
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [form, setForm] = useState({
     periode: new Date().toISOString().slice(0, 7),
     kategori: '',
@@ -25,23 +26,9 @@ export default function PengeluaranLain() {
     nominal: 0,
     keterangan: ''
   });
-  const withFinanceFallback = async (financeCall, legacyCall) => {
-    try {
-      return await financeCall();
-    } catch (e) {
-      const status = e?.response?.status;
-      const isNetwork = e?.code === 'ERR_NETWORK';
-      if (status === 404 || isNetwork) return legacyCall();
-      throw e;
-    }
-  };
-
   const load = async (range) => {
     const params = range || { startDate, endDate };
-    const res = await withFinanceFallback(
-      () => financeApi.get('/expenses', { params }),
-      () => api.get('/payroll/expenses', { params })
-    );
+    const res = await api.get('/payroll/expenses', { params });
     const rows = res.data || [];
     const seen = new Set();
     const unique = rows.filter(r => {
@@ -50,11 +37,22 @@ export default function PengeluaranLain() {
       return true;
     });
     setItems(unique);
+    setSelectedIds(prev => {
+      const next = new Set();
+      unique.forEach(row => {
+        if (prev.has(row.id)) next.add(row.id);
+      });
+      return next;
+    });
   };
 
   useEffect(() => {
     load();
-  }, [startDate, endDate]);
+  }, []);
+
+  const applyDateFilter = () => {
+    load({ startDate, endDate });
+  };
 
   const add = async () => {
     const tanggal = `${form.periode}-01`;
@@ -66,10 +64,7 @@ export default function PengeluaranLain() {
       nominal: form.nominal,
       keterangan: `Periode ${form.periode}`
     };
-    await withFinanceFallback(
-      () => financeApi.post('/expenses', payload),
-      () => api.post('/payroll/expenses', payload)
-    );
+    await api.post('/payroll/expenses', payload);
     setForm({ ...form, kategori: '', jumlah: 1, nominal: 0 });
     setShowModal(false);
     const firstDay = `${form.periode}-01`;
@@ -94,19 +89,47 @@ export default function PengeluaranLain() {
 
   const saveEdit = async () => {
     const payload = { ...editForm, tanggal: editForm.tanggal };
-    await withFinanceFallback(
-      () => financeApi.put(`/expenses/${editForm.id}`, payload),
-      () => api.put(`/payroll/expenses/${editForm.id}`, payload)
-    );
+    await api.put(`/payroll/expenses/${editForm.id}`, payload);
     setShowEditModal(false);
     load();
   };
 
   const del = async (id) => {
-    await withFinanceFallback(
-      () => financeApi.delete(`/expenses/${id}`),
-      () => api.delete(`/payroll/expenses/${id}`)
-    );
+    await api.delete(`/payroll/expenses/${id}`);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    load();
+  };
+
+  const isAllSelected = items.length > 0 && items.every(it => selectedIds.has(it.id));
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(items.map(it => it.id)));
+  };
+
+  const bulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const ok = window.confirm(`Hapus ${ids.length} data pengeluaran terpilih?`);
+    if (!ok) return;
+    await Promise.all(ids.map(id => api.delete(`/payroll/expenses/${id}`)));
+    setSelectedIds(new Set());
     load();
   };
 
@@ -121,16 +144,48 @@ export default function PengeluaranLain() {
           </div>
           <span style={{ color: 'var(--muted)' }}>s/d</span>
           <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <button className="outline" onClick={applyDateFilter}>
+            Terapkan
+          </button>
+          <button className="danger" onClick={bulkDelete} disabled={selectedIds.size === 0}>
+            <Trash2 size={18} /> Hapus Terpilih ({selectedIds.size})
+          </button>
           <button className="secondary" onClick={() => setShowModal(true)}>
             <Plus size={18} /> Tambah Pengeluaran
           </button>
         </div>
 
         <table className="table">
-          <thead><tr><th>Tanggal</th><th>Kategori</th><th>Jumlah</th><th>Nominal</th><th>Total</th><th>Keterangan</th><th>Aksi</th></tr></thead>
+          <thead>
+            <tr>
+              <th style={{ width: 44 }}>
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={toggleSelectAll}
+                  aria-label="Pilih semua data"
+                />
+              </th>
+              <th>Tanggal</th>
+              <th>Kategori</th>
+              <th>Jumlah</th>
+              <th>Nominal</th>
+              <th>Total</th>
+              <th>Keterangan</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
           <tbody>
-            {items.map((it, idx) => (
+            {items.map((it) => (
               <tr key={it.id}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(it.id)}
+                    onChange={() => toggleSelect(it.id)}
+                    aria-label={`Pilih data pengeluaran ${it.kategori || it.id}`}
+                  />
+                </td>
                 <td>{String(it.tanggal || '').slice(0, 10)}</td>
                 <td>{it.kategori}</td>
                 <td>{it.jumlah ?? 1}</td>

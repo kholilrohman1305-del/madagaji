@@ -1,0 +1,100 @@
+﻿<div class="max-w-5xl mx-auto space-y-6">
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-800">Profil Cabang</h2>
+            <p class="text-sm text-gray-500">Kelola data cabang, akun login, dan PIN transaksi.</p>
+        </div>
+    </div>
+
+    <div id="profil-alert" class="hidden rounded-xl border px-4 py-3 text-sm font-semibold"></div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm">
+            <div class="px-6 py-4 border-b bg-gray-50/60">
+                <h3 class="font-bold text-gray-800"><i class="fas fa-building mr-2"></i>Data Cabang</h3>
+            </div>
+            <form id="profil-branch-form" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Kode Cabang</label>
+                    <input id="profil-branch-code" type="text" class="w-full px-4 py-2.5 border rounded-lg bg-gray-100 text-gray-500" readonly>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Nama Cabang</label>
+                    <input id="profil-branch-name" type="text" class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Telepon</label>
+                    <input id="profil-branch-phone" type="text" class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Alamat</label>
+                    <textarea id="profil-branch-address" rows="2" class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"></textarea>
+                </div>
+                <div class="pt-2">
+                    <button type="submit" class="px-5 py-2.5 rounded-lg bg-primary-600 text-white font-bold hover:bg-primary-700">
+                        Simpan Data Cabang
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm">
+            <div class="px-6 py-4 border-b bg-gray-50/60">
+                <h3 class="font-bold text-gray-800"><i class="fas fa-user-shield mr-2"></i>Profil Akun</h3>
+            </div>
+            <form id="profil-account-form" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Nama Lengkap</label>
+                    <input id="profil-account-name" type="text" class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Username</label>
+                    <input id="profil-account-username" type="text" class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" required>
+                </div>
+                <hr class="border-gray-100">
+                <p class="text-xs text-gray-500">Isi password saat ini + password baru jika ingin ganti password.</p>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Password Saat Ini</label>
+                    <input id="profil-current-password" type="password" class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Password Baru</label>
+                    <input id="profil-new-password" type="password" class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                </div>
+                <div class="pt-2">
+                    <button type="submit" class="px-5 py-2.5 rounded-lg bg-primary-600 text-white font-bold hover:bg-primary-700">
+                        Simpan Profil Akun
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm">
+        <div class="px-6 py-4 border-b bg-gray-50/60 flex items-center justify-between">
+            <h3 class="font-bold text-gray-800"><i class="fas fa-key mr-2"></i>PIN Transaksi</h3>
+            <span id="profil-pin-badge" class="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 font-bold">Belum diset</span>
+        </div>
+        <form id="profil-pin-form" class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">PIN Lama (jika sudah ada)</label>
+                <input id="profil-pin-old" type="password" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" class="w-full px-4 py-2.5 border rounded-lg tracking-[0.35em] focus:ring-2 focus:ring-primary-500 outline-none" placeholder="######">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">PIN Baru (6 digit)</label>
+                <input id="profil-pin" type="password" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" class="w-full px-4 py-2.5 border rounded-lg tracking-[0.35em] focus:ring-2 focus:ring-primary-500 outline-none" required>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Konfirmasi PIN</label>
+                <input id="profil-pin-confirm" type="password" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" class="w-full px-4 py-2.5 border rounded-lg tracking-[0.35em] focus:ring-2 focus:ring-primary-500 outline-none" required>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Password Akun Saat Ini</label>
+                <input id="profil-pin-current-password" type="password" class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" required>
+            </div>
+            <button type="submit" class="h-[42px] px-5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700">
+                Ajukan Perubahan PIN
+            </button>
+        </form>
+    </div>
+</div>

@@ -1,4 +1,5 @@
 const pool = require('../db');
+const { randomBytes } = require('crypto');
 const {
   getTeachers,
   getSubjects,
@@ -9,6 +10,24 @@ const {
 } = require('./scheduler/configService');
 
 const DAY_NAMES = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Ahad'];
+
+function createScheduleId() {
+  const time = Date.now().toString(36).slice(-6).toUpperCase().padStart(6, '0');
+  const rand = randomBytes(2).toString('hex').slice(0, 3).toUpperCase();
+  return `J${time}${rand}`;
+}
+
+function isPrimaryDuplicateError(err) {
+  if (!err || err.code !== 'ER_DUP_ENTRY') return false;
+  const msg = String(err.sqlMessage || '');
+  return msg.includes("for key 'PRIMARY'") || msg.includes('PRIMARY');
+}
+
+function isScheduleConflictError(err) {
+  if (!err || err.code !== 'ER_DUP_ENTRY') return false;
+  const msg = String(err.sqlMessage || '');
+  return msg.includes('uniq_jadwal_kelas') || msg.includes('hari') && msg.includes('jam_ke') && msg.includes('kelas');
+}
 
 // Build map of allowed subjects per class (from positive mapping)
 function buildAllowedSubjectsByClass(classSubjects) {
@@ -219,16 +238,29 @@ async function generateSchedule({ days, hoursByDay }) {
 async function applyGeneratedSchedule(rows) {
   if (!rows || rows.length === 0) return { success: false, message: 'Tidak ada jadwal di-generate.' };
 
-  const [last] = await pool.query('SELECT id FROM jadwal ORDER BY id DESC LIMIT 1');
-  let lastIdNumber = parseInt(String(last[0]?.id || 'J000').substring(1)) || 0;
+  let inserted = false;
+  let attempts = 0;
+  while (!inserted && attempts < 3) {
+    attempts += 1;
+    const values = rows.map(r => [createScheduleId(), r.hari, r.jamKe, r.kelas, r.mapelId, r.guruId]);
+    try {
+      await pool.query('INSERT INTO jadwal (id, hari, jam_ke, kelas, mapel_id, guru_id) VALUES ?', [values]);
+      inserted = true;
+    } catch (e) {
+      if (isPrimaryDuplicateError(e)) {
+        continue;
+      }
+      if (isScheduleConflictError(e)) {
+        throw new Error('Jadwal bentrok. Ada kelas yang sudah memiliki jadwal pada hari dan jam yang sama.');
+      }
+      throw e;
+    }
+  }
 
-  const values = rows.map(r => {
-    lastIdNumber += 1;
-    const newId = `J${String(lastIdNumber).padStart(3, '0')}`;
-    return [newId, r.hari, r.jamKe, r.kelas, r.mapelId, r.guruId];
-  });
+  if (!inserted) {
+    throw new Error('Gagal menyimpan hasil auto-jadwal. Silakan coba lagi.');
+  }
 
-  await pool.query('INSERT INTO jadwal (id, hari, jam_ke, kelas, mapel_id, guru_id) VALUES ?', [values]);
   return { success: true, message: `Jadwal berhasil di-generate: ${rows.length} slot.` };
 }
 

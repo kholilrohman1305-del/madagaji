@@ -1,0 +1,179 @@
+﻿<div class="space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between transition hover:shadow-md">
+            <div>
+                <p class="text-xs text-gray-500 uppercase font-bold tracking-wider">Total Siswa Terdata</p>
+                <h3 class="text-2xl font-extrabold text-gray-800 mt-1" id="card-total-siswa">0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+                <i class="fas fa-users"></i>
+            </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between transition hover:shadow-md">
+            <div>
+                <p class="text-xs text-gray-500 uppercase font-bold tracking-wider">Siswa Lunas</p>
+                <h3 class="text-2xl font-extrabold text-emerald-600 mt-1" id="card-lunas">0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                <i class="fas fa-check-circle"></i>
+            </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between transition hover:shadow-md">
+            <div>
+                <p class="text-xs text-gray-500 uppercase font-bold tracking-wider">Siswa Tagihan</p>
+                <h3 class="text-2xl font-extrabold text-red-600 mt-1" id="card-nunggak">0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center text-xl">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="p-5 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50/50">
+            <h3 id="tunggakan-title" class="font-bold text-gray-800 flex items-center gap-2">
+                <i class="fas fa-list-ul text-primary-600"></i> Data Tagihan Siswa
+            </h3>
+            <div class="w-full sm:w-auto flex flex-col sm:flex-row gap-2">
+                <div class="relative w-full sm:w-48">
+                    <i class="fas fa-layer-group absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <select id="tunggakan-filter-kelas"
+                            class="w-full pl-10 pr-8 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition text-sm shadow-sm appearance-none"
+                            onchange="onTunggakanClassFilterChange()">
+                        <option value="">Semua Kelas</option>
+                    </select>
+                    <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 pointer-events-none"></i>
+                </div>
+                <div class="relative w-full sm:w-72">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" id="tunggakan-search" placeholder="Cari Nama / Kelas..." 
+                           class="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition text-sm shadow-sm"
+                           onkeyup="loadTunggakanData(1)">
+                </div>
+            </div>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-bold tracking-wide">
+                    <tr id="tunggakan-head-row">
+                        <th class="px-6 py-4">Nama Siswa</th>
+                        <th class="px-6 py-4">Kelas</th>
+                        <th class="px-6 py-4">Beasiswa</th>
+                        <th class="px-6 py-4 text-right">Total Tagihan</th>
+                        <th class="px-6 py-4 text-right">Terbayar</th>
+                        <th class="px-6 py-4 text-right">Sisa Tagihan</th>
+                        <th class="px-6 py-4 text-center">Status</th>
+                        <th class="px-6 py-4 text-center">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="table-tunggakan" class="divide-y divide-gray-100 bg-white">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="p-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50/50" id="tunggakan-pagination">
+            <span class="text-xs text-gray-500 font-medium" id="tunggakan-info">Menampilkan data...</span>
+            <div class="flex gap-2" id="tunggakan-controls">
+                </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-detail-tunggakan" class="fixed inset-0 z-[60] hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" onclick="closeDetailModal()"></div>
+    
+    <div class="flex min-h-full items-center justify-center p-2 md:p-4">
+        <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all w-[96vw] max-w-[1800px] h-[94vh] flex flex-col">
+            
+            <div class="bg-white px-6 py-4 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900" id="detail-nama">Nama Siswa</h3>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded font-mono" id="detail-kelas">Kelas</span>
+                    </div>
+                </div>
+                <button onclick="closeDetailModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center transition">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto custom-scrollbar bg-gray-50/30">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-gradient-to-br from-white to-gray-50 p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group">
+                        <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                            <i class="fas fa-wallet text-6xl text-gray-400"></i>
+                        </div>
+                        <p class="text-xs text-gray-500 font-bold uppercase tracking-wide">Total Kewajiban Tersisa</p>
+                        <p class="text-3xl font-extrabold mt-2" id="detail-total-sisa">Rp 0</p>
+                    </div>
+                    
+                    <div class="bg-gradient-to-br from-purple-50 to-white p-5 rounded-xl border border-purple-100 shadow-sm relative overflow-hidden">
+                        <div class="absolute right-0 top-0 p-4 opacity-10">
+                            <i class="fas fa-graduation-cap text-6xl text-purple-400"></i>
+                        </div>
+                        <p class="text-xs text-purple-600 font-bold uppercase tracking-wide">Status Beasiswa</p>
+                        <p class="text-xl font-bold text-purple-800 mt-2" id="detail-beasiswa">-</p>
+                        <p class="text-xs text-gray-500 mt-1" id="detail-beasiswa-ket">Keterangan beasiswa</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm h-fit">
+                        <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                            <h4 class="font-bold text-gray-700 text-sm flex items-center gap-2">
+                                <i class="fas fa-file-invoice-dollar text-red-500"></i> Rincian Tagihan
+                            </h4>
+                        </div>
+                        <div class="max-h-80 overflow-auto">
+                            <table class="min-w-full text-sm">
+                                <thead class="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0 z-10">
+                                    <tr>
+                                        <th class="p-3 text-left font-semibold whitespace-nowrap">Nama Tagihan</th>
+                                        <th class="p-3 text-left font-semibold whitespace-nowrap">Tahun Ajaran</th>
+                                        <th class="p-3 text-left font-semibold whitespace-nowrap">Semester</th>
+                                        <th class="p-3 text-right font-semibold whitespace-nowrap">Nominal</th>
+                                        <th class="p-3 text-right font-semibold whitespace-nowrap">Sisa</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="detail-list-bills" class="divide-y divide-gray-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm h-fit">
+                        <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                            <h4 class="font-bold text-gray-700 text-sm flex items-center gap-2">
+                                <i class="fas fa-history text-emerald-500"></i> Riwayat Pembayaran Masuk
+                            </h4>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0 z-10">
+                                    <tr>
+                                        <th class="p-3 text-left font-semibold">Tanggal</th>
+                                        <th class="p-3 text-left font-semibold">Penerima</th>
+                                        <th class="p-3 text-right font-semibold">Jumlah</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="detail-list-history" class="divide-y divide-gray-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+                <button onclick="printDetailTagihan()" class="bg-primary-600 text-white px-5 py-2 rounded-lg hover:bg-primary-700 font-medium shadow-sm transition">
+                    <i class="fas fa-print mr-2"></i> Print Detail
+                </button>
+                <button onclick="closeDetailModal()" class="bg-white border border-gray-300 text-gray-700 px-5 py-2 rounded-lg hover:bg-gray-100 font-medium shadow-sm transition">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

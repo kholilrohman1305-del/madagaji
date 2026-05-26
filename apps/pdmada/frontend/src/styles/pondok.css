@@ -1,0 +1,186 @@
+.pondok-shell {
+  display: grid;
+  gap: 14px;
+  font-family: Manrope, "Plus Jakarta Sans", "Segoe UI", sans-serif;
+}
+
+.pondok-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pondok-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.pondok-count {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-weight: 600;
+}
+
+.pondok-filters {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 10px;
+}
+
+.pondok-table-wrap {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.pondok-table-head {
+  display: grid;
+  grid-template-columns: 1.7fr 0.6fr 0.7fr;
+  gap: 8px;
+  padding: 14px 16px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pondok-row {
+  display: grid;
+  grid-template-columns: 1.7fr 0.6fr 0.7fr;
+  gap: 8px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.pondok-row:last-child {
+  border-bottom: none;
+}
+
+.pondok-row:hover {
+  background: #fafaff;
+}
+
+.pondok-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.pondok-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #6b7280;
+  background: #f3f4f6;
+  font-weight: 600;
+}
+
+.pondok-badge.active {
+  color: #065f46;
+  background: #d1fae5;
+}
+
+.pondok-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.icon-btn.danger {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.icon-btn.danger:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.pondok-empty {
+  padding: 24px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.pondok-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  background: rgba(15, 23, 42, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.pondok-modal {
+  width: min(540px, 100%);
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.22);
+}
+
+.pondok-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.pondok-modal-head h3 {
+  margin: 0;
+}
+
+.pondok-modal-body {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.pondok-modal-body label {
+  font-size: 13px;
+  color: #374151;
+}
+
+.pondok-modal-body input,
+.pondok-modal-body select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+.pondok-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+@media (max-width: 820px) {
+  .pondok-filters {
+    grid-template-columns: 1fr;
+  }
+  .pondok-table-head,
+  .pondok-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pondok-table-head span:first-child,
+  .pondok-row span:first-child {
+    grid-column: 1 / -1;
+  }
+}
+

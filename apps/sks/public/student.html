@@ -1,0 +1,248 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portal Siswa | SKS</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --line: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --ok: #059669;
+      --danger: #dc2626;
+      --primary: #3b82f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Plus Jakarta Sans", sans-serif;
+      margin: 0;
+      background: radial-gradient(circle at top right, #dbeafe 0%, #f8fafc 45%, #f1f5f9 100%);
+      color: var(--text);
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 40px; }
+    .topbar {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 12px; margin-bottom: 16px;
+    }
+    .brand {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: #0f172a; color: #fff; border-radius: 14px; padding: 10px 14px;
+      box-shadow: 0 10px 25px rgba(15,23,42,.2);
+    }
+    .logout {
+      border: 1px solid #fecaca; background: #fff1f2; color: #b91c1c;
+      border-radius: 10px; padding: 9px 14px; font-weight: 700; cursor: pointer;
+    }
+    .hero {
+      background: linear-gradient(120deg, #ffffff 0%, #f8fafc 100%);
+      border: 1px solid var(--line); border-radius: 18px; padding: 18px;
+      box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+      margin-bottom: 16px;
+    }
+    .hero h1 { margin: 0; font-size: 26px; font-weight: 800; }
+    .hero p { margin: 6px 0 0; color: var(--muted); }
+    .kpi { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .kpi .box { border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 12px; }
+    .kpi .lbl { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
+    .kpi .val { font-size: 24px; font-weight: 800; }
+    .layout { display: grid; grid-template-columns: 1.1fr .9fr; gap: 14px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: 0 8px 24px rgba(15,23,42,.06); }
+    .card-head { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 14px; font-weight: 800; display:flex; align-items:center; gap:8px; }
+    .card-body { padding: 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; padding: 12px 14px; background: #f8fafc; }
+    td { padding: 12px 14px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: top; }
+    .right { text-align: right; }
+    .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
+    .badge-ok { background: #dcfce7; color: #166534; }
+    .badge-due { background: #fee2e2; color: #b91c1c; }
+    .empty { padding: 20px; text-align: center; color: #94a3b8; font-size: 13px; }
+    .student-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+    .mini { background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px; }
+    .mini b { display:block; font-size:11px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .student-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .kpi { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <i class="fas fa-user-graduate"></i>
+        <strong>Portal Siswa</strong>
+      </div>
+      <button class="logout" id="btn-logout"><i class="fas fa-right-from-bracket"></i> Logout</button>
+    </div>
+
+    <div class="hero">
+      <h1 id="s-nama">-</h1>
+      <p id="s-headline">Memuat data siswa...</p>
+      <div class="student-grid">
+        <div class="mini"><b>NIS</b><span id="s-nis">-</span></div>
+        <div class="mini"><b>Kelas</b><span id="s-kelas">-</span></div>
+        <div class="mini"><b>Status</b><span id="s-status">-</span></div>
+        <div class="mini"><b>Asal Sekolah</b><span id="s-asal-sekolah">-</span></div>
+      </div>
+      <div class="kpi">
+        <div class="box">
+          <div class="lbl">Total Tagihan</div>
+          <div class="val" id="kpi-total-tagihan">Rp 0</div>
+        </div>
+        <div class="box">
+          <div class="lbl">Sudah Dibayar</div>
+          <div class="val" id="kpi-terbayar" style="color: var(--ok)">Rp 0</div>
+        </div>
+        <div class="box">
+          <div class="lbl">Sisa Kewajiban</div>
+          <div class="val" id="kpi-sisa" style="color: var(--danger)">Rp 0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="layout">
+      <section class="card">
+        <div class="card-head"><i class="fas fa-file-invoice-dollar"></i> Rincian Tagihan</div>
+        <div class="card-body">
+          <table>
+            <thead>
+              <tr>
+                <th>Nama Tagihan</th>
+                <th>Tahun Ajaran</th>
+                <th>Semester</th>
+                <th class="right">Nominal</th>
+                <th class="right">Sisa</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="student-bills-body">
+              <tr><td colspan="6" class="empty">Memuat data tagihan...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><i class="fas fa-receipt"></i> Riwayat Pembayaran</div>
+        <div class="card-body">
+          <table>
+            <thead>
+              <tr>
+                <th>Tanggal</th>
+                <th>Penerima</th>
+                <th>Keterangan</th>
+                <th class="right">Jumlah</th>
+              </tr>
+            </thead>
+            <tbody id="student-payments-body">
+              <tr><td colspan="4" class="empty">Memuat riwayat pembayaran...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script src="js/ui-feedback.js"></script>
+  <script>
+    const BASE = location.pathname.startsWith('/sks') ? '/sks' : '';
+    async function api(url, method = 'GET', body) {
+      const res = await fetch(`${BASE}${url}`, {
+        method,
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const data = await res.json().catch(() => ({}));
+      return { status: res.status, data };
+    }
+    function formatRp(val) {
+      return 'Rp ' + Number(val || 0).toLocaleString('id-ID');
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return '-';
+      const d = new Date(dateString);
+      if (Number.isNaN(d.getTime())) return String(dateString).split('T')[0];
+      return d.toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: '2-digit' });
+    }
+
+    function renderBills(rows) {
+      const tbody = document.getElementById('student-bills-body');
+      if (!rows || !rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">Belum ada data tagihan.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map((row) => {
+        const sisa = Number(row.sisa || 0);
+        const lunas = sisa <= 0;
+        return `
+          <tr>
+            <td>${row.namaTagihan || '-'}</td>
+            <td>${row.school_year_name || '-'}</td>
+            <td>${row.semester || '-'}</td>
+            <td class="right">${formatRp(row.nominal)}</td>
+            <td class="right">${lunas ? 'Lunas' : formatRp(sisa)}</td>
+            <td>${lunas ? '<span class="badge badge-ok">Lunas</span>' : '<span class="badge badge-due">Belum Lunas</span>'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderPayments(rows) {
+      const tbody = document.getElementById('student-payments-body');
+      if (!rows || !rows.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty">Belum ada riwayat pembayaran.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map((row) => `
+        <tr>
+          <td>${formatDate(row.tanggal)}</td>
+          <td>${row.penerima || '-'}</td>
+          <td>${row.keterangan || '-'}</td>
+          <td class="right" style="color:#059669;font-weight:700;">+${formatRp(row.jumlah_bayar)}</td>
+        </tr>
+      `).join('');
+    }
+
+    (async () => {
+      const me = await api('/api/auth/me');
+      if (me.status !== 200 || !me.data?.success || me.data?.role !== 'siswa') {
+        location.href = `${BASE}/login.html`;
+        return;
+      }
+      const s = me.data.student || {};
+      document.getElementById('s-nis').textContent = s.nis || '-';
+      document.getElementById('s-nama').textContent = s.nama || '-';
+      document.getElementById('s-kelas').textContent = s.kelas || '-';
+      document.getElementById('s-status').textContent = s.status || '-';
+
+      const finance = await api('/api/auth/student/finance');
+      if (finance.status !== 200 || !finance.data?.success) {
+        uiError(finance.data?.message || 'Gagal memuat ringkasan keuangan siswa.');
+        document.getElementById('s-headline').textContent = 'Data keuangan tidak tersedia.';
+        return;
+      }
+
+      const detail = finance.data.student || s;
+      document.getElementById('s-headline').textContent = `Kelas ${detail.kelas || '-'} Â· Status ${detail.status || '-'}`;
+      document.getElementById('s-asal-sekolah').textContent = detail.asal_sekolah || '-';
+      document.getElementById('kpi-total-tagihan').textContent = formatRp(finance.data.totals?.totalTagihan || 0);
+      document.getElementById('kpi-terbayar').textContent = formatRp(finance.data.totals?.totalTerbayar || 0);
+      document.getElementById('kpi-sisa').textContent = formatRp(finance.data.totals?.totalSisa || 0);
+      renderBills(finance.data.bills || []);
+      renderPayments(finance.data.payments || []);
+    })();
+    document.getElementById('btn-logout').addEventListener('click', async () => {
+      await api('/api/auth/logout', 'POST');
+      location.href = `${BASE}/login.html`;
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "name": "sks",
+  "version": "1.0.0",
+  "description": "",
+  "main": "db.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "drive:oauth-token": "node scripts/google-drive-oauth-token.js",
+    "perf:stage4": "node scripts/benchmark-stage4.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "body-parser": "^2.2.2",
+    "cors": "^2.8.5",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.2.3",
+    "ejs": "^4.0.1",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "express-session": "^1.18.2",
+    "googleapis": "^150.0.1",
+    "multer": "^2.0.2",
+    "mysql2": "^3.16.1",
+    "xlsx": "^0.18.5"
+  }
+}

@@ -1,0 +1,468 @@
+﻿<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-800">Manajemen Beasiswa</h2>
+            <p class="text-sm text-gray-500">Kelola program beasiswa, bantuan, dan pengurangan biaya otomatis.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <select id="bea-filter-period-type" class="px-3 py-2 rounded-lg border border-gray-200 text-sm">
+                <option value="month">Bulan</option>
+                <option value="semester">Semester</option>
+                <option value="year">Tahun</option>
+                <option value="next_semester">Semester Depan</option>
+            </select>
+            <select id="bea-filter-month" class="px-3 py-2 rounded-lg border border-gray-200 text-sm">
+                <option value="">Bulan</option>
+            </select>
+            <select id="bea-filter-semester" class="px-3 py-2 rounded-lg border border-gray-200 text-sm hidden">
+                <option value="ganjil">Ganjil</option>
+                <option value="genap">Genap</option>
+            </select>
+            <select id="bea-filter-year" class="px-3 py-2 rounded-lg border border-gray-200 text-sm">
+                <option value="">Tahun</option>
+            </select>
+            <select id="bea-export-report" class="px-3 py-2 rounded-lg border border-gray-200 text-sm">
+                <option value="realisasi_operasional">Export Realisasi (Aktif)</option>
+                <option value="realisasi_audit">Export Realisasi (Audit)</option>
+                <option value="rekap">Export Rekap</option>
+                <option value="rencana">Export Rencana</option>
+            </select>
+            <button id="bea-btn-export" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-lg shadow-emerald-200 transition text-sm font-bold">
+                <i class="fas fa-file-export"></i>
+                <span>Export</span>
+            </button>
+            <button id="bea-btn-open-plan" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-lg shadow-sky-200 transition text-sm font-bold">
+                <i class="fas fa-chart-line"></i>
+                <span>Tambah Rencana</span>
+            </button>
+            <button onclick="openMasterModal()" class="bg-pink-600 hover:bg-pink-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 shadow-lg shadow-pink-200 transition">
+                <i class="fas fa-plus-circle"></i>
+                <span>Buat Program Beasiswa</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-100 p-2 shadow-sm inline-flex gap-2">
+        <button id="bea-tab-ringkasan" type="button" onclick="setBeasiswaTab('ringkasan')" class="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white">Ringkasan</button>
+        <button id="bea-tab-realisasi" type="button" onclick="setBeasiswaTab('realisasi')" class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100">Realisasi</button>
+        <button id="bea-tab-rencana" type="button" onclick="setBeasiswaTab('rencana')" class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100">Rencana</button>
+    </div>
+
+    <div id="bea-section-ringkasan" class="space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+            <div>
+                <p class="text-xs text-gray-500 font-bold uppercase">Total Program</p>
+                <h3 class="text-2xl font-bold text-gray-800" id="bea-total-program">0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-pink-50 text-pink-600 flex items-center justify-center text-xl">
+                <i class="fas fa-certificate"></i>
+            </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+            <div>
+                <p class="text-xs text-gray-500 font-bold uppercase">Total Penerima</p>
+                <h3 class="text-2xl font-bold text-blue-600" id="bea-total-siswa">0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+                <i class="fas fa-users"></i>
+            </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+            <div>
+                <p class="text-xs text-gray-500 font-bold uppercase">Total Anggaran Tersalurkan</p>
+                <h3 class="text-2xl font-bold text-emerald-600" id="bea-total-anggaran">Rp 0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                <i class="fas fa-wallet"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+            <div>
+                <p class="text-xs text-gray-500 font-bold uppercase">Target Penerima (Rencana)</p>
+                <h3 class="text-2xl font-bold text-sky-600" id="bea-target-penerima">0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center text-xl">
+                <i class="fas fa-user-check"></i>
+            </div>
+        </div>
+        <div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+            <div>
+                <p class="text-xs text-gray-500 font-bold uppercase">Target Nominal (Rencana)</p>
+                <h3 class="text-2xl font-bold text-indigo-600" id="bea-target-nominal">Rp 0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
+                <i class="fas fa-bullseye"></i>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <div id="bea-section-rencana" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hidden">
+        <div class="p-5 border-b border-gray-100 bg-gray-50/50">
+            <h3 class="font-bold text-gray-800">Rencana Beasiswa per Program</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-bold">
+                    <tr>
+                        <th class="px-6 py-4">Program</th>
+                        <th class="px-6 py-4 text-center">Target Penerima</th>
+                        <th class="px-6 py-4 text-right">Target Nominal</th>
+                    </tr>
+                </thead>
+                <tbody id="table-plan-by-program" class="divide-y divide-gray-100 bg-white">
+                    <tr><td colspan="3" class="text-center p-8 text-gray-400">Memuat data rencana...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="p-5 border-t border-gray-100 bg-gray-50/50">
+            <h3 class="font-bold text-gray-800">Detail Rencana</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-bold">
+                    <tr>
+                        <th class="px-6 py-4">Periode</th>
+                        <th class="px-6 py-4">Program</th>
+                        <th class="px-6 py-4 text-center">Target Penerima</th>
+                        <th class="px-6 py-4 text-right">Target Nominal</th>
+                        <th class="px-6 py-4">Catatan</th>
+                        <th class="px-6 py-4 text-center">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="table-plan-list" class="divide-y divide-gray-100 bg-white">
+                    <tr><td colspan="6" class="text-center p-8 text-gray-400">Memuat detail rencana...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="bea-section-realisasi" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hidden">
+        <div class="p-5 border-b border-gray-100 bg-gray-50/50">
+            <h3 class="font-bold text-gray-800">Daftar Program Beasiswa</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-bold">
+                    <tr>
+                        <th class="px-6 py-4">Nama Program Beasiswa</th>
+                        <th class="px-6 py-4 text-right">Nominal / Nilai</th>
+                        <th class="px-6 py-4 text-center">Jml Penerima</th>
+                        <th class="px-6 py-4 text-right">Total Anggaran</th>
+                        <th class="px-6 py-4 text-center">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="table-master-beasiswa" class="divide-y divide-gray-100 bg-white">
+                    <tr><td colspan="5" class="text-center p-8 text-gray-400">Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <p id="bea-realisasi-page-info" class="text-xs text-gray-500">Menampilkan 0 - 0 dari 0 program</p>
+            <div class="flex items-center gap-2">
+                <select id="bea-realisasi-rows" class="rounded-lg border border-gray-200 px-2 py-1.5 text-sm" onchange="changeBeasiswaRealisasiRows()">
+                    <option value="10">10 baris</option>
+                    <option value="25">25 baris</option>
+                    <option value="50">50 baris</option>
+                    <option value="all">All</option>
+                </select>
+                <button id="bea-realisasi-prev" type="button" onclick="prevBeasiswaRealisasiPage()" class="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+                    <i class="fas fa-chevron-left text-xs"></i>
+                </button>
+                <button id="bea-realisasi-next" type="button" onclick="nextBeasiswaRealisasiPage()" class="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+                    <i class="fas fa-chevron-right text-xs"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-master" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" onclick="closeMasterModal()"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative transform transition-all">
+            
+            <h3 class="text-lg font-bold mb-4 text-gray-800">Buat Program Beasiswa Baru</h3>
+            
+            <form id="form-master" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-700">Nama Beasiswa</label>
+                    <input type="text" id="master-nama" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 outline-none" placeholder="Cth: Beasiswa Prestasi / Yatim" required>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Tipe Nilai</label>
+                        <select id="master-jenis" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 outline-none">
+                            <option value="nominal">Nominal</option>
+                            <option value="persen">Persentase</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Status Program</label>
+                        <select id="master-active" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 outline-none">
+                            <option value="1">Aktif</option>
+                            <option value="0">Nonaktif</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-700">Nominal (Rp) atau Persentase (%)</label>
+                    <input type="number" id="master-nominal" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 outline-none" placeholder="Cth: 500000 atau 50" required>
+                    <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle"></i> Untuk tipe persen, nilai wajib 1-100.</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Mulai Berlaku</label>
+                        <input type="date" id="master-start-date" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Selesai Berlaku</label>
+                        <input type="date" id="master-end-date" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Minimal Tagihan</label>
+                        <input type="number" id="master-min-arrears" class="w-full p-2 border border-gray-300 rounded-lg" placeholder="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Kuota Maksimal (opsional)</label>
+                        <input type="number" id="master-max-recipients" class="w-full p-2 border border-gray-300 rounded-lg" placeholder="mis: 50">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-700">Deskripsi</label>
+                    <textarea id="master-description" class="w-full p-2 border border-gray-300 rounded-lg" rows="2"></textarea>
+                </div>
+
+                <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+                    <button type="button" onclick="closeMasterModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">Batal</button>
+                    <button type="submit" class="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 font-bold text-sm shadow-md">Simpan Program</button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+<div id="modal-add-recipient" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" onclick="document.getElementById('modal-add-recipient').classList.add('hidden')"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+            
+            <h3 class="text-lg font-bold mb-1 text-gray-800" id="recipient-title">Tambah Penerima</h3>
+            <p class="text-xs text-gray-500 mb-4">Program: <span id="recipient-subtitle" class="font-bold text-pink-600">...</span></p>
+            
+            <form id="form-recipient" class="space-y-4">
+                <input type="hidden" id="recipient-type-id">
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-700">Mode Pilih Siswa</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="recipient-mode-class" type="button" onclick="setRecipientMode('class')" class="px-3 py-2 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 text-sm font-semibold">By Kelas</button>
+                        <button id="recipient-mode-student" type="button" onclick="setRecipientMode('student')" class="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-semibold">By Siswa</button>
+                    </div>
+                </div>
+
+                <div id="recipient-by-class">
+                    <label class="block text-sm font-medium mb-1 text-gray-700">Pilih Kelas</label>
+                    <select id="recipient-class-select" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" onchange="renderRecipientStudentOptions()">
+                        <option value="">-- Pilih Kelas --</option>
+                    </select>
+                </div>
+
+                <div id="recipient-by-student" class="hidden">
+                    <label class="block text-sm font-medium mb-1 text-gray-700">Cari Siswa</label>
+                    <input type="text" id="recipient-student-search" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ketik Nama / NIS..." onkeyup="renderRecipientStudentOptions()">
+                </div>
+
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 max-h-52 overflow-y-auto">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-xs text-gray-500 font-semibold">Pilih siswa penerima</p>
+                        <button type="button" onclick="toggleSelectAllRecipientStudents()" class="text-xs font-bold text-blue-600 hover:underline">Pilih Semua</button>
+                    </div>
+                    <div id="recipient-student-list" class="space-y-2"></div>
+                </div>
+
+                <div id="recipient-preview-box" class="hidden rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800"></div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-700">Tanggal Terima</label>
+                    <input type="date" id="recipient-date" class="w-full p-2 border border-gray-300 rounded-lg outline-none">
+                </div>
+
+                <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+                    <button type="button" onclick="previewRecipientScholarship()" class="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-bold text-sm shadow-md">Preview</button>
+                    <button type="button" onclick="document.getElementById('modal-add-recipient').classList.add('hidden')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">Batal</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold text-sm shadow-md">Tambahkan & Potong Tagihan</button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+<div id="modal-detail-list" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" onclick="document.getElementById('modal-detail-list').classList.add('hidden')"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-0 relative overflow-hidden flex flex-col max-h-[85vh]">
+            
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50">
+                <div>
+                    <h3 class="font-bold text-gray-800" id="detail-list-title">Daftar Penerima</h3>
+                    <p class="text-xs text-gray-500">Menampilkan seluruh siswa yang menerima beasiswa ini.</p>
+                </div>
+                <button onclick="document.getElementById('modal-detail-list').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            
+            <div class="overflow-y-auto p-0 flex-1 custom-scrollbar">
+                <div class="p-4 border-b bg-white">
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+                        <input id="detail-filter-search" type="text" placeholder="Cari nama / NIS..." class="px-3 py-2 rounded-lg border border-gray-200 text-sm md:col-span-2">
+                        <input id="detail-filter-kelas" type="text" placeholder="Filter kelas" class="px-3 py-2 rounded-lg border border-gray-200 text-sm">
+                        <input id="detail-filter-month" type="number" min="1" max="12" placeholder="Bulan" class="px-3 py-2 rounded-lg border border-gray-200 text-sm">
+                        <input id="detail-filter-year" type="number" min="2000" max="3000" placeholder="Tahun" class="px-3 py-2 rounded-lg border border-gray-200 text-sm">
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+                        <select id="detail-filter-status" class="px-3 py-2 rounded-lg border border-gray-200 text-sm">
+                            <option value="">Semua Status</option>
+                            <option value="aktif">Aktif</option>
+                            <option value="nonaktif">Nonaktif</option>
+                            <option value="lulus">Lulus</option>
+                            <option value="pindah">Pindah</option>
+                            <option value="keluar">Keluar</option>
+                        </select>
+                        <button id="detail-filter-apply" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-700">Terapkan Filter</button>
+                        <button id="detail-filter-reset" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm font-bold hover:bg-gray-50">Reset</button>
+                    </div>
+                </div>
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-white sticky top-0 border-b shadow-sm z-10">
+                        <tr class="text-gray-600">
+                            <th class="p-4 bg-gray-50">Nama Siswa</th>
+                            <th class="p-4 bg-gray-50">Kelas</th>
+                            <th class="p-4 bg-gray-50">Status</th>
+                            <th class="p-4 bg-gray-50">Tgl Terima</th>
+                            <th class="p-4 bg-gray-50 text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-detail-list" class="divide-y divide-gray-100">
+                        </tbody>
+                </table>
+                <div class="border-t bg-gray-50">
+                    <div class="p-4 border-b">
+                        <h4 class="font-bold text-gray-700 text-sm">Riwayat Perubahan Beasiswa</h4>
+                        <p class="text-xs text-gray-500">Siapa menambah / membatalkan penerima beasiswa.</p>
+                    </div>
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-white border-b">
+                            <tr class="text-gray-600">
+                                <th class="p-3 bg-gray-50">Waktu</th>
+                                <th class="p-3 bg-gray-50">Aksi</th>
+                                <th class="p-3 bg-gray-50">Aktor</th>
+                                <th class="p-3 bg-gray-50">Detail</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-detail-history" class="divide-y divide-gray-100 bg-white">
+                            <tr><td colspan="4" class="p-4 text-center text-gray-400">Memuat riwayat...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="p-4 border-t bg-gray-50 text-right">
+                <button onclick="document.getElementById('modal-detail-list').classList.add('hidden')" class="px-5 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-100 font-medium text-gray-700">Tutup</button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div id="modal-recipient-remove" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" onclick="closeRecipientRemoveModal()"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-0 relative overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="p-4 border-b bg-gray-50 flex items-start justify-between">
+                <div>
+                    <h3 class="font-bold text-gray-800 text-lg">Pilih Tagihan Yang Dibatalkan</h3>
+                    <p id="recipient-remove-subtitle" class="text-xs text-gray-500">Pilih tagihan yang ingin dibatalkan dari beasiswa siswa ini.</p>
+                </div>
+                <button type="button" onclick="closeRecipientRemoveModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="p-4 space-y-3 overflow-y-auto flex-1">
+                <div class="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
+                    <div id="recipient-remove-info">Memuat data...</div>
+                    <div id="recipient-remove-total" class="mt-1 font-semibold"></div>
+                </div>
+                <div id="recipient-remove-bills" class="space-y-2"></div>
+            </div>
+            <div class="p-4 border-t bg-gray-50 flex items-center justify-end gap-2">
+                <button type="button" onclick="closeRecipientRemoveModal()" class="px-4 py-2 text-sm rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100">Batal</button>
+                <button type="button" id="recipient-remove-submit" onclick="submitRecipientRemoval()" class="px-4 py-2 text-sm rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700">Hapus dari Beasiswa</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-plan" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" onclick="closePlanModal()"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative transform transition-all">
+            <h3 class="text-lg font-bold mb-4 text-gray-800">Tambah Rencana Beasiswa</h3>
+            <form id="form-plan" class="space-y-4">
+                <input type="hidden" id="plan-id">
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-700">Program Beasiswa</label>
+                    <select id="plan-type-id" class="w-full p-2 border border-gray-300 rounded-lg" required></select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Bulan</label>
+                        <input type="number" id="plan-target-month" min="1" max="12" class="w-full p-2 border border-gray-300 rounded-lg" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Tahun</label>
+                        <input type="number" id="plan-target-year" min="2000" max="3000" class="w-full p-2 border border-gray-300 rounded-lg" required>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Target Penerima</label>
+                        <input type="number" id="plan-target-recipients" min="0" class="w-full p-2 border border-gray-300 rounded-lg" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Target Nominal</label>
+                        <input type="number" id="plan-target-nominal" min="0" class="w-full p-2 border border-gray-300 rounded-lg" required>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-700">Catatan</label>
+                    <textarea id="plan-notes" class="w-full p-2 border border-gray-300 rounded-lg" rows="2"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1 text-gray-700">Status</label>
+                    <select id="plan-active" class="w-full p-2 border border-gray-300 rounded-lg">
+                        <option value="1">Aktif</option>
+                        <option value="0">Nonaktif</option>
+                    </select>
+                </div>
+                <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+                    <button type="button" onclick="closePlanModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">Batal</button>
+                    <button id="btn-plan-submit" type="submit" class="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-bold text-sm shadow-md">Simpan Rencana</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

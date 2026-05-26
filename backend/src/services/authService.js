@@ -45,7 +45,21 @@ async function login(username, password) {
   );
   const user = rows[0];
   if (!user) return null;
-  if (!verifyPassword(password, user.password_hash, user.password_salt)) return null;
+  let valid = verifyPassword(password, user.password_hash, user.password_salt);
+  if (!valid) {
+    // Backward-compatibility: allow env admin login and migrate to current hash format.
+    const envAdminUser = process.env.ADMIN_USERNAME;
+    const envAdminPass = process.env.ADMIN_PASSWORD;
+    if (username === envAdminUser && password === envAdminPass) {
+      const { hash, salt } = hashPassword(password);
+      await pool.query(
+        'UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?',
+        [hash, salt, user.id]
+      );
+      valid = true;
+    }
+  }
+  if (!valid) return null;
 
   await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
   const token = signToken({ id: user.id, role: user.role });

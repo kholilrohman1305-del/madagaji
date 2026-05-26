@@ -1,0 +1,199 @@
+﻿<div class="space-y-6">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <h2 class="text-2xl font-bold text-gray-800">Riwayat Pembayaran</h2>
+        <div class="flex items-center gap-2">
+            <button onclick="exportPaymentHistory()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-sm transition text-sm font-semibold">
+                <i class="fas fa-file-export"></i>
+                <span>Export Riwayat</span>
+            </button>
+            <button onclick="openPaymentModal()" class="bg-primary-600 hover:bg-primary-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 shadow-sm transition">
+                <i class="fas fa-plus-circle"></i>
+                <span>Transaksi Baru</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-end">
+        <div class="w-full md:w-1/3">
+            <label class="text-xs font-semibold text-gray-500 uppercase">Cari Siswa</label>
+            <div class="relative mt-1">
+                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                <input type="text" id="filter-pay-search" placeholder="Nama siswa..." class="pl-10 w-full p-2 border rounded-lg focus:ring-primary-500 focus:border-primary-500" onkeyup="onPaymentFilterChanged()">
+            </div>
+        </div>
+        <div class="w-full md:w-auto">
+            <label class="text-xs font-semibold text-gray-500 uppercase">Dari Tanggal</label>
+            <input type="date" id="filter-date-start" class="mt-1 w-full p-2 border rounded-lg" onchange="onPaymentFilterChanged()">
+        </div>
+        <div class="w-full md:w-auto">
+            <label class="text-xs font-semibold text-gray-500 uppercase">Sampai Tanggal</label>
+            <input type="date" id="filter-date-end" class="mt-1 w-full p-2 border rounded-lg" onchange="onPaymentFilterChanged()">
+        </div>
+        <button onclick="resetPaymentFilter()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200">
+            <i class="fas fa-undo"></i> Reset
+        </button>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                    <tr>
+                        <th class="px-6 py-4">ID Transaksi</th>
+                        <th class="px-6 py-4">Tanggal</th>
+                        <th class="px-6 py-4">Siswa</th>
+                        <th class="px-6 py-4">Tagihan</th>
+                        <th class="px-6 py-4 text-right">Jumlah Bayar</th>
+                        <th class="px-6 py-4 text-center">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="table-history" class="divide-y divide-gray-100">
+                    </tbody>
+            </table>
+        </div>
+        <div class="flex flex-col gap-2 border-t border-gray-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <p id="payment-page-info" class="text-xs text-gray-500">Menampilkan 0 - 0 dari 0 transaksi</p>
+            <div class="flex items-center gap-2">
+                <select id="payment-rows-per-page" class="rounded-lg border border-gray-200 px-2 py-1.5 text-sm" onchange="changePaymentRowsPerPage()">
+                    <option value="10">10 baris</option>
+                    <option value="25">25 baris</option>
+                    <option value="50">50 baris</option>
+                    <option value="all">All</option>
+                </select>
+                <button id="btn-prev-payment" type="button" onclick="prevPagePayment()" class="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+                    <i class="fas fa-chevron-left text-xs"></i>
+                </button>
+                <button id="btn-next-payment" type="button" onclick="nextPagePayment()" class="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+                    <i class="fas fa-chevron-right text-xs"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-payment" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-gray-900 bg-opacity-50 transition-opacity backdrop-blur-sm" onclick="closePaymentModal()"></div>
+    
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all w-full max-w-4xl">
+            
+            <div class="bg-white px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-900" id="modal-pay-title">Input Pembayaran</h3>
+                <button onclick="closePaymentModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                <form id="form-pembayaran" class="space-y-4">
+                    <input type="hidden" id="pay-id">
+                    
+                    <div class="relative">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Cari Siswa</label>
+                        <input type="text" id="pay-search-input" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" placeholder="Ketik nama siswa..." autocomplete="off">
+                        <div id="pay-student-list" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto hidden"></div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-xs text-gray-500">Kelas</label>
+                            <input type="text" id="pay-kelas" class="w-full p-2 bg-gray-100 border-none rounded text-sm font-semibold text-gray-700" readonly tabindex="-1">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500">Nama Siswa</label>
+                            <input type="text" id="pay-nama" class="w-full p-2 bg-gray-100 border-none rounded text-sm font-semibold text-gray-700" readonly tabindex="-1">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Bayar Untuk Tagihan</label>
+                        <select id="pay-tagihan" class="w-full p-2.5 border border-gray-300 rounded-lg bg-white">
+                            <option value="">-- Deposit / Bebas --</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Jumlah Bayar (Rp)</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">Rp</span>
+                            <input type="number" id="pay-jumlah" class="w-full pl-10 p-2.5 border border-gray-300 rounded-lg font-bold text-lg text-emerald-700" required placeholder="0">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-sm font-medium">Tanggal</label>
+                            <input type="date" id="pay-tanggal" class="w-full p-2 border rounded-lg" required>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium">Penerima</label>
+                            <input type="text" id="pay-penerima" class="w-full p-2 border rounded-lg" required>
+                        </div>
+                    </div>
+
+                    <div class="hidden">
+                        <label class="text-sm font-medium">PIN Verifikasi Transaksi (6 digit)</label>
+                        <input type="password" id="pay-pin" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" class="w-full p-2 border rounded-lg tracking-[0.35em]" placeholder="******">
+                    </div>
+
+                    <div id="pay-revision-reason-wrap" class="hidden">
+                        <label class="text-sm font-medium">Alasan Revisi Transaksi</label>
+                        <textarea id="pay-revision-reason" class="w-full p-2 border rounded-lg text-sm" rows="2" placeholder="Wajib diisi saat edit transaksi"></textarea>
+                    </div>
+
+                    <button type="submit" id="pay-submit-btn" class="w-full py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition">
+                        <i class="fas fa-wallet mr-2"></i> <span id="pay-submit-label">Lakukan Pembayaran</span>
+                    </button>
+                </form>
+
+                <div class="bg-gray-50 rounded-xl p-5 border border-gray-100 flex flex-col h-full">
+                    <h4 class="font-bold text-gray-700 border-b pb-2 mb-3 flex items-center gap-2">
+                        <i class="fas fa-file-invoice-dollar text-primary-600"></i> Rincian Kewajiban
+                    </h4>
+                    
+                    <div id="info-empty-state" class="flex-1 flex flex-col items-center justify-center text-gray-400 py-10">
+                        <i class="fas fa-user-clock text-4xl mb-2"></i>
+                        <p class="text-sm">Pilih siswa di formulir samping untuk melihat data tagihan.</p>
+                    </div>
+
+                    <div id="info-content-state" class="hidden flex-col h-full">
+                        <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500 mb-4">
+                            <p class="text-xs text-gray-500 uppercase font-semibold">Total Tagihan</p>
+                            <p class="text-2xl font-bold text-red-600" id="info-total-arrears">Rp 0</p>
+                        </div>
+
+                        <div class="flex-1 overflow-y-auto pr-1">
+                            <p class="text-xs font-semibold text-gray-500 mb-2">Daftar Tagihan Belum Lunas:</p>
+                            <ul class="space-y-2" id="info-bill-list">
+                                </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-payment-result" class="fixed inset-0 z-[70] hidden" aria-modal="true" role="dialog">
+    <div class="absolute inset-0 bg-slate-900/55 backdrop-blur-sm" onclick="closePaymentResultModal()"></div>
+    <div class="relative z-10 flex min-h-full items-center justify-center p-4">
+        <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+            <div class="bg-emerald-50 border-b border-emerald-100 px-5 py-4">
+                <h3 class="text-lg font-bold text-emerald-700">Pembayaran Berhasil</h3>
+                <p class="text-xs text-emerald-600 mt-1">Bukti pembayaran siap dicetak.</p>
+            </div>
+            <div class="p-5 space-y-2 text-sm">
+                <div class="flex justify-between"><span class="text-slate-500">Transaksi</span><span id="pay-result-trans" class="font-semibold text-slate-700">-</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Siswa</span><span id="pay-result-nama" class="font-semibold text-slate-700">-</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Nominal</span><span id="pay-result-jumlah" class="font-bold text-emerald-700">Rp 0</span></div>
+            </div>
+            <div class="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                <button type="button" onclick="closePaymentResultModal()" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100">Tutup</button>
+                <button type="button" onclick="printLatestPaymentReceipt()" class="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 font-semibold">
+                    <i class="fas fa-print mr-1"></i> Cetak Bukti
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

@@ -24,7 +24,11 @@ async function authRequired(req, res, next) {
       return next();
     }
 
-    const token = req.cookies?.[TOKEN_COOKIE];
+    let token = req.cookies?.[TOKEN_COOKIE];
+    if (!token) {
+      const authHeader = req.headers['authorization'] || '';
+      if (authHeader.startsWith('Bearer ')) token = authHeader.slice(7).trim();
+    }
     if (!token) return res.status(401).json({ success: false, message: 'Unauthorized.' });
     const payload = jwt.verify(token, process.env.JWT_SECRET, {
       issuer: process.env.JWT_ISSUER || 'mada-core',

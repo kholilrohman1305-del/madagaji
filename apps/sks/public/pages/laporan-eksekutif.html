@@ -1,0 +1,47 @@
+﻿<div class="space-y-6">
+    <div class="rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 via-white to-blue-50 p-5 md:p-6 shadow-sm">
+        <h2 class="text-2xl font-extrabold tracking-tight text-slate-800 md:text-3xl">Laporan Eksekutif</h2>
+        <p class="mt-1 text-sm text-slate-500">Ringkasan KPI pusat, top cabang pemasukan, dan top cabang tagihan.</p>
+    </div>
+
+    <div class="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <select id="exec-filter-month" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-100"></select>
+            <select id="exec-filter-year" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-100"></select>
+            <button id="exec-filter-btn" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700">
+                <i class="fas fa-filter text-xs"></i>
+                <span>Terapkan Filter</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Cabang</p>
+            <p id="exec-total-cabang" class="mt-2 text-3xl font-extrabold text-slate-800">0</p>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Siswa Aktif</p>
+            <p id="exec-total-siswa" class="mt-2 text-3xl font-extrabold text-slate-800">0</p>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Pemasukan</p>
+            <p id="exec-total-pemasukan" class="mt-2 text-2xl font-extrabold text-emerald-600">Rp 0</p>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Tagihan</p>
+            <p id="exec-total-tagihan" class="mt-2 text-2xl font-extrabold text-rose-600">Rp 0</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <h3 class="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500">Top 5 Pemasukan</h3>
+            <div class="h-72 w-full"><canvas id="execIncomeChart"></canvas></div>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <h3 class="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500">Top 5 Tagihan</h3>
+            <div class="h-72 w-full"><canvas id="execArrearsChart"></canvas></div>
+        </div>
+    </div>
+</div>

@@ -65,6 +65,72 @@ router.get('/expenses', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get('/extracurricular/teachers', async (req, res, next) => {
+  try {
+    res.json(await payroll.getActiveTeachers());
+  } catch (e) { next(e); }
+});
+
+router.get('/extracurricular', async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) return res.status(400).json({ success: false, message: 'startDate dan endDate wajib.' });
+    res.json(await payroll.getExtracurricularExpenses(startDate, endDate));
+  } catch (e) { next(e); }
+});
+
+router.get('/extracurricular/sheet', async (req, res, next) => {
+  try {
+    const { periode } = req.query;
+    if (!periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.getExtracurricularMonthSheet(periode));
+  } catch (e) { next(e); }
+});
+
+router.post('/extracurricular', async (req, res, next) => {
+  try { res.json(await payroll.addExtracurricularExpense(req.body)); } catch (e) { next(e); }
+});
+
+router.put('/extracurricular/sheet', async (req, res, next) => {
+  try {
+    const { periode, items } = req.body || {};
+    if (!periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.saveExtracurricularBulk(periode, items));
+  } catch (e) { next(e); }
+});
+
+router.put('/extracurricular/:id', async (req, res, next) => {
+  try { res.json(await payroll.updateExtracurricularExpense({ ...req.body, id: req.params.id })); } catch (e) { next(e); }
+});
+
+router.delete('/extracurricular/:id', async (req, res, next) => {
+  try { res.json(await payroll.deleteExtracurricularExpense(req.params.id)); } catch (e) { next(e); }
+});
+
+router.get('/discipline/sheet', async (req, res, next) => {
+  try {
+    const { periode } = req.query;
+    if (!periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.getDisciplineMonthSheet(periode));
+  } catch (e) { next(e); }
+});
+
+router.put('/discipline/sheet', async (req, res, next) => {
+  try {
+    const { periode, items } = req.body || {};
+    if (!periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.saveDisciplineBulk(periode, items));
+  } catch (e) { next(e); }
+});
+
+router.post('/discipline', async (req, res, next) => {
+  try { res.json(await payroll.addDisciplineExpense(req.body)); } catch (e) { next(e); }
+});
+
+router.delete('/discipline/:id', async (req, res, next) => {
+  try { res.json(await payroll.deleteDisciplineExpense(req.params.id)); } catch (e) { next(e); }
+});
+
 router.get('/activities', async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;

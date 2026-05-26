@@ -1,0 +1,62 @@
+﻿<div class="space-y-6">
+    <div class="rounded-2xl border border-rose-100 bg-gradient-to-r from-rose-50 via-white to-orange-50 p-5 md:p-6 shadow-sm">
+        <h2 class="text-2xl font-extrabold tracking-tight text-slate-800 md:text-3xl">Monitoring Tagihan</h2>
+        <p class="mt-1 text-sm text-slate-500">Pantau aging tagihan lintas cabang: 0-30, 31-60, dan &gt;60 hari.</p>
+    </div>
+
+    <div class="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <select id="arrears-filter-month" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-rose-300 focus:bg-white focus:ring-4 focus:ring-rose-100"></select>
+            <select id="arrears-filter-year" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-rose-300 focus:bg-white focus:ring-4 focus:ring-rose-100"></select>
+            <button id="arrears-filter-btn" class="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700">
+                <i class="fas fa-filter text-xs"></i>
+                <span>Terapkan Filter</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Tagihan</p>
+            <p id="arrears-total" class="mt-2 text-2xl font-extrabold text-rose-600">Rp 0</p>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Aging 0-30 Hari</p>
+            <p id="arrears-aging-0-30" class="mt-2 text-2xl font-extrabold text-amber-600">Rp 0</p>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Aging 31-60 Hari</p>
+            <p id="arrears-aging-31-60" class="mt-2 text-2xl font-extrabold text-orange-600">Rp 0</p>
+        </div>
+        <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Aging &gt;60 Hari</p>
+            <p id="arrears-aging-over-60" class="mt-2 text-2xl font-extrabold text-red-600">Rp 0</p>
+        </div>
+    </div>
+
+    <div class="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+        <div class="h-80 w-full">
+            <canvas id="arrearsAgingChart"></canvas>
+        </div>
+    </div>
+
+    <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-left text-sm">
+                <thead class="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <tr>
+                        <th class="px-6 py-4">Cabang</th>
+                        <th class="px-6 py-4 text-right">0-30 Hari</th>
+                        <th class="px-6 py-4 text-right">31-60 Hari</th>
+                        <th class="px-6 py-4 text-right">&gt;60 Hari</th>
+                        <th class="px-6 py-4 text-right">Total Tagihan</th>
+                        <th class="px-6 py-4">Invoice Tagihan</th>
+                    </tr>
+                </thead>
+                <tbody id="arrears-table" class="divide-y divide-slate-100 bg-white">
+                    <tr><td colspan="6" class="p-10 text-center text-slate-400">Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
