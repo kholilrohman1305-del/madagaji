@@ -1,9 +1,6 @@
 node_modules/
 dist/
 build/
-# Kecuali build PDMada yang dibutuhkan hosting
-!apps/pdmada/frontend/dist/
-!apps/pdmada/frontend/dist/**
 .DS_Store
 Thumbs.db
 
@@ -17,27 +14,16 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-backend.zip
-nul
-
 # Google Service Account credentials — jangan pernah di-commit
-apps/sks/sks-admin.json
-apps/sks/api_sks.json
 **/*service_account*.json
 **/*-admin.json
-
-# File ZIP sementara
-MyMada.zip
-
-# File debug/temp
-query
 
 # Project mobile (Flutter & Android design) — tidak perlu di hosting
 mobile/
 MyMada/
 
 # Data sensitif — jangan pernah di repo publik
-apps/sks/backups/
-apps/pdmada/backend/tmp/
-apps/pdmada/backend/uploads/
 **/backups/*.sql
+backend/tmp/
+backend/uploads/
+nul

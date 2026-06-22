@@ -17,6 +17,16 @@ router.get('/students', async (req, res, next) => {
   try { res.json(await master.getAllStudents()); } catch (e) { next(e); }
 });
 
+router.get('/students/nisn/:nisn', async (req, res, next) => {
+  try {
+    const nisn = String(req.params.nisn || '').trim();
+    if (!/^\d{10}$/.test(nisn)) return res.status(400).json({ success: false, message: 'NISN harus tepat 10 digit angka' });
+    const student = await master.getStudentByNisn(nisn);
+    if (!student) return res.status(404).json({ success: false, message: 'Siswa dengan NISN tersebut tidak ditemukan' });
+    res.json(student);
+  } catch (e) { next(e); }
+});
+
 router.post('/teachers', async (req, res, next) => {
   res.status(405).json({ success: false, message: 'Tambah guru dinonaktifkan.' });
 });

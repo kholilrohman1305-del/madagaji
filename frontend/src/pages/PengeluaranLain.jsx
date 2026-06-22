@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
 import { Wallet, Calendar, Plus, Save, Trash2, X, Edit3 } from 'lucide-react';
+import { showConfirm } from '../utils/confirm';
+import { toast } from '../utils/toast';
 
 export default function PengeluaranLain() {
   const today = new Date();
@@ -126,10 +128,17 @@ export default function PengeluaranLain() {
   const bulkDelete = async () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    const ok = window.confirm(`Hapus ${ids.length} data pengeluaran terpilih?`);
+    const ok = await showConfirm({
+      title: 'Hapus Pengeluaran',
+      message: `Hapus ${ids.length} data pengeluaran yang dipilih? Tindakan ini tidak dapat dibatalkan.`,
+      confirmLabel: 'Ya, Hapus',
+      danger: true,
+      icon: 'trash',
+    });
     if (!ok) return;
     await Promise.all(ids.map(id => api.delete(`/payroll/expenses/${id}`)));
     setSelectedIds(new Set());
+    toast.success('Berhasil dihapus', `${ids.length} data pengeluaran telah dihapus.`);
     load();
   };
 

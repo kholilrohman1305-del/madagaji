@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar.jsx';
 import ToastHost from './components/ToastHost.jsx';
+import ConfirmHost from './components/ConfirmHost.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import RoleRoute from './components/RoleRoute.jsx';
 import { useAuth } from './context/AuthContext.jsx';
@@ -30,6 +31,8 @@ import CetakBisyaroh from './pages/CetakBisyaroh.jsx';
 import Login from './pages/Login.jsx';
 import Profile from './pages/Profile.jsx';
 import Users from './pages/Users.jsx';
+import SebaranMapel from './pages/SebaranMapel.jsx';
+import DetailGuru from './pages/DetailGuru.jsx';
 import LandingHub from './pages/LandingHub.jsx';
 
 export default function App() {
@@ -48,6 +51,7 @@ export default function App() {
   return (
     <>
       <ToastHost />
+      <ConfirmHost />
       <Routes>
         <Route path="/" element={<LandingHub />} />
         <Route path="/login" element={user ? <Navigate to="/dasbor" replace /> : <Login />} />
@@ -82,6 +86,8 @@ export default function App() {
                     <Route path="/data-mapel" element={<RoleRoute roles={['admin']}><DataMapel /></RoleRoute>} />
                     <Route path="/tugas-tambahan" element={<RoleRoute roles={['admin']}><TugasTambahan /></RoleRoute>} />
                     <Route path="/auto-schedule" element={<RoleRoute roles={['admin']}><AutoSchedule /></RoleRoute>} />
+                    <Route path="/sebaran-mapel" element={<RoleRoute roles={['admin']}><SebaranMapel /></RoleRoute>} />
+                    <Route path="/detail-guru" element={<RoleRoute roles={['admin']}><DetailGuru /></RoleRoute>} />
                     <Route path="/jadwal-guru" element={<JadwalGuru />} />
                     <Route path="/jadwal-kelas" element={<JadwalKelas />} />
                     <Route path="/setting-bisyaroh" element={<RoleRoute roles={['admin']}><SettingBisyaroh /></RoleRoute>} />

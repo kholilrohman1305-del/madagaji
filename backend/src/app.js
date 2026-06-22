@@ -9,6 +9,7 @@ const requestId = require('./middleware/requestId');
 const requestLogger = require('./middleware/requestLogger');
 const errorHandler = require('./middleware/errorHandler');
 const { authRequired } = require('./middleware/auth');
+const { internalAuth } = require('./middleware/internalAuth');
 const pool = require('./db');
 
 const authRoutes = require('./routes/auth');
@@ -20,9 +21,10 @@ const payrollRoutes = require('./routes/payroll');
 const schedulerRoutes = require('./routes/scheduler');
 const usersRoutes = require('./routes/users');
 const mobileRoutes = require('./routes/mobile');
+const externalRoutes = require('./routes/external');
 const payrollService = require('./services/payrollService');
-const { createApp: createSksApp } = require('../../apps/sks/src/app');
-const { createApp: createPdmadaApiApp } = require('../../apps/pdmada/backend/src/server');
+const { createApp: createSksApp } = require('../../../sks/src/app');
+const { createApp: createPdmadaApiApp } = require('../../../pdmada/backend/src/server');
 
 const app = express();
 
@@ -64,7 +66,7 @@ const pdmadaFrontendTarget = 'embedded:/pdmada';
 const pdmadaApiTarget = 'embedded:/pdmada-api';
 const pdmadaDistDir = process.env.PDMADA_FRONTEND_DIST_DIR
   ? path.resolve(process.env.PDMADA_FRONTEND_DIST_DIR)
-  : path.resolve(__dirname, '..', '..', 'apps', 'pdmada', 'frontend', 'dist');
+  : path.resolve(__dirname, '..', '..', '..', 'pdmada', 'frontend', 'dist');
 
 function stripHopHeaders(headers = {}) {
   const disallowed = new Set([
@@ -248,7 +250,7 @@ if (enableGateway) {
       res.status(503).json({
         success: false,
         message: 'Frontend PDMADA belum dibuild.',
-        hint: 'Jalankan: cd apps/pdmada/frontend && npm run build'
+        hint: 'Jalankan: cd d:\\node.js\\pdmada\\frontend && npm run build'
       });
     });
   }
@@ -280,6 +282,7 @@ app.delete('/api/expenses/:id', authRequired, async (req, res, next) => {
 app.use('/api/scheduler', authRequired, schedulerRoutes);
 app.use('/api/users', authRequired, usersRoutes);
 app.use('/api/mobile', mobileRoutes);
+app.use('/api/external', internalAuth, externalRoutes);
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('*', (req, res) => {

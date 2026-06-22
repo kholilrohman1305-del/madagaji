@@ -85,6 +85,22 @@ async function getAllStudents() {
   }));
 }
 
+async function getStudentByNisn(nisn) {
+  const [rows] = await masterPool.query('SELECT * FROM students WHERE nisn = ? LIMIT 1', [nisn]);
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    id: r.id,
+    nisn: r.nisn || '',
+    nis: r.nis_local || r.nis || '',
+    name: r.name || r.nama || '',
+    class_id: r.class_id,
+    student_status: r.student_status || r.status || 'aktif',
+    gender: r.gender || r.jenis_kelamin || null,
+    birth_date: r.birth_date || r.tanggal_lahir || null
+  };
+}
+
 async function addTeacher(data) {
   throw new Error('Tambah guru dinonaktifkan. Hanya edit yang diperbolehkan.');
 }
@@ -263,6 +279,7 @@ module.exports = {
   getAllMasterData,
   getAllTeachers,
   getAllStudents,
+  getStudentByNisn,
   addTeacher,
   updateTeacher,
   deleteTeacher,

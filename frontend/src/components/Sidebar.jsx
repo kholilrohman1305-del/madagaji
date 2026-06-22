@@ -21,7 +21,9 @@ import {
   Sparkles,
   User,
   LogOut,
-  PanelLeftClose
+  PanelLeftClose,
+  LayoutGrid,
+  UserCog
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -79,6 +81,8 @@ export default function Sidebar({ hidden, onToggle }) {
         <LinkItem to="/jadwal-guru" label="Jadwal Guru" icon={UserCheck} />
         <LinkItem to="/jadwal-kelas" label="Jadwal Kelas" icon={GraduationCap} />
         {user?.role === 'admin' && <LinkItem to="/statistik-guru" label="Statistik Guru" icon={BarChart3} />}
+        {user?.role === 'admin' && <LinkItem to="/sebaran-mapel" label="Sebaran Mapel" icon={LayoutGrid} />}
+        {user?.role === 'admin' && <LinkItem to="/detail-guru" label="Detail Jadwal Guru" icon={UserCog} />}
       </div>
 
       <div className="nav-section">

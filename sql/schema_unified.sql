@@ -169,9 +169,11 @@ CREATE TABLE IF NOT EXISTS teacher_subjects (
   id INT AUTO_INCREMENT PRIMARY KEY,
   teacher_id VARCHAR(10) NOT NULL,
   subject_id VARCHAR(10) NOT NULL,
-  priority INT NOT NULL DEFAULT 1,
-  UNIQUE KEY uniq_teacher_subject (teacher_id, subject_id),
-  INDEX idx_teacher_priority (teacher_id, priority),
+  tingkat VARCHAR(10) NOT NULL DEFAULT '',
+  class_id INT NOT NULL DEFAULT 0,
+  is_linear TINYINT(1) NOT NULL DEFAULT 0,
+  UNIQUE KEY uniq_teacher_subject_scope (teacher_id, subject_id, tingkat, class_id),
+  INDEX idx_teacher_priority (teacher_id),
   CONSTRAINT fk_ts_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE,
   CONSTRAINT fk_ts_subject FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
 );
