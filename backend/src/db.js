@@ -38,10 +38,13 @@ const masterPool = mysql.createPool({
   database: masterDbName
 });
 
+const sksDbUser = process.env.SKS_DB_USER || gajiDbUser;
+const sksDbPass = process.env.SKS_DB_PASS || gajiDbPass;
+
 const sksPool = mysql.createPool({
   ...baseConfig,
-  user: gajiDbUser,
-  password: gajiDbPass,
+  user: sksDbUser,
+  password: sksDbPass,
   database: process.env.SKS_DB_NAME || 'sekolah_db'
 });
 
