@@ -5,6 +5,10 @@ const mainBackend = process.env.VITE_MAIN_BACKEND_URL || 'http://localhost:4000'
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    outDir: '../backend/public',
+    emptyOutDir: true,
+  },
   server: {
     host: true,
     allowedHosts: ['.ngrok-free.app'],
