@@ -171,9 +171,7 @@ app.use(cors({
     ) {
       return callback(null, true);
     }
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn(`[CORS] blocked origin: ${incoming}`);
-    }
+    console.warn(`[CORS] blocked origin: ${incoming} | allowed: ${allowedOrigins.join(',')}`);
     return callback(new Error('CORS origin not allowed'));
   },
   credentials: true
