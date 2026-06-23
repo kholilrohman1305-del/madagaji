@@ -7,6 +7,8 @@ const { generateTemplate, parseImportExcel } = require('../services/scheduler/ex
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
+const masterDb = process.env.DB_MASTER_NAME || process.env.DB2_NAME || 'sekolah_master';
+
 const router = express.Router();
 
 // Get all metadata (teachers now include gender; teacherSubjects include tingkat+is_linear; teacherLimits include available_days)
@@ -156,9 +158,9 @@ router.get('/locked-slots', async (req, res, next) => {
     const [rows] = await pool.query(
       `SELECT ls.*, t.name AS teacher_name, s.name AS subject_name, c.name AS class_name
        FROM locked_slots ls
-       JOIN sekolah_master.teachers t ON t.id = ls.teacher_id
-       JOIN sekolah_master.subjects s ON s.id = ls.subject_id
-       JOIN sekolah_master.classes c ON c.id = ls.class_id
+       JOIN ${masterDb}.teachers t ON t.id = ls.teacher_id
+       JOIN ${masterDb}.subjects s ON s.id = ls.subject_id
+       JOIN ${masterDb}.classes c ON c.id = ls.class_id
        ORDER BY ls.hari, ls.jam_ke, c.name`
     );
     res.json(rows);

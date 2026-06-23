@@ -1,5 +1,6 @@
 const pool = require('../../db');
 const masterPool = pool.master;
+const masterDb = process.env.DB_MASTER_NAME || process.env.DB2_NAME || 'sekolah_master';
 const { TTLCache } = require('../../utils/cache');
 
 const metaCacheTtl = Number(process.env.SCHEDULER_META_CACHE_TTL_MS || 30000);
@@ -205,7 +206,7 @@ async function getSebaranMapel() {
   const [csRows] = await pool.query(`
     SELECT cs.class_id, cs.subject_id, s.name AS subject_name, cs.hours_per_week
     FROM class_subjects cs
-    JOIN sekolah_master.subjects s ON s.id = cs.subject_id
+    JOIN ${masterDb}.subjects s ON s.id = cs.subject_id
     ORDER BY cs.class_id, s.name
   `);
 
@@ -213,7 +214,7 @@ async function getSebaranMapel() {
     SELECT j.kelas, j.mapel_id,
            GROUP_CONCAT(DISTINCT t.name ORDER BY t.name SEPARATOR ', ') AS teachers
     FROM jadwal j
-    LEFT JOIN sekolah_master.teachers t ON t.id = j.guru_id
+    LEFT JOIN ${masterDb}.teachers t ON t.id = j.guru_id
     GROUP BY j.kelas, j.mapel_id
   `);
 
@@ -245,9 +246,9 @@ async function getDetailGuru() {
            j.mapel_id, s.name AS subject_name,
            j.kelas, c.name AS class_name
     FROM (SELECT DISTINCT guru_id, mapel_id, kelas FROM jadwal) j
-    JOIN sekolah_master.teachers t ON t.id = j.guru_id AND t.is_active = 1
-    JOIN sekolah_master.subjects s ON s.id = j.mapel_id
-    JOIN sekolah_master.classes c ON c.id = j.kelas
+    JOIN ${masterDb}.teachers t ON t.id = j.guru_id AND t.is_active = 1
+    JOIN ${masterDb}.subjects s ON s.id = j.mapel_id
+    JOIN ${masterDb}.classes c ON c.id = j.kelas
     ORDER BY t.name, s.name, c.name
   `);
 
@@ -279,9 +280,9 @@ async function getDetailGuru() {
            ts.subject_id, s.name AS subject_name, ts.tingkat, ts.class_id,
            c.name AS class_name
     FROM teacher_subjects ts
-    JOIN sekolah_master.teachers t ON t.id = ts.teacher_id AND t.is_active = 1
-    JOIN sekolah_master.subjects s ON s.id = ts.subject_id
-    LEFT JOIN sekolah_master.classes c ON c.id = ts.class_id
+    JOIN ${masterDb}.teachers t ON t.id = ts.teacher_id AND t.is_active = 1
+    JOIN ${masterDb}.subjects s ON s.id = ts.subject_id
+    LEFT JOIN ${masterDb}.classes c ON c.id = ts.class_id
     ORDER BY t.name, s.name, c.name
   `);
 

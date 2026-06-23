@@ -1,4 +1,5 @@
 const pool = require('../db');
+const masterDb = process.env.DB_MASTER_NAME || process.env.DB2_NAME || 'sekolah_master';
 const { randomBytes } = require('crypto');
 const {
   getTeachers,
@@ -469,9 +470,9 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
   const [lockedRows] = await pool.query(
     `SELECT ls.*, t.name AS teacher_name, s.name AS subject_name, c.name AS class_name
      FROM locked_slots ls
-     JOIN sekolah_master.teachers t ON t.id = ls.teacher_id
-     JOIN sekolah_master.subjects s ON s.id = ls.subject_id
-     JOIN sekolah_master.classes c ON c.id = ls.class_id`
+     JOIN ${masterDb}.teachers t ON t.id = ls.teacher_id
+     JOIN ${masterDb}.subjects s ON s.id = ls.subject_id
+     JOIN ${masterDb}.classes c ON c.id = ls.class_id`
   );
 
   const teacherSubjects = buildTeacherSubjectsMap(teacherSubjectsRaw);
