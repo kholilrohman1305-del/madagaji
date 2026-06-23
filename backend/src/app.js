@@ -23,8 +23,13 @@ const usersRoutes = require('./routes/users');
 const mobileRoutes = require('./routes/mobile');
 const externalRoutes = require('./routes/external');
 const payrollService = require('./services/payrollService');
-const { createApp: createSksApp } = require('../../../sks/src/app');
-const { createApp: createPdmadaApiApp } = require('../../../pdmada/backend/src/server');
+
+// Gateway apps (SKS & PDMada) hanya tersedia di local dev (semua repo di folder yang sama).
+// Di hosting terpisah, path relatif ini tidak ada — load secara opsional agar app tetap jalan.
+let createSksApp = null;
+let createPdmadaApiApp = null;
+try { createSksApp = require('../../../sks/src/app').createApp; } catch (_) {}
+try { createPdmadaApiApp = require('../../../pdmada/backend/src/server').createApp; } catch (_) {}
 
 const app = express();
 
@@ -225,7 +230,7 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-if (enableGateway) {
+if (enableGateway && createSksApp && createPdmadaApiApp) {
   const fromSksPage = (req) => String(req.headers.referer || '').includes('/sks');
   const sksApp = createSksApp({ basePath: '/sks' });
   const pdmadaApiApp = createPdmadaApiApp();
