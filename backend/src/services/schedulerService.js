@@ -396,10 +396,14 @@ function swapRepair(schedule, unassigned, teachers, days, slotsByTingkat, hoursB
 // and consecutive. Works cross-day: moves slots between days if needed.
 function consolidatePairs(schedule, classNameMap, slotsByTingkat, hoursByDayByTingkat, hoursByDay) {
   const classBusyMap = new Map();
-  const teacherBusyMap = new Map();
+  // Count how many schedule entries occupy each teacher slot — handles multi-class locked slots
+  // where the same teacher is at the same time for 2+ different classes.
+  const teacherBusyCount = new Map();
+
   schedule.forEach((r, idx) => {
     classBusyMap.set(`${r.kelas}-${r.hari}-${r.jamKe}`, idx);
-    teacherBusyMap.set(`${r.guruId}-${r.hari}-${r.jamKe}`, idx);
+    const tk = `${r.guruId}-${r.hari}-${r.jamKe}`;
+    teacherBusyCount.set(tk, (teacherBusyCount.get(tk) || 0) + 1);
   });
 
   // Group by (class, subject) — all slots regardless of day
@@ -407,7 +411,7 @@ function consolidatePairs(schedule, classNameMap, slotsByTingkat, hoursByDayByTi
   schedule.forEach((r, idx) => {
     const key = `${r.kelas}|${r.mapelId}`;
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push({ idx, hari: r.hari, jamKe: Number(r.jamKe), guruId: r.guruId, kelas: r.kelas });
+    groups.get(key).push({ idx, hari: r.hari, jamKe: Number(r.jamKe), guruId: r.guruId, kelas: r.kelas, isLocked: !!r.locked });
   });
 
   const dayOrder = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
@@ -429,6 +433,7 @@ function consolidatePairs(schedule, classNameMap, slotsByTingkat, hoursByDayByTi
       const classTingkat = extractTingkat(classNameMap.get(Number(s0.kelas)) || '');
 
       const tryMove = (movable, targetHari, targetJam) => {
+        if (movable.isLocked) return false; // locked slots must never be moved
         if (movable.hari === targetHari && movable.jamKe === targetJam) return false;
         if (targetJam < 1) return false;
         const active = getActiveSlots(targetHari, classTingkat, slotsByTingkat, hoursByDayByTingkat, hoursByDay);
@@ -436,14 +441,17 @@ function consolidatePairs(schedule, classNameMap, slotsByTingkat, hoursByDayByTi
         const newCK = `${movable.kelas}-${targetHari}-${targetJam}`;
         const newTK = `${movable.guruId}-${targetHari}-${targetJam}`;
         if (classBusyMap.has(newCK)) return false;
-        if (teacherBusyMap.has(newTK)) return false;
+        if ((teacherBusyCount.get(newTK) || 0) > 0) return false;
         const oldCK = `${movable.kelas}-${movable.hari}-${movable.jamKe}`;
         const oldTK = `${movable.guruId}-${movable.hari}-${movable.jamKe}`;
         classBusyMap.delete(oldCK);
-        teacherBusyMap.delete(oldTK);
+        // Decrement count — only truly free when count reaches 0 (handles multi-class)
+        const prevCount = teacherBusyCount.get(oldTK) || 1;
+        if (prevCount <= 1) teacherBusyCount.delete(oldTK);
+        else teacherBusyCount.set(oldTK, prevCount - 1);
         schedule[movable.idx] = { ...schedule[movable.idx], hari: targetHari, jamKe: String(targetJam) };
         classBusyMap.set(newCK, movable.idx);
-        teacherBusyMap.set(newTK, movable.idx);
+        teacherBusyCount.set(newTK, (teacherBusyCount.get(newTK) || 0) + 1);
         return true;
       };
 
