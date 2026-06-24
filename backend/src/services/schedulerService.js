@@ -10,10 +10,14 @@ const {
   getTeacherLimits
 } = require('./scheduler/configService');
 
-function createScheduleId() {
-  const time = Date.now().toString(36).slice(-6).toUpperCase().padStart(6, '0');
-  const rand = randomBytes(2).toString('hex').slice(0, 3).toUpperCase();
-  return `J${time}${rand}`;
+function createBatchIds(count) {
+  // Generate `count` unique 10-char IDs (J + 9 hex chars = 68B combinations).
+  // Building a Set guarantees no duplicates within the batch.
+  const ids = new Set();
+  while (ids.size < count) {
+    ids.add('J' + randomBytes(5).toString('hex').toUpperCase().slice(0, 9));
+  }
+  return [...ids];
 }
 
 function isPrimaryDuplicateError(err) {
@@ -647,41 +651,28 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
 
 async function applyGeneratedSchedule(rows) {
   if (!rows || rows.length === 0) return { success: false, message: 'Tidak ada jadwal di-generate.' };
-  let inserted = false;
-  let attempts = 0;
-  while (!inserted && attempts < 3) {
-    attempts++;
-    const values = rows.map(r => [createScheduleId(), r.hari, r.jamKe, r.kelas, r.mapelId, r.guruId]);
-    try {
-      await pool.query('INSERT INTO jadwal (id, hari, jam_ke, kelas, mapel_id, guru_id) VALUES ?', [values]);
-      inserted = true;
-    } catch (e) {
-      if (isPrimaryDuplicateError(e)) continue;
-      if (isScheduleConflictError(e)) throw new Error('Jadwal bentrok.');
-      throw e;
-    }
+  const ids = createBatchIds(rows.length);
+  const values = rows.map((r, i) => [ids[i], r.hari, r.jamKe, r.kelas, r.mapelId, r.guruId]);
+  try {
+    await pool.query('INSERT INTO jadwal (id, hari, jam_ke, kelas, mapel_id, guru_id) VALUES ?', [values]);
+  } catch (e) {
+    if (isScheduleConflictError(e)) throw new Error('Jadwal bentrok (kelas sudah terisi di jam yang sama).');
+    throw e;
   }
-  if (!inserted) throw new Error('Gagal menyimpan hasil auto-jadwal.');
   return { success: true, message: `Jadwal berhasil di-generate: ${rows.length} slot.` };
 }
 
 async function finalizeSchedule(rows) {
   if (!rows || rows.length === 0) return { success: false, message: 'Tidak ada jadwal untuk difinalisasi.' };
   await pool.query('DELETE FROM jadwal');
-  let inserted = false;
-  let attempts = 0;
-  while (!inserted && attempts < 3) {
-    attempts++;
-    const values = rows.map(r => [createScheduleId(), r.hari, r.jamKe, r.kelas, r.mapelId, r.guruId]);
-    try {
-      await pool.query('INSERT INTO jadwal (id, hari, jam_ke, kelas, mapel_id, guru_id) VALUES ?', [values]);
-      inserted = true;
-    } catch (e) {
-      if (isPrimaryDuplicateError(e)) continue;
-      throw e;
-    }
+  const ids = createBatchIds(rows.length);
+  const values = rows.map((r, i) => [ids[i], r.hari, r.jamKe, r.kelas, r.mapelId, r.guruId]);
+  try {
+    await pool.query('INSERT INTO jadwal (id, hari, jam_ke, kelas, mapel_id, guru_id) VALUES ?', [values]);
+  } catch (e) {
+    if (isScheduleConflictError(e)) throw new Error('Jadwal bentrok: ada kelas yang terjadwal 2x di slot yang sama.');
+    throw new Error(`Gagal menyimpan jadwal: ${e.message}`);
   }
-  if (!inserted) throw new Error('Gagal menyimpan jadwal yang difinalisasi.');
   return { success: true, message: `Jadwal berhasil difinalisasi: ${rows.length} slot.` };
 }
 

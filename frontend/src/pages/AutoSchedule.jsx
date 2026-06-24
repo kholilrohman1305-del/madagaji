@@ -777,6 +777,8 @@ export default function AutoSchedule() {
     try {
       await api.post('/scheduler/finalize', { rows: generated });
       setFinalized(true);
+    } catch (e) {
+      // error toast already shown by global api interceptor — nothing extra needed
     } finally { setFinalizing(false); }
   };
 
