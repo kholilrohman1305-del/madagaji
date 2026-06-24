@@ -11,6 +11,36 @@ const masterPool = pool.master;
 
 const router = express.Router();
 
+// One-time migration: fix locked_slots UNIQUE KEY to include class_id
+// so the same teacher can have the same jam for multiple classes (multi-class plot)
+;(async () => {
+  try {
+    const [idxRows] = await pool.query(`
+      SELECT INDEX_NAME FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'locked_slots'
+        AND NON_UNIQUE = 0 AND INDEX_NAME != 'PRIMARY'
+    `);
+    // Drop any unique index that does NOT include class_id in its columns
+    for (const row of idxRows) {
+      const [cols] = await pool.query(`
+        SELECT COLUMN_NAME FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'locked_slots'
+          AND INDEX_NAME = ? ORDER BY SEQ_IN_INDEX
+      `, [row.INDEX_NAME]);
+      const colNames = cols.map(c => c.COLUMN_NAME);
+      if (!colNames.includes('class_id')) {
+        await pool.query(`ALTER TABLE locked_slots DROP INDEX \`${row.INDEX_NAME}\``).catch(() => {});
+      }
+    }
+    // Add correct unique key (ignore if already exists)
+    await pool.query(
+      `ALTER TABLE locked_slots ADD UNIQUE INDEX uq_teacher_class_hari_jam (teacher_id, class_id, hari, jam_ke)`
+    ).catch(() => {});
+  } catch (e) {
+    console.warn('[locked_slots migration]', e.message);
+  }
+})();
+
 // Get all metadata (teachers now include gender; teacherSubjects include tingkat+is_linear; teacherLimits include available_days)
 router.get('/meta', async (req, res, next) => {
   try {
@@ -174,14 +204,29 @@ router.get('/locked-slots', async (req, res, next) => {
 
 router.post('/locked-slots', async (req, res, next) => {
   try {
-    const { teacher_id, subject_id, class_id, hari, jam_ke, allow_multi_class } = req.body;
-    if (!teacher_id || !subject_id || !class_id || !hari || !jam_ke)
-      return res.status(400).json({ message: 'teacher_id, subject_id, class_id, hari, jam_ke wajib diisi.' });
-    const [result] = await pool.query(
-      'INSERT INTO locked_slots (teacher_id, subject_id, class_id, hari, jam_ke, allow_multi_class) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE teacher_id=VALUES(teacher_id), subject_id=VALUES(subject_id), allow_multi_class=VALUES(allow_multi_class)',
-      [teacher_id, subject_id, class_id, hari, jam_ke, allow_multi_class ? 1 : 0]
-    );
-    res.json({ id: result.insertId || null, success: true });
+    const { teacher_id, subject_id, hari } = req.body;
+    // Support both single (class_id/jam_ke) and multi (class_ids/jam_kes)
+    const class_ids = req.body.class_ids?.length ? req.body.class_ids.map(Number) : [Number(req.body.class_id)];
+    const jam_kes   = req.body.jam_kes?.length   ? req.body.jam_kes.map(Number)   : [Number(req.body.jam_ke)];
+
+    if (!teacher_id || !subject_id || !hari || !class_ids[0] || !jam_kes[0])
+      return res.status(400).json({ message: 'teacher_id, subject_id, hari, class_ids, jam_kes wajib diisi.' });
+
+    const insertedIds = [];
+    for (const class_id of class_ids) {
+      for (const jam_ke of jam_kes) {
+        // allow_multi_class = 1 when same teacher teaches multiple classes at same hari+jam
+        const allow_multi = class_ids.length > 1 ? 1 : 0;
+        const [r] = await pool.query(
+          `INSERT INTO locked_slots (teacher_id, subject_id, class_id, hari, jam_ke, allow_multi_class)
+           VALUES (?,?,?,?,?,?)
+           ON DUPLICATE KEY UPDATE subject_id=VALUES(subject_id), allow_multi_class=VALUES(allow_multi_class)`,
+          [teacher_id, subject_id, class_id, hari, jam_ke, allow_multi]
+        );
+        insertedIds.push(r.insertId || null);
+      }
+    }
+    res.json({ ids: insertedIds, success: true });
   } catch (e) { next(e); }
 });
 

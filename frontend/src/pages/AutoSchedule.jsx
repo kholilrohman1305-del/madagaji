@@ -125,7 +125,7 @@ export default function AutoSchedule() {
   // Step 5 — Manual Plot (Locked Slots)
   const [lockedSlots, setLockedSlots] = useState([]);
   const [lockedSlotsLoading, setLockedSlotsLoading] = useState(false);
-  const [newLock, setNewLock] = useState({ teacher_id: '', subject_id: '', class_id: '', hari: '', jam_ke: '', allow_multi_class: false });
+  const [newLock, setNewLock] = useState({ teacher_id: '', subject_id: '', class_ids: [], hari: '', jam_kes: [] });
   const [lockSaving, setLockSaving] = useState(false);
   const [importModal, setImportModal] = useState(null); // { phase: 'upload'|'preview', data }
 
@@ -663,16 +663,23 @@ export default function AutoSchedule() {
   // ── Step 5 — Manual Plot (Locked Slots) ─────────────────────────────────
 
   const addLockedSlot = async () => {
-    const { teacher_id, subject_id, class_id, hari, jam_ke, allow_multi_class } = newLock;
-    if (!teacher_id || !subject_id || !class_id || !hari || !jam_ke) {
+    const { teacher_id, subject_id, class_ids, hari, jam_kes } = newLock;
+    if (!teacher_id || !subject_id || !class_ids.length || !hari || !jam_kes.length) {
       toast.warn('Lengkapi semua field sebelum menyimpan.');
       return;
     }
     setLockSaving(true);
     try {
-      await api.post('/scheduler/locked-slots', { teacher_id: Number(teacher_id), subject_id: Number(subject_id), class_id: Number(class_id), hari, jam_ke: Number(jam_ke), allow_multi_class });
-      toast.success('Slot terkunci ditambahkan.');
-      setNewLock({ teacher_id: '', subject_id: '', class_id: '', hari: '', jam_ke: '', allow_multi_class: false });
+      await api.post('/scheduler/locked-slots', {
+        teacher_id: Number(teacher_id),
+        subject_id: Number(subject_id),
+        class_ids: class_ids.map(Number),
+        jam_kes: jam_kes.map(Number),
+        hari,
+      });
+      const count = class_ids.length * jam_kes.length;
+      toast.success(`${count} slot terkunci ditambahkan.`);
+      setNewLock({ teacher_id: '', subject_id: '', class_ids: [], hari: '', jam_kes: [] });
       loadLockedSlots();
     } finally { setLockSaving(false); }
   };
@@ -1361,17 +1368,20 @@ export default function AutoSchedule() {
         <div className="modern-table-card">
           <div className="modern-table-title">Step 5 — Manual Plot (Slot Terkunci)</div>
           <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-            Set guru, mapel, kelas, hari, dan jam secara manual. Slot ini akan <strong>terkunci</strong> dan tidak berubah saat generate jadwal otomatis.
-            Centang <em>"Izinkan multi-kelas"</em> agar 1 guru bisa mengajar 2+ kelas di jam yang sama.
+            Set guru, mapel, hari, lalu centang kelas dan jam yang diinginkan. Slot ini akan <strong>terkunci</strong> dan tidak berubah saat generate jadwal otomatis.
+            Satu guru bisa mengajar beberapa kelas sekaligus di jam yang sama dengan memilih lebih dari 1 kelas.
           </p>
 
           {/* Form tambah slot */}
           <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '16px 20px', marginBottom: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 12 }}>Tambah Slot Terkunci</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+
+            {/* Row 1: Guru | Mapel | Hari */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
               <div>
                 <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Guru</div>
-                <select value={newLock.teacher_id} onChange={e => setNewLock(p => ({ ...p, teacher_id: e.target.value, subject_id: '', jam_ke: '' }))}
+                <select value={newLock.teacher_id}
+                  onChange={e => setNewLock(p => ({ ...p, teacher_id: e.target.value, subject_id: '', class_ids: [], jam_kes: [] }))}
                   style={{ width: '100%', border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '7px 10px', fontSize: 13 }}>
                   <option value="">Pilih Guru</option>
                   {(meta?.teachers || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -1380,14 +1390,15 @@ export default function AutoSchedule() {
               <div>
                 <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Mapel</div>
                 {(() => {
-                  const subjectIdsForTeacher = newLock.teacher_id
+                  const subjectIds = newLock.teacher_id
                     ? [...new Set((teacherSubjectsLocal[newLock.teacher_id] || []).map(x => String(x.subjectId)))]
                     : null;
-                  const subjectsToShow = subjectIdsForTeacher
-                    ? (meta?.subjects || []).filter(s => subjectIdsForTeacher.includes(String(s.id)))
+                  const subjectsToShow = subjectIds
+                    ? (meta?.subjects || []).filter(s => subjectIds.includes(String(s.id)))
                     : (meta?.subjects || []);
                   return (
-                    <select value={newLock.subject_id} onChange={e => setNewLock(p => ({ ...p, subject_id: e.target.value }))}
+                    <select value={newLock.subject_id}
+                      onChange={e => setNewLock(p => ({ ...p, subject_id: e.target.value, class_ids: [], jam_kes: [] }))}
                       style={{ width: '100%', border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '7px 10px', fontSize: 13 }}>
                       <option value="">{newLock.teacher_id && subjectsToShow.length === 0 ? 'Belum ada mapel' : 'Pilih Mapel'}</option>
                       {subjectsToShow.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -1396,84 +1407,160 @@ export default function AutoSchedule() {
                 })()}
               </div>
               <div>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Kelas</div>
-                <select value={newLock.class_id} onChange={e => setNewLock(p => ({ ...p, class_id: e.target.value, jam_ke: '' }))}
-                  style={{ width: '100%', border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '7px 10px', fontSize: 13 }}>
-                  <option value="">Pilih Kelas</option>
-                  {(meta?.classes || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <div>
                 <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Hari</div>
-                <select value={newLock.hari} onChange={e => setNewLock(p => ({ ...p, hari: e.target.value, jam_ke: '' }))}
+                <select value={newLock.hari}
+                  onChange={e => setNewLock(p => ({ ...p, hari: e.target.value, jam_kes: [] }))}
                   style={{ width: '100%', border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '7px 10px', fontSize: 13 }}>
                   <option value="">Pilih Hari</option>
                   {days.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
-              <div>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Jam Ke-</div>
-                {(() => {
-                  const lockClass = (meta?.classes || []).find(c => String(c.id) === String(newLock.class_id));
-                  const lockTingkat = lockClass ? extractTingkat(lockClass.name) : '';
-                  const slotsForDay = newLock.hari && lockTingkat
-                    ? (slotsByTingkat[lockTingkat]?.[newLock.hari] || [])
-                    : newLock.hari && !lockTingkat
-                    ? Object.values(slotsByTingkat).flatMap(t => t[newLock.hari] || []).filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b)
-                    : lockTingkat
-                    ? Array.from({ length: maxHoursByTingkat[lockTingkat] || 0 }, (_, i) => i + 1)
-                    : [];
-                  const hasSlots = slotsForDay.length > 0;
-                  return (
-                    <select value={newLock.jam_ke} onChange={e => setNewLock(p => ({ ...p, jam_ke: e.target.value }))}
-                      style={{ width: '100%', border: `1.5px solid ${hasSlots ? '#cbd5e1' : '#e2e8f0'}`, borderRadius: 8, padding: '7px 10px', fontSize: 13, background: hasSlots ? '#fff' : '#f8fafc', color: hasSlots ? '#1e293b' : '#94a3b8' }}>
-                      <option value="">{!newLock.hari || !newLock.class_id ? 'Pilih hari & kelas dulu' : hasSlots ? 'Pilih Jam' : 'Tidak ada slot'}</option>
-                      {slotsForDay.map(jam => (
-                        <option key={jam} value={jam}>Jam ke-{jam}</option>
-                      ))}
-                    </select>
-                  );
-                })()}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={newLock.allow_multi_class} onChange={e => setNewLock(p => ({ ...p, allow_multi_class: e.target.checked }))} />
-                  <span style={{ fontSize: 12, color: '#475569' }}>Izinkan multi-kelas (guru sama, jam sama)</span>
-                </label>
-              </div>
             </div>
-            {/* Preview card — tampil realtime saat form diisi */}
-            {(newLock.teacher_id || newLock.class_id || newLock.hari) && (() => {
+
+            {/* Row 2: Pilih Kelas (checkbox, filtered by teacher+subject) */}
+            {(() => {
+              if (!newLock.teacher_id || !newLock.subject_id) return (
+                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12, padding: '8px 12px', background: '#f1f5f9', borderRadius: 8 }}>
+                  Pilih guru dan mapel dulu untuk melihat daftar kelas yang diampu.
+                </div>
+              );
+              const assignments = (teacherSubjectsLocal[newLock.teacher_id] || [])
+                .filter(e => String(e.subjectId) === String(newLock.subject_id));
+              const specificIds = new Set(assignments.filter(e => e.classId).map(e => String(e.classId)));
+              const allowedTingkat = new Set(assignments.filter(e => !e.classId && e.tingkat).map(e => e.tingkat));
+              const filteredClasses = (meta?.classes || []).filter(c => {
+                if (specificIds.has(String(c.id))) return true;
+                if (allowedTingkat.size > 0) return allowedTingkat.has(extractTingkat(c.name));
+                return assignments.length === 0;
+              });
+              if (!filteredClasses.length) return (
+                <div style={{ fontSize: 12, color: '#f59e0b', marginBottom: 12, padding: '8px 12px', background: '#fef3c7', borderRadius: 8 }}>
+                  Guru ini belum memiliki kelas yang diampu untuk mapel ini. Atur di Step 3.
+                </div>
+              );
+              const toggleClass = (id) => {
+                const sid = String(id);
+                setNewLock(p => ({
+                  ...p,
+                  class_ids: p.class_ids.includes(sid) ? p.class_ids.filter(x => x !== sid) : [...p.class_ids, sid]
+                }));
+              };
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>
+                    Kelas yang Diampu
+                    <span style={{ color: '#94a3b8', fontWeight: 400, marginLeft: 6 }}>({filteredClasses.length} kelas — centang yang ingin di-plot)</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {filteredClasses.map(c => {
+                      const checked = newLock.class_ids.includes(String(c.id));
+                      return (
+                        <label key={c.id} onClick={() => toggleClass(c.id)} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px',
+                          borderRadius: 20, cursor: 'pointer', userSelect: 'none', fontSize: 13, fontWeight: checked ? 700 : 400,
+                          background: checked ? '#dbeafe' : '#f1f5f9',
+                          border: `1.5px solid ${checked ? '#3b82f6' : '#e2e8f0'}`,
+                          color: checked ? '#1d4ed8' : '#475569',
+                          transition: 'all .15s'
+                        }}>
+                          <input type="checkbox" checked={checked} onChange={() => {}} style={{ accentColor: '#3b82f6', width: 14, height: 14 }} />
+                          {c.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Row 3: Pilih Jam (checkbox, based on hari + selected classes' tingkat) */}
+            {(() => {
+              if (!newLock.hari) return null;
+              const selectedClasses = (meta?.classes || []).filter(c => newLock.class_ids.includes(String(c.id)));
+              const tingkats = selectedClasses.length
+                ? [...new Set(selectedClasses.map(c => extractTingkat(c.name)).filter(Boolean))]
+                : [...new Set((meta?.classes || []).map(c => extractTingkat(c.name)).filter(Boolean))];
+              const allSlots = [...new Set(tingkats.flatMap(tk => slotsByTingkat[tk]?.[newLock.hari] || []))].sort((a,b) => a-b);
+              if (!allSlots.length) return (
+                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12, padding: '8px 12px', background: '#f1f5f9', borderRadius: 8 }}>
+                  Tidak ada slot jam untuk hari {newLock.hari}.
+                </div>
+              );
+              const toggleJam = (jam) => {
+                const sj = String(jam);
+                setNewLock(p => ({
+                  ...p,
+                  jam_kes: p.jam_kes.includes(sj) ? p.jam_kes.filter(x => x !== sj) : [...p.jam_kes, sj]
+                }));
+              };
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>
+                    Jam Ke-
+                    <span style={{ color: '#94a3b8', fontWeight: 400, marginLeft: 6 }}>({allSlots.length} slot — centang jam yang ingin di-plot)</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {allSlots.map(jam => {
+                      const checked = newLock.jam_kes.includes(String(jam));
+                      return (
+                        <label key={jam} onClick={() => toggleJam(jam)} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px',
+                          borderRadius: 20, cursor: 'pointer', userSelect: 'none', fontSize: 13, fontWeight: checked ? 700 : 400,
+                          background: checked ? '#ede9fe' : '#f1f5f9',
+                          border: `1.5px solid ${checked ? '#7c3aed' : '#e2e8f0'}`,
+                          color: checked ? '#5b21b6' : '#475569',
+                          transition: 'all .15s'
+                        }}>
+                          <input type="checkbox" checked={checked} onChange={() => {}} style={{ accentColor: '#7c3aed', width: 14, height: 14 }} />
+                          Jam {jam}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Preview */}
+            {(newLock.teacher_id || newLock.class_ids.length > 0 || newLock.hari) && (() => {
               const t = (meta?.teachers || []).find(x => String(x.id) === String(newLock.teacher_id));
               const s = (meta?.subjects || []).find(x => String(x.id) === String(newLock.subject_id));
-              const c = (meta?.classes || []).find(x => String(x.id) === String(newLock.class_id));
-              const isComplete = newLock.teacher_id && newLock.subject_id && newLock.class_id && newLock.hari && newLock.jam_ke;
+              const selectedClassNames = (meta?.classes || []).filter(c => newLock.class_ids.includes(String(c.id))).map(c => c.name);
+              const isComplete = newLock.teacher_id && newLock.subject_id && newLock.class_ids.length > 0 && newLock.hari && newLock.jam_kes.length > 0;
+              const totalSlots = newLock.class_ids.length * newLock.jam_kes.length;
               return (
-                <div style={{ marginTop: 14, padding: '12px 16px', borderRadius: 10, border: `2px ${isComplete ? 'solid #6366f1' : 'dashed #cbd5e1'}`, background: isComplete ? '#f5f3ff' : '#f8fafc', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', minWidth: 80 }}>Preview:</div>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
+                <div style={{ marginBottom: 12, padding: '12px 16px', borderRadius: 10, border: `2px ${isComplete ? 'solid #6366f1' : 'dashed #cbd5e1'}`, background: isComplete ? '#f5f3ff' : '#f8fafc' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', minWidth: 60 }}>Preview:</span>
                     {[
                       { label: 'Guru', val: t?.name, color: '#1e40af', bg: '#dbeafe' },
                       { label: 'Mapel', val: s?.name, color: '#166534', bg: '#dcfce7' },
-                      { label: 'Kelas', val: c?.name, color: '#9d174d', bg: '#fce7f3' },
                       { label: 'Hari', val: newLock.hari, color: '#92400e', bg: '#fef3c7' },
-                      { label: 'Jam', val: newLock.jam_ke ? `Jam ${newLock.jam_ke}` : null, color: '#5b21b6', bg: '#ede9fe' },
                     ].map(({ label, val, color, bg }) => (
                       <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 8, background: val ? bg : '#f1f5f9', border: `1px solid ${val ? color + '40' : '#e2e8f0'}` }}>
                         <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>{label}</span>
                         <span style={{ fontSize: 13, fontWeight: 600, color: val ? color : '#cbd5e1' }}>{val || '—'}</span>
                       </span>
                     ))}
-                    {newLock.allow_multi_class && (
-                      <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 8, background: '#dcfce7', color: '#15803d', fontWeight: 700 }}>Multi-Kelas ✓</span>
+                    {selectedClassNames.length > 0 && (
+                      <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 8, background: '#dbeafe', color: '#1d4ed8', fontWeight: 600, border: '1px solid #93c5fd' }}>
+                        {selectedClassNames.length} Kelas: {selectedClassNames.join(', ')}
+                      </span>
+                    )}
+                    {newLock.jam_kes.length > 0 && (
+                      <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 8, background: '#ede9fe', color: '#5b21b6', fontWeight: 600, border: '1px solid #c4b5fd' }}>
+                        Jam {newLock.jam_kes.sort((a,b) => Number(a)-Number(b)).join(', ')}
+                      </span>
+                    )}
+                    {isComplete && (
+                      <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 700 }}>→ {totalSlots} slot akan dibuat</span>
                     )}
                   </div>
-                  {isComplete && <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>✓ Siap ditambahkan</div>}
                 </div>
               );
             })()}
 
-            <div style={{ marginTop: 12 }}>
+            <div>
               <button className="btn success sm" onClick={addLockedSlot} disabled={lockSaving}>
                 {lockSaving ? 'Menyimpan...' : '+ Tambah Slot'}
               </button>
