@@ -254,42 +254,49 @@ async function getSebaranMapel() {
 
 async function getDetailGuru() {
   const [jadwalRaw] = await pool.query(
-    `SELECT DISTINCT guru_id, mapel_id, kelas FROM jadwal WHERE guru_id IS NOT NULL`
+    `SELECT guru_id, mapel_id, kelas, hari, jam_ke FROM jadwal WHERE guru_id IS NOT NULL ORDER BY guru_id, mapel_id, hari, jam_ke`
   );
   const [teachers] = await masterPool.query(`SELECT id, name FROM teachers WHERE is_active = 1`);
   const [subjects] = await masterPool.query(`SELECT id, name FROM subjects`);
   const [classes]  = await masterPool.query(`SELECT id, name FROM classes`);
-  const teacherMap = new Map(teachers.map(t => [t.id, t.name]));
-  const subjectMap = new Map(subjects.map(s => [s.id, s.name]));
-  const classMap   = new Map(classes.map(c => [c.id, c.name]));
-  const jadwalRows = jadwalRaw
-    .filter(j => teacherMap.has(j.guru_id))
-    .map(j => ({
-      guru_id: j.guru_id, teacher_name: teacherMap.get(j.guru_id),
-      mapel_id: j.mapel_id, subject_name: subjectMap.get(j.mapel_id) || String(j.mapel_id),
-      kelas: j.kelas, class_name: classMap.get(j.kelas) || String(j.kelas)
-    }))
-    .sort((a, b) => a.teacher_name.localeCompare(b.teacher_name) || a.subject_name.localeCompare(b.subject_name));
+  const teacherMap = new Map(teachers.map(t => [String(t.id), t.name]));
+  const subjectMap = new Map(subjects.map(s => [String(s.id), s.name]));
+  const classMap   = new Map(classes.map(c => [String(c.id), c.name]));
 
-  if (jadwalRows.length > 0) {
+  if (jadwalRaw.length > 0) {
     const guruMap = new Map();
-    for (const r of jadwalRows) {
-      if (!guruMap.has(r.guru_id)) {
-        guruMap.set(r.guru_id, { teacherId: r.guru_id, teacherName: r.teacher_name, subjects: new Map() });
+    for (const j of jadwalRaw) {
+      const gKey = String(j.guru_id);
+      const teacherName = teacherMap.get(gKey);
+      if (!teacherName) continue;
+      if (!guruMap.has(gKey)) {
+        guruMap.set(gKey, { teacherId: j.guru_id, teacherName, subjects: new Map() });
       }
-      const teacher = guruMap.get(r.guru_id);
-      if (!teacher.subjects.has(r.mapel_id)) {
-        teacher.subjects.set(r.mapel_id, { subjectId: r.mapel_id, subjectName: r.subject_name, classes: [] });
+      const teacher = guruMap.get(gKey);
+      const mKey = String(j.mapel_id);
+      if (!teacher.subjects.has(mKey)) {
+        teacher.subjects.set(mKey, {
+          subjectId: j.mapel_id,
+          subjectName: subjectMap.get(mKey) || String(j.mapel_id),
+          slots: [],
+          classes: []
+        });
       }
-      teacher.subjects.get(r.mapel_id).classes.push(r.class_name);
+      const subject = teacher.subjects.get(mKey);
+      const className = classMap.get(String(j.kelas)) || String(j.kelas);
+      subject.slots.push({ kelas: className, hari: j.hari, jamKe: Number(j.jam_ke) });
+      if (!subject.classes.includes(className)) subject.classes.push(className);
     }
     return {
       fromJadwal: true,
-      data: Array.from(guruMap.values()).map(t => ({
-        teacherId: t.teacherId,
-        teacherName: t.teacherName,
-        subjects: Array.from(t.subjects.values())
-      }))
+      data: Array.from(guruMap.values())
+        .sort((a, b) => a.teacherName.localeCompare(b.teacherName))
+        .map(t => ({
+          teacherId: t.teacherId,
+          teacherName: t.teacherName,
+          subjects: Array.from(t.subjects.values())
+            .sort((a, b) => a.subjectName.localeCompare(b.subjectName))
+        }))
     };
   }
 

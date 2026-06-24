@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+﻿import { useEffect, useState, useMemo } from 'react';
 import api from '../api';
 import { BookOpen, Eye, FileSpreadsheet, FileText, GraduationCap, Search, Users, X } from 'lucide-react';
 import { exportPdf, exportXlsx } from '../utils/reportExport';
@@ -36,8 +36,8 @@ function buildDetailRows(classes) {
       }
       return c.subjects.map((s, subjectIdx) => [
         subjectIdx === 0 ? classIdx + 1 : '',
-        c.className,
-        c.homeroomTeacher || '-',
+        subjectIdx === 0 ? c.className : '',
+        subjectIdx === 0 ? (c.homeroomTeacher || '-') : '',
         s.subjectName,
         s.hoursPerWeek || 0,
         s.teachers || 'Belum ada jadwal',
@@ -74,18 +74,26 @@ export default function SebaranMapel() {
   const totalSubjects = data.reduce((s, c) => s + (c.subjectCount || 0), 0);
   const totalClasses = data.length;
 
-  const handleExportXlsx = () => {
-    exportXlsx('sebaran-mapel.xlsx', [
-      { name: 'Ringkasan Kelas', rows: buildSummaryRows(filtered) },
-      { name: 'Detail Mapel', rows: buildDetailRows(filtered) },
-    ]);
+  const handleExportXlsx = async () => {
+    try {
+      await exportXlsx('sebaran-mapel.xlsx', [
+        { name: 'Ringkasan Kelas', rows: buildSummaryRows(filtered) },
+        { name: 'Detail Mapel', rows: buildDetailRows(filtered) },
+      ]);
+    } catch (e) {
+      console.error('Export XLSX gagal:', e);
+    }
   };
 
-  const handleExportPdf = () => {
-    exportPdf('sebaran-mapel.pdf', 'Sebaran Mata Pelajaran', [
-      { title: 'Ringkasan Kelas', rows: buildSummaryRows(filtered) },
-      { title: 'Detail Mapel Per Kelas', rows: buildDetailRows(filtered) },
-    ]);
+  const handleExportPdf = async () => {
+    try {
+      await exportPdf('sebaran-mapel.pdf', 'Sebaran Mata Pelajaran', [
+        { title: 'Ringkasan Kelas', rows: buildSummaryRows(filtered) },
+        { title: 'Detail Mapel Per Kelas', rows: buildDetailRows(filtered) },
+      ]);
+    } catch (e) {
+      console.error('Export PDF gagal:', e);
+    }
   };
 
   return (

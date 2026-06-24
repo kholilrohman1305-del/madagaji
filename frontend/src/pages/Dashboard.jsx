@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
-import { Users, School, CheckCircle, AlertCircle, CreditCard, BarChart3, XCircle } from 'lucide-react';
+import { Users, School, CheckCircle, AlertCircle, CreditCard, BarChart3, XCircle, CalendarCheck } from 'lucide-react';
 
 const DashboardSkeleton = () => (
   <div>
@@ -23,6 +23,7 @@ const DashboardSkeleton = () => (
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
+  const [showAllTeachers, setShowAllTeachers] = useState(false);
   const formatRupiah = (value) => new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
@@ -32,6 +33,8 @@ export default function Dashboard() {
   useEffect(() => {
     api.get('/dashboard').then(res => setData(res.data)).catch(() => setData(null));
   }, []);
+
+  const todayLabel = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
     <div>
@@ -49,7 +52,7 @@ export default function Dashboard() {
             <div className="stat-card blue">
               <div className="stat-label">Total Guru</div>
               <div className="stat-value">{data.totalGuru}</div>
-              <div className="stat-desc">Terjadwal hari ini</div>
+              <div className="stat-desc">Guru aktif terdaftar</div>
               <div className="stat-icon"><Users size={96} /></div>
             </div>
             <div className="stat-card green">
@@ -102,6 +105,43 @@ export default function Dashboard() {
                 <div className="chart-label">Tidak Hadir</div>
               </div>
             </div>
+          </div>
+
+          {/* Guru Terjadwal Hari Ini */}
+          <div className="modern-table-card" style={{ marginBottom: 24 }}>
+            <div className="modern-table-title">
+              <CalendarCheck size={24} /> Guru Terjadwal Hari Ini
+            </div>
+            <div style={{ marginBottom: 12, color: 'var(--muted)', fontSize: 13 }}>
+              {todayLabel} &mdash; Total <strong style={{ color: 'var(--primary-700)' }}>{data.scheduledTeachersList?.length ?? 0}</strong> guru terjadwal
+            </div>
+            {!data.scheduledTeachersList?.length ? (
+              <div className="empty">Tidak ada guru yang terjadwal hari ini.</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                  {(showAllTeachers ? data.scheduledTeachersList : data.scheduledTeachersList.slice(0, 30)).map((t, idx) => (
+                    <span
+                      key={t.guruId}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        background: '#f1f5f9', color: '#1e293b',
+                        border: '1px solid #e2e8f0', borderRadius: 20,
+                        padding: '4px 12px', fontSize: 13, fontWeight: 500
+                      }}
+                    >
+                      <span style={{ color: 'var(--muted)', fontSize: 11 }}>{idx + 1}.</span>
+                      {t.namaGuru}
+                    </span>
+                  ))}
+                </div>
+                {data.scheduledTeachersList.length > 30 && (
+                  <button className="btn sm outline" onClick={() => setShowAllTeachers(v => !v)} style={{ marginTop: 4 }}>
+                    {showAllTeachers ? 'Tampilkan lebih sedikit' : `Lihat semua (${data.scheduledTeachersList.length} guru)`}
+                  </button>
+                )}
+              </>
+            )}
           </div>
 
           <div className="grid grid-2" style={{ marginTop: 16 }}>

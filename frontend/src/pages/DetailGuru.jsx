@@ -14,13 +14,26 @@ const MAPEL_COLORS = [
   { bg: '#f0fdf4', color: '#14532d', border: '#86efac' },
 ];
 
+const DAYS_ORDER = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Ahad'];
+
+function sortSlots(slots) {
+  return [...slots].sort((a, b) => {
+    const dA = DAYS_ORDER.indexOf(a.hari);
+    const dB = DAYS_ORDER.indexOf(b.hari);
+    if (dA !== dB) return dA - dB;
+    return (a.jamKe || 0) - (b.jamKe || 0);
+  });
+}
+
 function countClasses(teacher) {
-  return teacher.subjects.reduce((sum, subject) => sum + (subject.classes?.length || 0), 0);
+  return teacher.subjects.reduce((sum, subject) => {
+    return sum + (subject.slots?.length || subject.classes?.length || 0);
+  }, 0);
 }
 
 function buildSummaryRows(teachers) {
   return [
-    ['No', 'Nama Guru', 'Jumlah Mapel', 'Jumlah Sesi Kelas'],
+    ['No', 'Nama Guru', 'Jumlah Mapel', 'Jumlah Sesi Mengajar'],
     ...teachers.map((teacher, idx) => [
       idx + 1,
       teacher.teacherName,
@@ -32,17 +45,25 @@ function buildSummaryRows(teachers) {
 
 function buildDetailRows(teachers) {
   return [
-    ['No', 'Nama Guru', 'Mata Pelajaran', 'Tingkat', 'Kelas'],
+    ['No', 'Nama Guru', 'Mata Pelajaran', 'Hari', 'Jam Ke', 'Kelas'],
     ...teachers.flatMap((teacher, teacherIdx) => {
       if (!teacher.subjects?.length) {
-        return [[teacherIdx + 1, teacher.teacherName, 'Belum ada mapel', '-', '-']];
+        return [[teacherIdx + 1, teacher.teacherName, 'Belum ada mapel', '-', '-', '-']];
       }
-      return teacher.subjects.map((subject, subjectIdx) => [
-        subjectIdx === 0 ? teacherIdx + 1 : '',
-        teacher.teacherName,
-        subject.subjectName,
-        subject.tingkat || 'Semua',
-        subject.classes?.length ? subject.classes.join(', ') : 'Belum ada kelas yang dijadwalkan',
+      const allSlots = teacher.subjects.flatMap(s =>
+        (s.slots?.length ? sortSlots(s.slots) : (s.classes || []).map(cls => ({ kelas: cls, hari: '-', jamKe: '-' })))
+          .map(slot => ({ ...slot, subjectName: s.subjectName }))
+      );
+      if (!allSlots.length) {
+        return [[teacherIdx + 1, teacher.teacherName, 'Belum ada jadwal', '-', '-', '-']];
+      }
+      return allSlots.map((slot, slotIdx) => [
+        slotIdx === 0 ? teacherIdx + 1 : '',
+        slotIdx === 0 ? teacher.teacherName : '',
+        slot.subjectName,
+        slot.hari,
+        slot.jamKe,
+        slot.kelas,
       ]);
     }),
   ];
@@ -84,7 +105,8 @@ export default function DetailGuru() {
       t.subjects.some(m =>
         m.subjectName.toLowerCase().includes(q) ||
         (m.tingkat || '').toLowerCase().includes(q) ||
-        (m.classes || []).some(cls => cls.toLowerCase().includes(q))
+        (m.classes || []).some(cls => cls.toLowerCase().includes(q)) ||
+        (m.slots || []).some(slot => slot.kelas.toLowerCase().includes(q) || slot.hari.toLowerCase().includes(q))
       )
     );
   }, [result, query]);
@@ -93,18 +115,26 @@ export default function DetailGuru() {
   const totalMapel = allSubjects.length;
   const totalSessions = filtered.reduce((sum, teacher) => sum + countClasses(teacher), 0);
 
-  const handleExportXlsx = () => {
-    exportXlsx('detail-jadwal-guru.xlsx', [
-      { name: 'Ringkasan Guru', rows: buildSummaryRows(filtered) },
-      { name: 'Detail Jadwal', rows: buildDetailRows(filtered) },
-    ]);
+  const handleExportXlsx = async () => {
+    try {
+      await exportXlsx('detail-jadwal-guru.xlsx', [
+        { name: 'Ringkasan Guru', rows: buildSummaryRows(filtered) },
+        { name: 'Detail Jadwal', rows: buildDetailRows(filtered) },
+      ]);
+    } catch (e) {
+      console.error('Export XLSX gagal:', e);
+    }
   };
 
-  const handleExportPdf = () => {
-    exportPdf('detail-jadwal-guru.pdf', 'Detail Jadwal Guru', [
-      { title: 'Ringkasan Guru', rows: buildSummaryRows(filtered) },
-      { title: 'Detail Mapel dan Kelas', rows: buildDetailRows(filtered) },
-    ]);
+  const handleExportPdf = async () => {
+    try {
+      await exportPdf('detail-jadwal-guru.pdf', 'Detail Jadwal Guru', [
+        { title: 'Ringkasan Guru', rows: buildSummaryRows(filtered) },
+        { title: 'Detail Jadwal Per Guru', rows: buildDetailRows(filtered) },
+      ]);
+    } catch (e) {
+      console.error('Export PDF gagal:', e);
+    }
   };
 
   return (
@@ -126,7 +156,7 @@ export default function DetailGuru() {
             {[
               { label: 'Guru Aktif', value: result?.data?.length || 0, bg: '#dbeafe', color: '#1e40af' },
               { label: 'Jenis Mapel', value: totalMapel, bg: '#dcfce7', color: '#166534' },
-              { label: 'Sesi Kelas', value: totalSessions, bg: '#fef9c3', color: '#854d0e' },
+              { label: 'Sesi Mengajar', value: totalSessions, bg: '#fef9c3', color: '#854d0e' },
             ].map(s => (
               <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: s.bg, color: s.color, fontWeight: 700, fontSize: 13 }}>
                 {s.value} <span style={{ fontWeight: 400, fontSize: 12 }}>{s.label}</span>
@@ -170,7 +200,7 @@ export default function DetailGuru() {
                 <th>No</th>
                 <th>Nama Guru</th>
                 <th>Mapel</th>
-                <th style={{ textAlign: 'center' }}>Sesi Kelas</th>
+                <th style={{ textAlign: 'center' }}>Sesi Mengajar</th>
                 <th style={{ textAlign: 'center' }}>Detail</th>
               </tr>
             </thead>
@@ -209,53 +239,78 @@ export default function DetailGuru() {
 
       {selectedTeacher && (
         <div className="modal-backdrop">
-          <div className="modal" style={{ width: 'min(920px, 100%)' }}>
+          <div className="modal" style={{ width: 'min(960px, 100%)' }}>
             <div className="modal-header">
-              <h3 className="modal-title"><Users size={22} /> Detail {selectedTeacher.teacherName}</h3>
+              <h3 className="modal-title"><Users size={22} /> Detail Jadwal — {selectedTeacher.teacherName}</h3>
               <button className="modal-close" onClick={() => setSelectedTeacher(null)}><X size={20} /></button>
             </div>
-            <div style={{ display: 'grid', gap: 6, marginBottom: 16, color: 'var(--muted)', fontSize: 13 }}>
-              <div><strong style={{ color: 'var(--text)' }}>Jumlah Mapel:</strong> {selectedTeacher.subjects.length}</div>
-              <div><strong style={{ color: 'var(--text)' }}>Sesi Kelas:</strong> {countClasses(selectedTeacher)}</div>
+            <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+              <div style={{ padding: '6px 14px', borderRadius: 8, background: '#dbeafe', color: '#1e40af', fontSize: 13 }}>
+                <strong>{selectedTeacher.subjects.length}</strong> Mata Pelajaran
+              </div>
+              <div style={{ padding: '6px 14px', borderRadius: 8, background: '#dcfce7', color: '#166534', fontSize: 13 }}>
+                <strong>{countClasses(selectedTeacher)}</strong> Sesi Mengajar
+              </div>
             </div>
             <table className="table">
               <thead>
                 <tr>
                   <th>No</th>
                   <th>Mata Pelajaran</th>
-                  <th>Tingkat</th>
+                  <th>Hari</th>
+                  <th style={{ textAlign: 'center' }}>Jam Ke</th>
                   <th>Kelas</th>
-                  <th style={{ textAlign: 'center' }}>Jumlah Kelas</th>
                 </tr>
               </thead>
               <tbody>
-                {selectedTeacher.subjects.map((subject, idx) => {
-                  const col = colorMap.get(subject.subjectId) || MAPEL_COLORS[idx % MAPEL_COLORS.length];
-                  return (
-                    <tr key={subject.subjectId}>
-                      <td>{idx + 1}</td>
-                      <td>
-                        <span style={{ background: col.bg, color: col.color, border: `1px solid ${col.border}`, borderRadius: 20, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>
-                          {subject.subjectName}
-                        </span>
-                      </td>
-                      <td>{subject.tingkat || 'Semua'}</td>
-                      <td>
-                        {subject.classes?.length ? (
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {subject.classes.map(cls => (
-                              <span key={cls} style={{ background: '#f8fafc', color: '#334155', border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>
-                                {cls}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Belum ada kelas yang dijadwalkan</span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>{subject.classes?.length || 0}</td>
-                    </tr>
-                  );
+                {selectedTeacher.subjects.flatMap((subject, sIdx) => {
+                  const col = colorMap.get(subject.subjectId) || MAPEL_COLORS[sIdx % MAPEL_COLORS.length];
+                  const slots = subject.slots?.length
+                    ? sortSlots(subject.slots)
+                    : (subject.classes || []).map(cls => ({ kelas: cls, hari: '-', jamKe: '-' }));
+
+                  if (!slots.length) {
+                    return [(
+                      <tr key={`${subject.subjectId}-empty`}>
+                        <td>—</td>
+                        <td>
+                          <span style={{ background: col.bg, color: col.color, border: `1px solid ${col.border}`, borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>
+                            {subject.subjectName}
+                          </span>
+                        </td>
+                        <td colSpan={3} style={{ color: '#94a3b8', fontStyle: 'italic' }}>Belum ada slot jadwal</td>
+                      </tr>
+                    )];
+                  }
+
+                  return slots.map((slot, slotIdx) => {
+                    const rowNum = selectedTeacher.subjects
+                      .slice(0, sIdx)
+                      .reduce((acc, s) => acc + Math.max(s.slots?.length || s.classes?.length || 1, 1), 0) + slotIdx + 1;
+                    return (
+                      <tr key={`${subject.subjectId}-${slot.hari}-${slot.jamKe}-${slot.kelas}`}>
+                        <td style={{ color: 'var(--muted)', fontSize: 12 }}>{rowNum}</td>
+                        <td>
+                          {slotIdx === 0 && (
+                            <span style={{ background: col.bg, color: col.color, border: `1px solid ${col.border}`, borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>
+                              {subject.subjectName}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ fontWeight: 500 }}>{slot.hari}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{ background: '#f1f5f9', color: '#475569', borderRadius: 6, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>
+                            Jam {slot.jamKe}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ background: '#f8fafc', color: '#334155', border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>
+                            {slot.kelas}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  });
                 })}
               </tbody>
             </table>

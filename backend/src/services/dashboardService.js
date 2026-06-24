@@ -40,6 +40,16 @@ async function getDashboardData() {
   const absentCount = new Set(absentTeachersList.map(item => item.guruId)).size;
   const presentCount = new Set(presentTeachersList.map(item => item.guruId)).size;
 
+  const scheduledTeachersMap = new Map();
+  scheduleToday.forEach(item => {
+    if (!scheduledTeachersMap.has(item.guruId)) {
+      scheduledTeachersMap.set(item.guruId, item.namaGuru);
+    }
+  });
+  const scheduledTeachersList = [...scheduledTeachersMap.entries()]
+    .map(([guruId, namaGuru]) => ({ guruId, namaGuru }))
+    .sort((a, b) => a.namaGuru.localeCompare(b.namaGuru));
+
   const [[{ totalGuru }]] = await masterPool.query('SELECT COUNT(*) AS totalGuru FROM teachers WHERE is_active=1');
   const [[{ totalKelas }]] = await masterPool.query('SELECT COUNT(*) AS totalKelas FROM classes');
 
@@ -54,6 +64,8 @@ async function getDashboardData() {
     totalKelas: totalKelas || 0,
     countKampusA: uniqueTeachersKampusA.size,
     countKampusB: uniqueTeachersKampusB.size,
+    totalGuruTerjadwalHariIni: scheduledTeachersList.length,
+    scheduledTeachersList,
     absentCount,
     presentCount,
     totalBisyarohMonth: financialSummary.totalHonorarium,
