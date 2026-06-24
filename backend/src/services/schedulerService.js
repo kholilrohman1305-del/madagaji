@@ -664,16 +664,33 @@ async function applyGeneratedSchedule(rows) {
 
 async function finalizeSchedule(rows) {
   if (!rows || rows.length === 0) return { success: false, message: 'Tidak ada jadwal untuk difinalisasi.' };
+
+  // Deduplicate by (kelas, hari, jamKe): locked slots take priority over generated ones.
+  // This handles edge cases where consolidatePairs places a generated slot at the same
+  // position as a locked slot — the locked slot always wins.
+  const slotMap = new Map();
+  for (const r of rows) {
+    const key = `${r.kelas}|${r.hari}|${r.jamKe}`;
+    const existing = slotMap.get(key);
+    if (!existing) {
+      slotMap.set(key, r);
+    } else if (r.locked && !existing.locked) {
+      slotMap.set(key, r); // locked beats non-locked
+    }
+    // else: keep existing (locked already there, or both non-locked → keep first)
+  }
+  const deduped = [...slotMap.values()];
+
   await pool.query('DELETE FROM jadwal');
-  const ids = createBatchIds(rows.length);
-  const values = rows.map((r, i) => [ids[i], r.hari, r.jamKe, r.kelas, r.mapelId, r.guruId]);
+  const ids = createBatchIds(deduped.length);
+  const values = deduped.map((r, i) => [ids[i], r.hari, r.jamKe, r.kelas, r.mapelId, r.guruId]);
   try {
     await pool.query('INSERT INTO jadwal (id, hari, jam_ke, kelas, mapel_id, guru_id) VALUES ?', [values]);
   } catch (e) {
     if (isScheduleConflictError(e)) throw new Error('Jadwal bentrok: ada kelas yang terjadwal 2x di slot yang sama.');
     throw new Error(`Gagal menyimpan jadwal: ${e.message}`);
   }
-  return { success: true, message: `Jadwal berhasil difinalisasi: ${rows.length} slot.` };
+  return { success: true, message: `Jadwal berhasil difinalisasi: ${deduped.length} slot.` };
 }
 
 function checkConflict(schedule, hari, jamKe, kelas, newGuruId, excludeIdx = -1) {
