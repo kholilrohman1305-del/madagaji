@@ -217,13 +217,13 @@ async function getSebaranMapel() {
     SELECT kelas, mapel_id, guru_id FROM jadwal
   `);
   const [teachers] = await masterPool.query(`SELECT id, name FROM teachers`);
-  const teacherNameMap = new Map(teachers.map(t => [t.id, t.name]));
+  const teacherNameMap = new Map(teachers.map(t => [String(t.id), t.name]));
 
   const jadwalMap = new Map();
   for (const j of jadwalRaw) {
     const key = `${j.kelas}-${j.mapel_id}`;
     if (!jadwalMap.has(key)) jadwalMap.set(key, new Set());
-    if (j.guru_id) jadwalMap.get(key).add(teacherNameMap.get(j.guru_id) || String(j.guru_id));
+    if (j.guru_id) jadwalMap.get(key).add(teacherNameMap.get(String(j.guru_id)) || String(j.guru_id));
   }
   const jadwalRows = [...jadwalMap.entries()].map(([key, names]) => {
     const [kelas, mapel_id] = key.split('-');

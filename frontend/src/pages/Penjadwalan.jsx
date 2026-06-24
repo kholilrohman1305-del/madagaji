@@ -48,7 +48,14 @@ export default function Penjadwalan() {
     return () => { alive = false; };
   }, [day, kelasFilter]);
 
-  const hours = Number(hoursByDay[day] || 0);
+  // Derive hours from config; fallback to max jam_ke found in existing schedule rows
+  const hours = useMemo(() => {
+    const cfgHours = Number(hoursByDay[day] || 0);
+    if (cfgHours > 0) return cfgHours;
+    return rows
+      .filter(r => r.hari === day)
+      .reduce((max, r) => Math.max(max, Number(r.jamKe) || 0), 0);
+  }, [hoursByDay, day, rows]);
 
   const grid = useMemo(() => {
     const map = new Map();
@@ -351,3 +358,4 @@ export default function Penjadwalan() {
     </div>
   );
 }
+
