@@ -7,7 +7,7 @@ const { generateTemplate, parseImportExcel } = require('../services/scheduler/ex
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
-const masterDb = process.env.DB_MASTER_NAME || process.env.DB2_NAME || 'sekolah_master';
+const masterPool = pool.master;
 
 const router = express.Router();
 
@@ -155,14 +155,19 @@ router.post('/reset', async (req, res, next) => {
 
 router.get('/locked-slots', async (req, res, next) => {
   try {
-    const [rows] = await pool.query(
-      `SELECT ls.*, t.name AS teacher_name, s.name AS subject_name, c.name AS class_name
-       FROM locked_slots ls
-       JOIN ${masterDb}.teachers t ON t.id = ls.teacher_id
-       JOIN ${masterDb}.subjects s ON s.id = ls.subject_id
-       JOIN ${masterDb}.classes c ON c.id = ls.class_id
-       ORDER BY ls.hari, ls.jam_ke, c.name`
-    );
+    const [lsRows]   = await pool.query(`SELECT * FROM locked_slots ORDER BY hari, jam_ke`);
+    const [teachers] = await masterPool.query(`SELECT id, name FROM teachers`);
+    const [subjects] = await masterPool.query(`SELECT id, name FROM subjects`);
+    const [classes]  = await masterPool.query(`SELECT id, name FROM classes`);
+    const tMap = new Map(teachers.map(t => [t.id, t.name]));
+    const sMap = new Map(subjects.map(s => [s.id, s.name]));
+    const cMap = new Map(classes.map(c => [c.id, c.name]));
+    const rows = lsRows.map(ls => ({
+      ...ls,
+      teacher_name: tMap.get(ls.teacher_id) || String(ls.teacher_id),
+      subject_name: sMap.get(ls.subject_id) || String(ls.subject_id),
+      class_name:   cMap.get(ls.class_id)   || String(ls.class_id)
+    }));
     res.json(rows);
   } catch (e) { next(e); }
 });

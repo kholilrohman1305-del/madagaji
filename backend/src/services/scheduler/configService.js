@@ -1,6 +1,5 @@
 const pool = require('../../db');
 const masterPool = pool.master;
-const masterDb = process.env.DB_MASTER_NAME || process.env.DB2_NAME || 'sekolah_master';
 const { TTLCache } = require('../../utils/cache');
 
 const metaCacheTtl = Number(process.env.SCHEDULER_META_CACHE_TTL_MS || 30000);
@@ -203,31 +202,44 @@ async function getSebaranMapel() {
     ORDER BY c.name
   `);
 
+  const [subjects] = await masterPool.query(`SELECT id, name FROM subjects`);
+  const subjectNameMap = new Map(subjects.map(s => [s.id, s.name]));
+
   const [csRows] = await pool.query(`
-    SELECT cs.class_id, cs.subject_id, s.name AS subject_name, cs.hours_per_week
-    FROM class_subjects cs
-    JOIN ${masterDb}.subjects s ON s.id = cs.subject_id
-    ORDER BY cs.class_id, s.name
+    SELECT class_id, subject_id, hours_per_week FROM class_subjects ORDER BY class_id
   `);
+  const csRowsMapped = csRows.map(cs => ({
+    ...cs,
+    subject_name: subjectNameMap.get(cs.subject_id) || String(cs.subject_id)
+  }));
 
-  const [jadwalRows] = await pool.query(`
-    SELECT j.kelas, j.mapel_id,
-           GROUP_CONCAT(DISTINCT t.name ORDER BY t.name SEPARATOR ', ') AS teachers
-    FROM jadwal j
-    LEFT JOIN ${masterDb}.teachers t ON t.id = j.guru_id
-    GROUP BY j.kelas, j.mapel_id
+  const [jadwalRaw] = await pool.query(`
+    SELECT kelas, mapel_id, guru_id FROM jadwal
   `);
+  const [teachers] = await masterPool.query(`SELECT id, name FROM teachers`);
+  const teacherNameMap = new Map(teachers.map(t => [t.id, t.name]));
 
-  const jadwalMap = new Map(jadwalRows.map(r => [`${r.kelas}-${r.mapel_id}`, r.teachers]));
+  const jadwalMap = new Map();
+  for (const j of jadwalRaw) {
+    const key = `${j.kelas}-${j.mapel_id}`;
+    if (!jadwalMap.has(key)) jadwalMap.set(key, new Set());
+    if (j.guru_id) jadwalMap.get(key).add(teacherNameMap.get(j.guru_id) || String(j.guru_id));
+  }
+  const jadwalRows = [...jadwalMap.entries()].map(([key, names]) => {
+    const [kelas, mapel_id] = key.split('-');
+    return { kelas: Number(kelas), mapel_id: Number(mapel_id), teachers: [...names].sort().join(', ') };
+  });
+
+  const jadwalFinalMap = new Map(jadwalRows.map(r => [`${r.kelas}-${r.mapel_id}`, r.teachers]));
 
   return classRows.map(c => {
-    const subjects = csRows
+    const subjects = csRowsMapped
       .filter(cs => cs.class_id === c.id)
       .map(cs => ({
         subjectId: cs.subject_id,
         subjectName: cs.subject_name,
         hoursPerWeek: cs.hours_per_week,
-        teachers: jadwalMap.get(`${c.id}-${cs.subject_id}`) || null
+        teachers: jadwalFinalMap.get(`${c.id}-${cs.subject_id}`) || null
       }));
     return {
       classId: c.id,
@@ -241,24 +253,31 @@ async function getSebaranMapel() {
 }
 
 async function getDetailGuru() {
-  const [jadwalRows] = await pool.query(`
-    SELECT j.guru_id, t.name AS teacher_name,
-           j.mapel_id, s.name AS subject_name,
-           j.kelas, c.name AS class_name
-    FROM (SELECT DISTINCT guru_id, mapel_id, kelas FROM jadwal) j
-    JOIN ${masterDb}.teachers t ON t.id = j.guru_id AND t.is_active = 1
-    JOIN ${masterDb}.subjects s ON s.id = j.mapel_id
-    JOIN ${masterDb}.classes c ON c.id = j.kelas
-    ORDER BY t.name, s.name, c.name
-  `);
+  const [jadwalRaw] = await pool.query(
+    `SELECT DISTINCT guru_id, mapel_id, kelas FROM jadwal WHERE guru_id IS NOT NULL`
+  );
+  const [teachers] = await masterPool.query(`SELECT id, name FROM teachers WHERE is_active = 1`);
+  const [subjects] = await masterPool.query(`SELECT id, name FROM subjects`);
+  const [classes]  = await masterPool.query(`SELECT id, name FROM classes`);
+  const teacherMap = new Map(teachers.map(t => [t.id, t.name]));
+  const subjectMap = new Map(subjects.map(s => [s.id, s.name]));
+  const classMap   = new Map(classes.map(c => [c.id, c.name]));
+  const jadwalRows = jadwalRaw
+    .filter(j => teacherMap.has(j.guru_id))
+    .map(j => ({
+      guru_id: j.guru_id, teacher_name: teacherMap.get(j.guru_id),
+      mapel_id: j.mapel_id, subject_name: subjectMap.get(j.mapel_id) || String(j.mapel_id),
+      kelas: j.kelas, class_name: classMap.get(j.kelas) || String(j.kelas)
+    }))
+    .sort((a, b) => a.teacher_name.localeCompare(b.teacher_name) || a.subject_name.localeCompare(b.subject_name));
 
   if (jadwalRows.length > 0) {
-    const teacherMap = new Map();
+    const guruMap = new Map();
     for (const r of jadwalRows) {
-      if (!teacherMap.has(r.guru_id)) {
-        teacherMap.set(r.guru_id, { teacherId: r.guru_id, teacherName: r.teacher_name, subjects: new Map() });
+      if (!guruMap.has(r.guru_id)) {
+        guruMap.set(r.guru_id, { teacherId: r.guru_id, teacherName: r.teacher_name, subjects: new Map() });
       }
-      const teacher = teacherMap.get(r.guru_id);
+      const teacher = guruMap.get(r.guru_id);
       if (!teacher.subjects.has(r.mapel_id)) {
         teacher.subjects.set(r.mapel_id, { subjectId: r.mapel_id, subjectName: r.subject_name, classes: [] });
       }
@@ -266,7 +285,7 @@ async function getDetailGuru() {
     }
     return {
       fromJadwal: true,
-      data: Array.from(teacherMap.values()).map(t => ({
+      data: Array.from(guruMap.values()).map(t => ({
         teacherId: t.teacherId,
         teacherName: t.teacherName,
         subjects: Array.from(t.subjects.values())
@@ -275,29 +294,29 @@ async function getDetailGuru() {
   }
 
   // Fallback: teacher_subjects mapping (no actual schedule yet)
-  const [tsRows] = await pool.query(`
-    SELECT ts.teacher_id, t.name AS teacher_name,
-           ts.subject_id, s.name AS subject_name, ts.tingkat, ts.class_id,
-           c.name AS class_name
-    FROM teacher_subjects ts
-    JOIN ${masterDb}.teachers t ON t.id = ts.teacher_id AND t.is_active = 1
-    JOIN ${masterDb}.subjects s ON s.id = ts.subject_id
-    LEFT JOIN ${masterDb}.classes c ON c.id = ts.class_id
-    ORDER BY t.name, s.name, c.name
-  `);
+  const [tsRows] = await pool.query(
+    `SELECT teacher_id, subject_id, tingkat, class_id FROM teacher_subjects`
+  );
+  const [fbTeachers] = await masterPool.query(`SELECT id, name FROM teachers WHERE is_active = 1`);
+  const [fbSubjects] = await masterPool.query(`SELECT id, name FROM subjects`);
+  const [fbClasses]  = await masterPool.query(`SELECT id, name FROM classes`);
+  const fbTeacherMap = new Map(fbTeachers.map(t => [t.id, t.name]));
+  const fbSubjectMap = new Map(fbSubjects.map(s => [s.id, s.name]));
+  const fbClassMap   = new Map(fbClasses.map(c => [c.id, c.name]));
 
-  const teacherMap = new Map();
+  const fallbackTeacherMap = new Map();
   for (const r of tsRows) {
-    if (!teacherMap.has(r.teacher_id)) {
-      teacherMap.set(r.teacher_id, { teacherId: r.teacher_id, teacherName: r.teacher_name, subjects: [] });
+    if (!fbTeacherMap.has(r.teacher_id)) continue;
+    if (!fallbackTeacherMap.has(r.teacher_id)) {
+      fallbackTeacherMap.set(r.teacher_id, { teacherId: r.teacher_id, teacherName: fbTeacherMap.get(r.teacher_id), subjects: [] });
     }
-    teacherMap.get(r.teacher_id).subjects.push({
-      subjectId: r.subject_id, subjectName: r.subject_name,
-      classes: r.class_name ? [r.class_name] : [],
+    fallbackTeacherMap.get(r.teacher_id).subjects.push({
+      subjectId: r.subject_id, subjectName: fbSubjectMap.get(r.subject_id) || String(r.subject_id),
+      classes: r.class_id ? [fbClassMap.get(r.class_id) || String(r.class_id)] : [],
       tingkat: r.tingkat || ''
     });
   }
-  return { fromJadwal: false, data: Array.from(teacherMap.values()) };
+  return { fromJadwal: false, data: Array.from(fallbackTeacherMap.values()) };
 }
 
 module.exports = {

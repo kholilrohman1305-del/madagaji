@@ -1,5 +1,5 @@
 const pool = require('../db');
-const masterDb = process.env.DB_MASTER_NAME || process.env.DB2_NAME || 'sekolah_master';
+const masterPool = pool.master;
 const { randomBytes } = require('crypto');
 const {
   getTeachers,
@@ -466,14 +466,20 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
   const classSubjectsRaw = await getClassSubjects();
   const teacherLimitsRaw = await getTeacherLimits();
 
-  // Load locked slots — these are pre-placed before random scheduling
-  const [lockedRows] = await pool.query(
-    `SELECT ls.*, t.name AS teacher_name, s.name AS subject_name, c.name AS class_name
-     FROM locked_slots ls
-     JOIN ${masterDb}.teachers t ON t.id = ls.teacher_id
-     JOIN ${masterDb}.subjects s ON s.id = ls.subject_id
-     JOIN ${masterDb}.classes c ON c.id = ls.class_id`
-  );
+  // Load locked slots — separate queries to avoid cross-DB permission issues
+  const [lockedRaw] = await pool.query(`SELECT * FROM locked_slots`);
+  const [lkTeachers] = await masterPool.query(`SELECT id, name FROM teachers`);
+  const [lkSubjects] = await masterPool.query(`SELECT id, name FROM subjects`);
+  const [lkClasses]  = await masterPool.query(`SELECT id, name FROM classes`);
+  const lkTeacherMap = new Map(lkTeachers.map(t => [t.id, t.name]));
+  const lkSubjectMap = new Map(lkSubjects.map(s => [s.id, s.name]));
+  const lkClassMap   = new Map(lkClasses.map(c => [c.id, c.name]));
+  const lockedRows = lockedRaw.map(ls => ({
+    ...ls,
+    teacher_name: lkTeacherMap.get(ls.teacher_id) || String(ls.teacher_id),
+    subject_name: lkSubjectMap.get(ls.subject_id) || String(ls.subject_id),
+    class_name:   lkClassMap.get(ls.class_id)   || String(ls.class_id)
+  }));
 
   const teacherSubjects = buildTeacherSubjectsMap(teacherSubjectsRaw);
   const teacherLimits = buildTeacherLimitsMap(teacherLimitsRaw);
