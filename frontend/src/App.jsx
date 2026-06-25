@@ -53,7 +53,7 @@ export default function App() {
       <ToastHost />
       <ConfirmHost />
       <Routes>
-        <Route path="/" element={<LandingHub />} />
+        <Route path="/" element={user ? <Navigate to="/dasbor" replace /> : <Navigate to="/login" replace />} />
         <Route path="/login" element={user ? <Navigate to="/dasbor" replace /> : <Login />} />
         <Route
           path="/*"

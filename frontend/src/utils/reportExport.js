@@ -16,7 +16,7 @@ function downloadBlob(filename, blob) {
 export async function exportXlsx(filename, sheets) {
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Madagaji';
+  workbook.creator = 'MadaFlow';
   workbook.created = new Date();
 
   sheets.forEach((sheet) => {

@@ -32,30 +32,30 @@ export default function LandingHub() {
         <div className="hub-grid">
           <article className="hub-card">
             <div className="hub-icon"><Wallet size={24} /></div>
-            <h3>MadaGaji</h3>
+            <h3>MadaFlow</h3>
             <p>Absensi guru, jadwal, bisyaroh, dan master data utama.</p>
             <Link className="hub-link" to={user ? '/dasbor' : '/login'}>
-              {user ? 'Masuk ke Dasbor' : 'Login MadaGaji'}
+              {user ? 'Masuk ke Dasbor' : 'Login MadaFlow'}
               <ArrowRight size={16} />
             </Link>
           </article>
 
           <article className="hub-card">
             <div className="hub-icon"><School size={24} /></div>
-            <h3>SKS</h3>
+            <h3>MadaPay</h3>
             <p>Sistem keuangan sekolah untuk tagihan, pembayaran, dan laporan.</p>
             <a className="hub-link" href={sksUrl}>
-              Buka SKS
+              Buka MadaPay
               <ArrowRight size={16} />
             </a>
           </article>
 
           <article className="hub-card">
             <div className="hub-icon"><Database size={24} /></div>
-            <h3>PDMADA</h3>
+            <h3>MyMada</h3>
             <p>Master data sekolah: siswa, guru, kelas, mapel, dan sinkronisasi.</p>
             <a className="hub-link" href={pdmadaUrl}>
-              Buka PDMADA
+              Buka MyMada
               <ArrowRight size={16} />
             </a>
           </article>

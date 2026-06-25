@@ -62,7 +62,7 @@ export default function Sidebar({ hidden, onToggle }) {
         <div className="brand-logo">
           <Sparkles size={24} />
         </div>
-        <span className="brand-text">Mada Gaji</span>
+        <span className="brand-text">MadaFlow</span>
         <button className="sidebar-toggle-icon" type="button" onClick={onToggle}>
           <PanelLeftClose size={18} />
         </button>
@@ -113,11 +113,11 @@ export default function Sidebar({ hidden, onToggle }) {
         <div className="nav-title">Integrasi</div>
         <button className="nav-link" type="button" onClick={openSks}>
           <ExternalLink className="nav-icon" size={20} />
-          <span>Sistem SKS</span>
+          <span>MadaPay</span>
         </button>
         <button className="nav-link" type="button" onClick={openPdMada}>
           <ExternalLink className="nav-icon" size={20} />
-          <span>Sistem PDMADA</span>
+          <span>MyMada</span>
         </button>
       </div>
 

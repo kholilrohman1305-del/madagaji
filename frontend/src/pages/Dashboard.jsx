@@ -43,7 +43,7 @@ export default function Dashboard() {
         <div>
           <div className="dashboard-welcome">
             <div>
-              <h1>Selamat Datang di Madagaji</h1>
+              <h1>Selamat Datang di MadaFlow</h1>
               <p>Ringkasan aktivitas akademik dan keuangan sekolah hari ini.</p>
             </div>
           </div>
