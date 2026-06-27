@@ -22,6 +22,18 @@ function resolvePeriodRange(period) {
   };
 }
 
+// GET /api/external/public-stats — counts for pdmada dashboard (no auth)
+router.get('/public-stats', async (req, res) => {
+  try {
+    const [[gRow]] = await pool.master.query('SELECT COUNT(*) AS c FROM teachers WHERE is_active = 1').catch(() => [[{c:null}]]);
+    const [[kRow]] = await pool.query('SELECT COUNT(DISTINCT kelas) AS c FROM jadwal').catch(() => [[{c:null}]]);
+    const [[jRow]] = await pool.query('SELECT COUNT(*) AS c FROM jadwal').catch(() => [[{c:null}]]);
+    res.json({ ok: true, guru: gRow?.c ?? null, kelas: kRow?.c ?? null, jadwal: jRow?.c ?? null });
+  } catch (e) {
+    res.status(500).json({ ok: false, guru: null, kelas: null, jadwal: null });
+  }
+});
+
 // GET /api/external/schedule/:guruId - one teacher's weekly teaching schedule
 router.get('/schedule/:guruId', async (req, res, next) => {
   try {
