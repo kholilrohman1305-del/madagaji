@@ -150,4 +150,16 @@ router.post('/journal-sync', async (req, res, next) => {
   }
 });
 
+// GET /api/external/schedule-kelas?kelas={kelas}&hari={hari}
+// Dipakai pdmada untuk menampilkan jadwal siswa berdasarkan nama kelas
+router.get('/schedule-kelas', async (req, res, next) => {
+  try {
+    const kelas = String(req.query.kelas || '').trim();
+    const hari  = String(req.query.hari  || '').trim();
+    if (!kelas) return res.status(400).json({ success: false, message: 'kelas wajib diisi.' });
+    const rows = await schedule.getSchedule({ kelas, hari: hari || undefined });
+    res.json({ success: true, data: rows });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
