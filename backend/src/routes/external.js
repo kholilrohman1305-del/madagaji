@@ -162,4 +162,69 @@ router.get('/schedule-kelas', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /api/external/payroll-total?period=YYYY-MM
+// Total bisyaroh breakdown seluruh guru sebulan — untuk dashboard kepala madrasah
+router.get('/payroll-total', async (req, res, next) => {
+  try {
+    const { startDate, endDate } = resolvePeriodRange(req.query.period);
+    const [breakdown, summary] = await Promise.all([
+      payroll.getTotalBisyarohBreakdown(startDate, endDate),
+      payroll.getFinancialSummary(startDate, endDate)
+    ]);
+    res.json({ success: true, data: { ...breakdown, ...summary, startDate, endDate } });
+  } catch (e) { next(e); }
+});
+
+// GET /api/external/payroll-rekap?period=YYYY-MM
+// Rekap bisyaroh per guru — untuk kepala madrasah (read-only)
+router.get('/payroll-rekap', async (req, res, next) => {
+  try {
+    const { startDate, endDate } = resolvePeriodRange(req.query.period);
+    const teachers = await payroll.getAllPayslipsData(startDate, endDate);
+    res.json({ success: true, data: { teachers, startDate, endDate } });
+  } catch (e) { next(e); }
+});
+
+// GET /api/external/schedule-today
+// Jadwal hari ini: guru terjadwal + guru tidak hadir/izin
+router.get('/schedule-today', async (req, res, next) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const payload = await attendance.getScheduleAndAttendance(today);
+    const items = payload.items || [];
+
+    const scheduledMap = new Map();
+    const absentMap = new Map();
+    items.forEach((item) => {
+      const sess = { jamKe: item.jamKe, namaKelas: item.namaKelas, namaMapel: item.namaMapel, status: item.status || '' };
+      if (!scheduledMap.has(item.guruId)) {
+        scheduledMap.set(item.guruId, { guruId: item.guruId, namaGuru: item.namaGuru, sessions: [] });
+      }
+      scheduledMap.get(item.guruId).sessions.push(sess);
+      if (item.status === 'Izin' || item.status === 'Tidak Hadir') {
+        if (!absentMap.has(item.guruId)) {
+          absentMap.set(item.guruId, { guruId: item.guruId, namaGuru: item.namaGuru, status: item.status, sessions: [] });
+        }
+        absentMap.get(item.guruId).sessions.push(sess);
+      }
+    });
+
+    const scheduledTeachers = [...scheduledMap.values()].sort((a, b) => a.namaGuru.localeCompare(b.namaGuru, 'id'));
+    const absentTeachers = [...absentMap.values()].sort((a, b) => a.namaGuru.localeCompare(b.namaGuru, 'id'));
+
+    res.json({
+      success: true,
+      data: {
+        tanggal: today,
+        locked: payload.locked,
+        holidayReason: payload.holidayReason,
+        totalTerjadwal: scheduledTeachers.length,
+        totalTidakHadir: absentTeachers.length,
+        scheduledTeachers,
+        absentTeachers
+      }
+    });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
