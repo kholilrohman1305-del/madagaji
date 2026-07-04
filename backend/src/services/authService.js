@@ -83,10 +83,28 @@ async function getUserById(id) {
   return rows[0] || null;
 }
 
+// Login tanpa password (dipakai login biometrik/WebAuthn setelah assertion terverifikasi)
+async function loginByUserId(id) {
+  const user = await getUserById(id);
+  if (!user) return null;
+  await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
+  const token = signToken({ id: user.id, role: user.role });
+  return {
+    token,
+    user: {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      display_name: user.display_name
+    }
+  };
+}
+
 module.exports = {
   TOKEN_COOKIE,
   buildCookieOptions,
   ensureAdminUser,
   login,
-  getUserById
+  getUserById,
+  loginByUserId
 };

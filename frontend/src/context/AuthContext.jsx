@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import api from '../api';
 import { toast } from '../utils/toast';
+import { loginBiometric } from '../utils/biometric';
 
 const AuthContext = createContext(null);
 const isBypassEnabled =
@@ -48,6 +49,13 @@ export const AuthProvider = ({ children }) => {
     return res;
   };
 
+  const loginWithBiometric = async () => {
+    const data = await loginBiometric();
+    setUser(data?.user || null);
+    toast.success(data?.message || 'Login berhasil.');
+    return data;
+  };
+
   const logout = async () => {
     if (!isBypassEnabled) {
       await api.post('/auth/logout', {}, { skipToast: true });
@@ -60,6 +68,7 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     login,
+    loginWithBiometric,
     logout
   }), [user, loading]);
 

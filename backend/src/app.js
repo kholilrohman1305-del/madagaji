@@ -260,6 +260,7 @@ if (enableGateway && createSksApp && createPdmadaApiApp) {
 }
 
 app.use('/api/auth', authRoutes);
+app.use('/api/auth/biometric', require('./routes/biometric'));
 app.use('/api/dashboard', authRequired, dashboardRoutes);
 app.use('/api/master', authRequired, masterRoutes);
 app.use('/api/attendance', authRequired, attendanceRoutes);

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from '../utils/toast';
+import { biometricPlatformAvailable, biometricRegistered, registerBiometric } from '../utils/biometric';
 
 const FEATURES = [
   { icon: '📋', label: 'Absensi Guru Real-time', desc: 'Catat dan pantau kehadiran setiap hari.' },
@@ -10,7 +11,7 @@ const FEATURES = [
 ];
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loginWithBiometric } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -18,6 +19,30 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [focused, setFocused] = useState('');
+  const [bioReady, setBioReady] = useState(false);
+  const [bioLoading, setBioLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      if (biometricRegistered() && (await biometricPlatformAvailable())) setBioReady(true);
+    })();
+  }, []);
+
+  const offerBiometricActivation = async () => {
+    try {
+      if (biometricRegistered()) return;
+      if (!(await biometricPlatformAvailable())) return;
+      if (localStorage.getItem('madaflow_biometric_offered')) return;
+      localStorage.setItem('madaflow_biometric_offered', '1');
+      if (!window.confirm('Aktifkan login biometrik (sidik jari / Face ID) di perangkat ini?')) return;
+      await registerBiometric(username);
+      toast.success('Login biometrik berhasil diaktifkan.');
+    } catch (err) {
+      if (String(err?.name) !== 'NotAllowedError') {
+        toast.error(err?.response?.data?.message || err?.message || 'Gagal mengaktifkan biometrik.');
+      }
+    }
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -25,6 +50,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login(username, password);
+      await offerBiometricActivation();
       navigate('/dasbor', { replace: true });
     } catch (err) {
       const msg = err?.response?.data?.message || 'Login gagal. Periksa username/password.';
@@ -32,6 +58,23 @@ export default function Login() {
       toast.error(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onBiometricLogin = async () => {
+    setError('');
+    setBioLoading(true);
+    try {
+      await loginWithBiometric();
+      navigate('/dasbor', { replace: true });
+    } catch (err) {
+      if (String(err?.name) !== 'NotAllowedError') {
+        const msg = err?.response?.data?.message || err?.message || 'Login biometrik gagal.';
+        setError(msg);
+        toast.error(msg);
+      }
+    } finally {
+      setBioLoading(false);
     }
   };
 
@@ -157,6 +200,25 @@ export default function Login() {
                 </>
               ) : 'Masuk'}
             </button>
+
+            {bioReady && (
+              <button
+                type="button"
+                className="mf-submit"
+                style={{ marginTop: 10, background: 'transparent', border: '1px solid rgba(120,130,180,.45)', color: 'inherit' }}
+                onClick={onBiometricLogin}
+                disabled={bioLoading}
+              >
+                {bioLoading ? 'Memverifikasi…' : (
+                  <>
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+                    </svg>
+                    Masuk dengan Biometrik
+                  </>
+                )}
+              </button>
+            )}
           </form>
 
           <p className="mf-footnote">Hanya untuk pengguna yang telah terdaftar</p>
