@@ -2390,3 +2390,218 @@ input[type="checkbox"] {
     right: 24px;
   }
 }
+
+/* ═══════════════════════════════════════
+   Mobile ala myBCA (768px ke bawah)
+═══════════════════════════════════════ */
+.mb-topbar, .mb-bottomnav, .mb-sheet-overlay { display: none; }
+
+@media (max-width: 768px) {
+  /* ── Login ala myBCA ── */
+  .mf-shell {
+    background: #ffffff;
+    padding: 0;
+    place-items: stretch;
+  }
+  .mf-orb { display: none; }
+  .mf-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 100vh;
+  }
+  .mf-hero {
+    color: #1e293b;
+    text-align: center;
+    padding: 64px 24px 6px;
+  }
+  .mf-logo {
+    background: linear-gradient(135deg, #0060AF, #1B7ED8);
+    box-shadow: 0 8px 22px rgba(0, 96, 175, 0.3);
+    margin: 0 auto 14px;
+  }
+  .mf-brand { color: #0060AF !important; font-size: 1.9rem !important; }
+  .mf-tagline { color: #64748b !important; font-size: 0.85rem !important; margin-bottom: 0 !important; }
+  .mf-rule, .mf-features { display: none !important; }
+  .mf-card {
+    background: #ffffff !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 14px 26px calc(30px + env(safe-area-inset-bottom)) !important;
+    width: 100% !important;
+    backdrop-filter: none !important;
+    flex: 1;
+  }
+  .mf-card-badge { display: none !important; }
+  .mf-card-title { color: #0f172a !important; }
+  .mf-card-sub { color: #64748b !important; }
+  .mf-label { color: #475569 !important; }
+  .mf-input {
+    background: #f2f5f9 !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    color: #0f172a !important;
+    padding-top: 14px !important;
+    padding-bottom: 14px !important;
+  }
+  .mf-input::placeholder { color: #94a3b8 !important; }
+  .mf-input-focused, .mf-input:focus {
+    border-color: #0060AF !important;
+    box-shadow: 0 0 0 3px rgba(0, 96, 175, 0.12) !important;
+  }
+  .mf-input-icon { color: #94a3b8 !important; }
+  .mf-eye { color: #94a3b8 !important; }
+  .mf-submit {
+    background: #0060AF !important;
+    color: #fff !important;
+    border-radius: 999px !important;
+    padding: 15px !important;
+    box-shadow: 0 10px 22px rgba(0, 96, 175, 0.3) !important;
+  }
+  .mf-footnote { color: #94a3b8 !important; }
+  .mf-error { border-radius: 12px; }
+
+  /* ── App shell ala myBCA ── */
+  .app-shell { display: block; background: #f4f6f9; }
+  .sidebar, .sidebar-fab { display: none !important; }
+  .app-content {
+    padding: calc(64px + 14px) 16px calc(84px + env(safe-area-inset-bottom));
+    min-height: 100vh;
+    background: #f4f6f9;
+  }
+
+  .mb-topbar {
+    display: flex;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 120;
+    height: 58px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #e8edf3;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+  }
+  .mb-topbar-brand { display: flex; align-items: center; gap: 9px; }
+  .mb-topbar-logo {
+    width: 32px; height: 32px;
+    border-radius: 10px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, #0060AF, #1B7ED8);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .mb-topbar-title { color: #0060AF; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+  .mb-topbar-user {
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+
+  .mb-bottomnav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 120;
+    background: #ffffff;
+    border-top: 1px solid #e8edf3;
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.07);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    justify-content: space-around;
+  }
+  .mb-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    border: 0;
+    background: transparent;
+    color: #8b95a5;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 6px 2px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .mb-tab.active { color: #0060AF; }
+
+  .mb-sheet-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(15, 23, 42, 0.45);
+  }
+  .mb-sheet {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    max-height: 78vh;
+    overflow-y: auto;
+    background: #ffffff;
+    border-radius: 22px 22px 0 0;
+    padding: 18px 18px calc(20px + env(safe-area-inset-bottom));
+    box-shadow: 0 -16px 40px rgba(15, 23, 42, 0.25);
+  }
+  .mb-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 14px;
+  }
+  .mb-sheet-head button { border: 0; background: #f1f5f9; border-radius: 999px; width: 32px; height: 32px; display: grid; place-items: center; color: #475569; cursor: pointer; }
+  .mb-sheet-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px 6px;
+  }
+  .mb-sheet-item {
+    border: 0;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+    text-align: center;
+    line-height: 1.25;
+  }
+  .mb-sheet-icon {
+    width: 46px; height: 46px;
+    border-radius: 14px;
+    display: grid; place-items: center;
+    background: #eaf2fb;
+    color: #0060AF;
+  }
+  .mb-sheet-logout {
+    margin-top: 18px;
+    width: 100%;
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-weight: 800;
+    font-size: 13px;
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+}
