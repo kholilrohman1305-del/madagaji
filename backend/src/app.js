@@ -288,6 +288,24 @@ app.use('/api/users', authRequired, usersRoutes);
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/external', internalAuth, externalRoutes);
 
+// Digital Asset Links untuk aplikasi Android TWA (MyMada) — agar domain MadaFlow
+// tetap dibuka di dalam aplikasi saat berpindah dari MyMada.
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  res.type('application/json');
+  res.json([
+    {
+      relation: ['delegate_permission/common.handle_all_urls'],
+      target: {
+        namespace: 'android_app',
+        package_name: 'cloud.abudarrin.mymada',
+        sha256_cert_fingerprints: [
+          '79:6C:26:4F:58:ED:DC:3F:29:AF:48:83:0A:3C:99:B3:35:DC:C5:33:03:47:17:AD:C9:85:C8:D6:31:6B:12:12'
+        ]
+      }
+    }
+  ]);
+});
+
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));

@@ -4,6 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MadaFlow</title>
+    <script>
+      // Kontrol mode tampilan MyMada: default MOBILE, tombol beralih DESKTOP.
+      (function () {
+        var K = 'mymada_view_mode';
+        function g() { try { return localStorage.getItem(K) === 'desktop' ? 'desktop' : 'mobile'; } catch (e) { return 'mobile'; } }
+        function av(m) { var v = document.querySelector('meta[name="viewport"]'); if (!v) { v = document.createElement('meta'); v.setAttribute('name', 'viewport'); document.head.appendChild(v); } v.setAttribute('content', m === 'desktop' ? 'width=1280' : 'width=device-width, initial-scale=1.0'); }
+        av(g());
+        window.__mymadaSetViewMode = function (m) { try { localStorage.setItem(K, m === 'desktop' ? 'desktop' : 'mobile'); } catch (e) {} location.reload(); };
+        function ij() {
+          if (document.getElementById('mymada-viewtoggle')) return;
+          var b = document.createElement('button');
+          b.id = 'mymada-viewtoggle'; b.type = 'button'; b.setAttribute('aria-label', 'Ganti mode tampilan');
+          b.style.cssText = 'position:fixed;z-index:2147483647;right:0;top:50%;transform:translateY(-50%);padding:8px 7px;border:0;border-radius:12px 0 0 12px;background:rgba(10,46,134,.85);color:#fff;font:700 10px/1.2 Inter,system-ui,sans-serif;box-shadow:-2px 4px 14px rgba(2,10,40,.3);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;opacity:.85;';
+          function r() { var m = g(); b.innerHTML = m === 'desktop' ? '<span style="font-size:16px">📱</span><span>HP</span>' : '<span style="font-size:16px">🖥️</span><span>Desktop</span>'; }
+          r();
+          b.onclick = function () { window.__mymadaSetViewMode(g() === 'desktop' ? 'mobile' : 'desktop'); };
+          document.body.appendChild(b);
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ij); else ij();
+      })();
+    </script>
     <script type="module" crossorigin src="/assets/index-Df3tr-Yl.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-EJC2BhcO.css">
   </head>
