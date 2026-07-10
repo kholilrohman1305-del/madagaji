@@ -101,12 +101,15 @@ async function getTeacherLimits() {
   const cached = cacheGet('teacherLimits');
   if (cached) return cached;
   const [rows] = await pool.query(
-    'SELECT teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, class_gender_pref, max_slot FROM teacher_limits'
+    'SELECT teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, class_gender_pref, max_slot, available_slots FROM teacher_limits'
   );
   const parsed = rows.map(r => ({
     ...r,
     available_days: r.available_days
       ? (typeof r.available_days === 'string' ? JSON.parse(r.available_days) : r.available_days)
+      : null,
+    available_slots: r.available_slots
+      ? (typeof r.available_slots === 'string' ? JSON.parse(r.available_slots) : r.available_slots)
       : null,
     class_gender_pref: r.class_gender_pref || 'both'
   }));
@@ -114,9 +117,9 @@ async function getTeacherLimits() {
   return parsed;
 }
 
-async function upsertTeacherLimit(teacherId, maxWeek, maxDay, minLinier, availableDays, classGenderPref, maxSlot) {
+async function upsertTeacherLimit(teacherId, maxWeek, maxDay, minLinier, availableDays, classGenderPref, availableSlots) {
   await pool.query(
-    `INSERT INTO teacher_limits (teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, class_gender_pref, max_slot)
+    `INSERT INTO teacher_limits (teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, class_gender_pref, available_slots)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        max_hours_per_week=VALUES(max_hours_per_week),
@@ -124,10 +127,11 @@ async function upsertTeacherLimit(teacherId, maxWeek, maxDay, minLinier, availab
        min_hours_linier=VALUES(min_hours_linier),
        available_days=VALUES(available_days),
        class_gender_pref=VALUES(class_gender_pref),
-       max_slot=VALUES(max_slot)`,
+       available_slots=VALUES(available_slots)`,
     [teacherId, maxWeek ?? null, maxDay ?? null, minLinier ?? null,
      availableDays != null ? JSON.stringify(availableDays) : null,
-     classGenderPref || 'both', maxSlot ?? null]
+     classGenderPref || 'both',
+     availableSlots != null ? JSON.stringify(availableSlots) : null]
   );
   invalidateMetaCache();
   return { success: true, message: 'Batas jam guru diperbarui.' };
@@ -149,23 +153,60 @@ async function upsertTeacherLimitsBulk(limits) {
   }
   const queries = limits.map(l =>
     pool.query(
-      `INSERT INTO teacher_limits (teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, max_slot)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO teacher_limits (teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, available_slots, max_slot)
+       VALUES (?, ?, ?, ?, ?, ?, NULL)
        ON DUPLICATE KEY UPDATE
          max_hours_per_week=VALUES(max_hours_per_week),
          max_hours_per_day=VALUES(max_hours_per_day),
          min_hours_linier=VALUES(min_hours_linier),
          available_days=VALUES(available_days),
-         max_slot=VALUES(max_slot)`,
+         available_slots=VALUES(available_slots),
+         max_slot=NULL`,
       [l.teacherId || l.teacher_id,
        l.maxWeek ?? null, l.maxDay ?? null, l.minLinier ?? null,
        l.availableDays != null ? JSON.stringify(l.availableDays) : null,
-       l.maxSlot ?? null]
+       l.availableSlots != null ? JSON.stringify(l.availableSlots) : null]
     )
   );
   await Promise.all(queries);
   invalidateMetaCache();
   return { success: true, message: `${limits.length} batas jam guru diperbarui.` };
+}
+
+// Jam tersedia per mapel: [{ subject_id, available_slots }] — null = semua jam
+async function getSubjectLimits() {
+  const cached = cacheGet('subjectLimits');
+  if (cached) return cached;
+  try {
+    const [rows] = await pool.query('SELECT subject_id, available_slots FROM subject_limits');
+    const parsed = rows.map(r => ({
+      subject_id: r.subject_id,
+      available_slots: r.available_slots
+        ? (typeof r.available_slots === 'string' ? JSON.parse(r.available_slots) : r.available_slots)
+        : null
+    }));
+    cacheSet('subjectLimits', parsed);
+    return parsed;
+  } catch {
+    return [];
+  }
+}
+
+async function upsertSubjectLimitsBulk(limits) {
+  if (!Array.isArray(limits) || limits.length === 0) {
+    return { success: true, message: 'Tidak ada data untuk diupdate.' };
+  }
+  const queries = limits.map(l =>
+    pool.query(
+      `INSERT INTO subject_limits (subject_id, available_slots) VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE available_slots=VALUES(available_slots)`,
+      [l.subjectId || l.subject_id,
+       l.availableSlots != null ? JSON.stringify(l.availableSlots) : null]
+    )
+  );
+  await Promise.all(queries);
+  invalidateMetaCache();
+  return { success: true, message: `Jam tersedia ${limits.length} mapel diperbarui.` };
 }
 
 async function getScheduleConfig(name = 'default') {
@@ -350,6 +391,8 @@ module.exports = {
   upsertTeacherLimit,
   updateTeacherClassGenderPref,
   upsertTeacherLimitsBulk,
+  getSubjectLimits,
+  upsertSubjectLimitsBulk,
   getScheduleConfig,
   upsertScheduleConfig,
   getClassSubjectRules,

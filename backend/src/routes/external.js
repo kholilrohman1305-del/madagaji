@@ -196,7 +196,15 @@ router.get('/schedule-today', async (req, res, next) => {
     const scheduledMap = new Map();
     const absentMap = new Map();
     items.forEach((item) => {
-      const sess = { jamKe: item.jamKe, namaKelas: item.namaKelas, namaMapel: item.namaMapel, status: item.status || '' };
+      const sess = {
+        jamKe: item.jamKe,
+        namaKelas: item.namaKelas,
+        namaMapel: item.namaMapel,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        durationMinutes: item.durationMinutes,
+        status: item.status || ''
+      };
       if (!scheduledMap.has(item.guruId)) {
         scheduledMap.set(item.guruId, { guruId: item.guruId, namaGuru: item.namaGuru, sessions: [] });
       }

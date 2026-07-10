@@ -2,12 +2,45 @@ const pool = require('../db');
 const masterPool = pool.master;
 const { TTLCache } = require('../utils/cache');
 const { formatDateToYMD, monthKey } = require('../utils/date');
+const { getScheduleConfig } = require('./scheduler/configService');
 
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const scheduleDayCacheTtl = Number(process.env.SCHEDULE_DAY_CACHE_TTL_MS || 5000);
 const scheduleDayCache = new TTLCache(scheduleDayCacheTtl);
 const guruCacheTtl = Number(process.env.GURU_CACHE_TTL_MS || 30000);
 const guruCache = new TTLCache(guruCacheTtl);
+
+function extractTingkat(className) {
+  const n = String(className || '').toUpperCase().trim();
+  if (n.startsWith('XII') || n.startsWith('12')) return 'XII';
+  if (n.startsWith('XI') || n.startsWith('11')) return 'XI';
+  if (n.startsWith('X') || n.startsWith('10')) return 'X';
+  return '';
+}
+
+function timeToMinutes(value) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  return Math.min(23, Math.max(0, Number(match[1]) || 0)) * 60 + Math.min(59, Math.max(0, Number(match[2]) || 0));
+}
+
+function minutesToTime(totalMinutes) {
+  const mins = ((Number(totalMinutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+function getSlotTime(config, tingkat, hari, jamKe) {
+  const saved = config?.slotTimesByTingkat?.[tingkat]?.[hari]?.[jamKe] || config?.slotTimesByTingkat?.[tingkat]?.[hari]?.[String(jamKe)];
+  if (saved?.start && saved?.end) {
+    const startMin = timeToMinutes(saved.start);
+    const endMin = timeToMinutes(saved.end);
+    return { startTime: saved.start, endTime: saved.end, durationMinutes: startMin != null && endMin != null ? Math.max(0, endMin - startMin) : null };
+  }
+  const duration = Number(config?.slotDuration || 45);
+  const startBase = timeToMinutes(config?.startTimeByDay?.[hari]) ?? 7 * 60;
+  const start = startBase + (Number(jamKe) - 1) * duration;
+  return { startTime: minutesToTime(start), endTime: minutesToTime(start + duration), durationMinutes: duration };
+}
 
 async function getHoliday(dateString) {
   const [rows] = await pool.query('SELECT tanggal, keterangan FROM libur WHERE tanggal = ?', [dateString]);
@@ -74,19 +107,24 @@ async function getScheduleAndAttendance(dateString) {
     attendanceMap.set(key, { status: r.status, rowId: r.id });
   });
 
+  const config = await getScheduleConfig().catch(() => null);
   const items = scheduleRows.map(s => {
     const key = `${s.guru_id}-${s.kelas}-${s.jam_ke}`;
     const attendance = attendanceMap.get(key);
+    const namaKelas = s.nama_kelas || String(s.kelas);
+    const tingkat = extractTingkat(namaKelas);
     return {
       jadwalId: s.id,
       hari: s.hari,
       jamKe: s.jam_ke,
       kelas: s.kelas,
-      namaKelas: s.nama_kelas || String(s.kelas),
+      namaKelas,
       mapelId: s.mapel_id,
       guruId: s.guru_id,
       namaMapel: s.nama_mapel || String(s.mapel_id),
       namaGuru: s.nama_guru || String(s.guru_id),
+      tingkat,
+      ...getSlotTime(config, tingkat, s.hari, s.jam_ke),
       status: attendance?.status || '',
       rowId: attendance?.rowId
     };

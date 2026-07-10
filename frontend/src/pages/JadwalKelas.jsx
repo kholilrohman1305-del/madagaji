@@ -101,7 +101,8 @@ export default function JadwalKelas() {
           grid.set(`${i.hari}-${i.jamKe}`, {
             mapel: subjectNameById.get(String(i.mapelId)) || i.mapelId,
             guru: guruNameById.get(String(i.guruId)) || i.guruId,
-            mapelId: i.mapelId
+            mapelId: i.mapelId,
+            waktu: i.startTime && i.endTime ? `${i.startTime}-${i.endTime}` : ''
           });
         });
         const usedDays = effectiveDays.length > 0 ? effectiveDays : DAYS;
@@ -133,6 +134,7 @@ export default function JadwalKelas() {
                             <div className="teacher-cell-content">
                               <div className="teacher-cell-kelas">{val.mapel}</div>
                               <div className="teacher-cell-mapel">{val.guru}</div>
+                              {val.waktu && <div className="teacher-cell-mapel">{val.waktu}</div>}
                             </div>
                           ) : null}
                         </td>

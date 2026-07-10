@@ -48,6 +48,30 @@ function extractClassGender(className) {
   return '';
 }
 
+function minutesToTime(totalMinutes) {
+  const mins = ((Number(totalMinutes) % 1440) + 1440) % 1440;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function timeToMinutes(value) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  const h = Math.min(23, Math.max(0, Number(match[1]) || 0));
+  const m = Math.min(59, Math.max(0, Number(match[2]) || 0));
+  return h * 60 + m;
+}
+
+function getSlotTime(slotTimesByTingkat, tingkat, day, jam, startTimeByDay = {}, slotDuration = 45) {
+  const saved = slotTimesByTingkat?.[tingkat]?.[day]?.[jam] || slotTimesByTingkat?.[tingkat]?.[day]?.[String(jam)];
+  if (saved?.start && saved?.end) return saved;
+  const startBase = timeToMinutes(startTimeByDay?.[day]) ?? 7 * 60;
+  const start = startBase + (Number(jam) - 1) * Number(slotDuration || 45);
+  const end = start + Number(slotDuration || 45);
+  return { start: minutesToTime(start), end: minutesToTime(end) };
+}
+
 function checkClientConflict(schedule, hari, jamKe, kelas, newGuruId, excludeIdx = -1) {
   if (!newGuruId) return null;
   for (let i = 0; i < schedule.length; i++) {
@@ -97,6 +121,7 @@ export default function AutoSchedule() {
   const [tingkatSlotTab, setTingkatSlotTab] = useState('X');
   const [slotDuration, setSlotDuration] = useState(45);
   const [startTimeByDay, setStartTimeByDay] = useState({});
+  const [slotTimesByTingkat, setSlotTimesByTingkat] = useState({ X: {}, XI: {}, XII: {} });
   const [step1Saving, setStep1Saving] = useState(false);
 
   // Step 2
@@ -117,11 +142,11 @@ export default function AutoSchedule() {
 
   // Step 4
   const [teacherLimitsLocal, setTeacherLimitsLocal] = useState({});
+  const [subjectLimitsLocal, setSubjectLimitsLocal] = useState({});
   const [limitSearch, setLimitSearch] = useState('');
   const [bulkMaxWeek, setBulkMaxWeek] = useState('');
   const [bulkMaxDay, setBulkMaxDay] = useState('');
   const [bulkMinLinier, setBulkMinLinier] = useState('');
-  const [bulkMaxSlot, setBulkMaxSlot] = useState('');
 
   // Step 5 — Manual Plot (Locked Slots) — matriks per kelas
   const [lockedSlots, setLockedSlots] = useState([]);
@@ -168,6 +193,7 @@ export default function AutoSchedule() {
           const hbd = cfg.hoursByDay || {};
           setHoursByDay(hbd);
           setStartTimeByDay(cfg.startTimeByDay || {});
+          setSlotTimesByTingkat(cfg.slotTimesByTingkat || { X: {}, XI: {}, XII: {} });
           setSlotDuration(cfg.slotDuration || 45);
 
           if (cfg.slotsByTingkat) {
@@ -233,12 +259,17 @@ export default function AutoSchedule() {
             maxWeek: tl.max_hours_per_week ?? '',
             maxDay: tl.max_hours_per_day ?? '',
             minLinier: tl.min_hours_linier ?? '',
-            maxSlot: tl.max_slot ?? '',
+            availableSlots: Array.isArray(tl.available_slots) ? tl.available_slots.map(Number) : [],
             availableDays: Array.isArray(tl.available_days) ? tl.available_days : [],
             classGenderPref: tl.class_gender_pref || 'both'
           };
         });
         setTeacherLimitsLocal(tlMap);
+        const slMap = {};
+        (metaRes.data?.subjectLimits || []).forEach(sl => {
+          slMap[sl.subject_id] = Array.isArray(sl.available_slots) ? sl.available_slots.map(Number) : [];
+        });
+        setSubjectLimitsLocal(slMap);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -361,6 +392,22 @@ export default function AutoSchedule() {
     });
   };
 
+  const updateSlotTime = (tingkat, day, jam, field, value) => {
+    setSlotTimesByTingkat(prev => {
+      const current = getSlotTime(prev, tingkat, day, jam, startTimeByDay, slotDuration);
+      return {
+        ...prev,
+        [tingkat]: {
+          ...(prev[tingkat] || {}),
+          [day]: {
+            ...(prev[tingkat]?.[day] || {}),
+            [jam]: { ...current, [field]: value }
+          }
+        }
+      };
+    });
+  };
+
   const toggleAllSlotsForDay = (tingkat, day) => {
     const maxH = maxHoursByTingkat[tingkat] || 0;
     const existing = slotsByTingkat[tingkat]?.[day] || [];
@@ -382,6 +429,14 @@ export default function AutoSchedule() {
       X: { ...srcSlots },
       XI: { ...Object.fromEntries(Object.entries(srcSlots).map(([d, s]) => [d, [...s]])) },
       XII: { ...Object.fromEntries(Object.entries(srcSlots).map(([d, s]) => [d, [...s]])) }
+    });
+    setSlotTimesByTingkat(prev => {
+      const srcTimes = prev[src] || {};
+      return {
+        X: JSON.parse(JSON.stringify(srcTimes)),
+        XI: JSON.parse(JSON.stringify(srcTimes)),
+        XII: JSON.parse(JSON.stringify(srcTimes))
+      };
     });
   };
 
@@ -413,8 +468,18 @@ export default function AutoSchedule() {
     });
     setSlotsByTingkat(cleanSts);
     setHoursByDay(newHbd);
+    const cleanSlotTimes = {};
+    TINGKAT_LIST.forEach(t => {
+      cleanSlotTimes[t] = {};
+      days.forEach(day => {
+        cleanSlotTimes[t][day] = {};
+        (cleanSts[t]?.[day] || []).forEach(jam => {
+          cleanSlotTimes[t][day][jam] = getSlotTime(slotTimesByTingkat, t, day, jam, startTimeByDay, slotDuration);
+        });
+      });
+    });
     try {
-      await api.put('/scheduler/config', { days, hoursByDay: newHbd, slotsByTingkat: cleanSts, slotDuration, startTimeByDay });
+      await api.put('/scheduler/config', { days, hoursByDay: newHbd, slotsByTingkat: cleanSts, slotDuration, startTimeByDay, slotTimesByTingkat: cleanSlotTimes });
       setStep(2);
     } finally { setStep1Saving(false); }
   };
@@ -553,7 +618,7 @@ export default function AutoSchedule() {
     setTeacherSubjectsLocal(prev => ({ ...prev, [teacherId]: subjects }));
     setTeacherLimitsLocal(prev => ({
       ...prev,
-      [teacherId]: { ...(prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', maxSlot: '', availableDays: [] }), classGenderPref: classGenderPref || 'both' }
+      [teacherId]: { ...(prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', availableSlots: [], availableDays: [] }), classGenderPref: classGenderPref || 'both' }
     }));
     setTeacherModalSaving(true);
     try {
@@ -629,13 +694,13 @@ export default function AutoSchedule() {
   const updateLimit = (teacherId, field, val) => {
     setTeacherLimitsLocal(prev => ({
       ...prev,
-      [teacherId]: { ...(prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', maxSlot: '', availableDays: [] }), [field]: val }
+      [teacherId]: { ...(prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', availableSlots: [], availableDays: [] }), [field]: val }
     }));
   };
 
   const toggleAvailableDay = (teacherId, day) => {
     setTeacherLimitsLocal(prev => {
-      const cur = prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', maxSlot: '', availableDays: [] };
+      const cur = prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', availableSlots: [], availableDays: [] };
       const ad = [...(cur.availableDays || [])];
       const idx = ad.indexOf(day);
       if (idx >= 0) ad.splice(idx, 1); else ad.push(day);
@@ -650,6 +715,26 @@ export default function AutoSchedule() {
     }));
   };
 
+  const toggleAvailableSlot = (teacherId, jam) => {
+    setTeacherLimitsLocal(prev => {
+      const cur = prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', availableSlots: [], availableDays: [] };
+      const slots = [...(cur.availableSlots || [])].map(Number);
+      const idx = slots.indexOf(Number(jam));
+      if (idx >= 0) slots.splice(idx, 1); else slots.push(Number(jam));
+      return { ...prev, [teacherId]: { ...cur, availableSlots: slots.sort((a, b) => a - b) } };
+    });
+  };
+
+  const setAllAvailableSlots = (teacherId) => {
+    setTeacherLimitsLocal(prev => ({
+      ...prev,
+      [teacherId]: {
+        ...(prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', availableDays: [] }),
+        availableSlots: Array.from({ length: globalMaxHours }, (_, i) => i + 1)
+      }
+    }));
+  };
+
   const applyBulkLimits = () => {
     setTeacherLimitsLocal(prev => {
       const next = { ...prev };
@@ -658,8 +743,7 @@ export default function AutoSchedule() {
           ...(prev[t.id] || { availableDays: [] }),
           ...(bulkMaxWeek !== '' ? { maxWeek: bulkMaxWeek } : {}),
           ...(bulkMaxDay !== '' ? { maxDay: bulkMaxDay } : {}),
-          ...(bulkMinLinier !== '' ? { minLinier: bulkMinLinier } : {}),
-          ...(bulkMaxSlot !== '' ? { maxSlot: bulkMaxSlot } : {})
+          ...(bulkMinLinier !== '' ? { minLinier: bulkMinLinier } : {})
         };
       });
       return next;
@@ -672,7 +756,7 @@ export default function AutoSchedule() {
       maxWeek: l.maxWeek !== '' ? Number(l.maxWeek) : null,
       maxDay: l.maxDay !== '' ? Number(l.maxDay) : null,
       minLinier: l.minLinier !== '' ? Number(l.minLinier) : null,
-      maxSlot: l.maxSlot !== '' && l.maxSlot != null ? Number(l.maxSlot) : null,
+      availableSlots: l.availableSlots?.length > 0 ? l.availableSlots.map(Number) : null,
       availableDays: l.availableDays?.length > 0 ? l.availableDays : null
     }));
     await api.put('/scheduler/teacher-limits-bulk', { limits });
@@ -874,7 +958,9 @@ export default function AutoSchedule() {
         if (lim.classGenderPref === 'PA' && kelasG === 'PI') continue;
         if (lim.classGenderPref === 'PI' && kelasG === 'PA') continue;
         if (lim.availableDays?.length && !lim.availableDays.includes(hari)) continue;
-        if (lim.maxSlot !== '' && lim.maxSlot != null && Number(jamKe) > Number(lim.maxSlot)) continue;
+        if (lim.availableSlots?.length && !lim.availableSlots.includes(Number(jamKe))) continue;
+        const sLim = subjectLimitsLocal[sid] || subjectLimitsLocal[String(sid)];
+        if (sLim?.length && !sLim.includes(Number(jamKe))) continue;
         const busy = generated.some(r => String(r.guruId) === String(tid) && r.hari === hari && String(r.jamKe) === String(jamKe));
         if (busy) continue;
         const loadWeek = generated.filter(r => String(r.guruId) === String(tid)).length;
@@ -1024,7 +1110,7 @@ export default function AutoSchedule() {
                       <th style={{ padding: '7px 14px', textAlign: 'left', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 600, color: '#475569', minWidth: 80 }}>Hari</th>
                       <th style={{ padding: '7px 10px', background: '#f1f5f9', border: '1px solid #e2e8f0', textAlign: 'center', minWidth: 80, color: '#475569', fontSize: 12 }}>Pilih Semua</th>
                       {Array.from({ length: maxHoursByTingkat[tingkatSlotTab] }, (_, i) => i + 1).map(jam => (
-                        <th key={jam} style={{ padding: '7px 8px', background: '#f1f5f9', border: '1px solid #e2e8f0', textAlign: 'center', minWidth: 46, color: '#475569', fontSize: 12 }}>Jam {jam}</th>
+                        <th key={jam} style={{ padding: '7px 8px', background: '#f1f5f9', border: '1px solid #e2e8f0', textAlign: 'center', minWidth: 118, color: '#475569', fontSize: 12 }}>Jam {jam}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1042,8 +1128,31 @@ export default function AutoSchedule() {
                           {Array.from({ length: maxH }, (_, i) => i + 1).map(jam => {
                             const active = activeSlots.includes(jam);
                             return (
-                              <td key={jam} style={{ padding: '7px 8px', textAlign: 'center', border: '1px solid #e2e8f0', background: active ? '#eff6ff' : '#fff' }}>
-                                <input type="checkbox" checked={active} onChange={() => toggleSlot(tingkatSlotTab, day, jam)} style={{ cursor: 'pointer', width: 15, height: 15 }} />
+                              <td key={jam} style={{ padding: 8, textAlign: 'center', border: '1px solid #e2e8f0', background: active ? '#eff6ff' : '#fff' }}>
+                                <div style={{ display: 'grid', gap: 5, justifyItems: 'center' }}>
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#475569', fontWeight: 700 }}>
+                                    <input type="checkbox" checked={active} onChange={() => toggleSlot(tingkatSlotTab, day, jam)} style={{ cursor: 'pointer', width: 15, height: 15 }} />
+                                    Aktif
+                                  </label>
+                                  <div style={{ display: 'grid', gap: 4, opacity: active ? 1 : 0.45 }}>
+                                    <input
+                                      type="time"
+                                      value={getSlotTime(slotTimesByTingkat, tingkatSlotTab, day, jam, startTimeByDay, slotDuration).start}
+                                      onChange={e => updateSlotTime(tingkatSlotTab, day, jam, 'start', e.target.value)}
+                                      disabled={!active}
+                                      aria-label={`Jam mulai ${day} slot ${jam}`}
+                                      style={{ width: 92, border: '1px solid #cbd5e1', borderRadius: 6, padding: '3px 5px', fontSize: 11 }}
+                                    />
+                                    <input
+                                      type="time"
+                                      value={getSlotTime(slotTimesByTingkat, tingkatSlotTab, day, jam, startTimeByDay, slotDuration).end}
+                                      onChange={e => updateSlotTime(tingkatSlotTab, day, jam, 'end', e.target.value)}
+                                      disabled={!active}
+                                      aria-label={`Jam selesai ${day} slot ${jam}`}
+                                      style={{ width: 92, border: '1px solid #cbd5e1', borderRadius: 6, padding: '3px 5px', fontSize: 11 }}
+                                    />
+                                  </div>
+                                </div>
                               </td>
                             );
                           })}
@@ -1495,7 +1604,7 @@ export default function AutoSchedule() {
         <div className="modern-table-card">
           <div className="modern-table-title">Step 4 — Aturan & Batasan Guru</div>
           <div style={{ padding: 14, borderRadius: 10, background: '#f1f5f9', marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            {[['Max Jam/Minggu', bulkMaxWeek, setBulkMaxWeek], ['Max Jam/Hari', bulkMaxDay, setBulkMaxDay], ['Min Jam Linier', bulkMinLinier, setBulkMinLinier], ['Max Jam Ke-', bulkMaxSlot, setBulkMaxSlot]].map(([label, val, set]) => (
+            {[['Max Jam/Minggu', bulkMaxWeek, setBulkMaxWeek], ['Max Jam/Hari', bulkMaxDay, setBulkMaxDay], ['Min Jam Linier', bulkMinLinier, setBulkMinLinier]].map(([label, val, set]) => (
               <div key={label}>
                 <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{label}</div>
                 <input type="number" min={0} value={val} onChange={e => set(e.target.value)} placeholder="—"
@@ -1508,19 +1617,30 @@ export default function AutoSchedule() {
             style={{ border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '7px 14px', width: '100%', marginBottom: 12 }} />
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: 720 }}>
-              <thead><tr><th>Guru</th><th style={{ textAlign: 'center' }}>Max/Minggu</th><th style={{ textAlign: 'center' }}>Max/Hari</th><th style={{ textAlign: 'center' }}>Min Linier</th><th style={{ textAlign: 'center' }} title="Jam ke berapa terakhir guru boleh dijadwalkan. Contoh: 4 = hanya jam 1-4 (pagi), untuk mapel seperti Penjas.">Max Jam Ke- ⓘ</th><th>Hari Tersedia</th></tr></thead>
+              <thead><tr><th>Guru</th><th style={{ textAlign: 'center' }}>Max/Minggu</th><th style={{ textAlign: 'center' }}>Max/Hari</th><th style={{ textAlign: 'center' }}>Min Linier</th><th>Jam Tersedia</th><th>Hari Tersedia</th></tr></thead>
               <tbody>
                 {(meta?.teachers || []).filter(t => !limitSearch || t.name.toLowerCase().includes(limitSearch.toLowerCase())).map(t => {
-                  const lim = teacherLimitsLocal[t.id] || { maxWeek: '', maxDay: '', minLinier: '', maxSlot: '', availableDays: [] };
+                  const lim = teacherLimitsLocal[t.id] || { maxWeek: '', maxDay: '', minLinier: '', availableSlots: [], availableDays: [] };
                   return (
                     <tr key={t.id}>
                       <td style={{ fontWeight: 500, fontSize: 13 }}>{t.name}</td>
-                      {['maxWeek', 'maxDay', 'minLinier', 'maxSlot'].map(field => (
+                      {['maxWeek', 'maxDay', 'minLinier'].map(field => (
                         <td key={field} style={{ textAlign: 'center' }}>
                           <input type="number" min={0} value={lim[field] ?? ''} onChange={e => updateLimit(t.id, field, e.target.value)}
                             style={{ width: 62, textAlign: 'center', border: '1.5px solid #cbd5e1', borderRadius: 6, padding: '4px' }} />
                         </td>
                       ))}
+                      <td>
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', minWidth: 220 }}>
+                          {Array.from({ length: globalMaxHours }, (_, i) => i + 1).map(jam => (
+                            <label key={jam} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                              <input type="checkbox" checked={(lim.availableSlots || []).map(Number).includes(jam)} onChange={() => toggleAvailableSlot(t.id, jam)} />
+                              {jam}
+                            </label>
+                          ))}
+                          <button className="btn sm outline" style={{ fontSize: 10, padding: '2px 7px' }} onClick={() => setAllAvailableSlots(t.id)}>Semua</button>
+                        </div>
+                      </td>
                       <td>
                         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                           {days.map(day => (
@@ -1587,8 +1707,8 @@ export default function AutoSchedule() {
             const tLim = teacherLimitsLocal[plotTeacher] || {};
             const warns = [];
             if (plotEdit && plotTeacher) {
-              if (tLim.maxSlot !== '' && tLim.maxSlot != null && Number(plotEdit.jam) > Number(tLim.maxSlot)) {
-                warns.push(`Guru ini dibatasi maksimal jam ke-${tLim.maxSlot} (Step 4) — slot ini melewatinya.`);
+              if (tLim.availableSlots?.length && !tLim.availableSlots.map(Number).includes(Number(plotEdit.jam))) {
+                warns.push(`Jam ke-${plotEdit.jam} tidak termasuk jam tersedia guru di Step 4.`);
               }
               if (tLim.availableDays?.length && !tLim.availableDays.includes(plotEdit.hari)) {
                 warns.push(`Hari ${plotEdit.hari} di luar hari tersedia guru (${tLim.availableDays.join(', ')}).`);

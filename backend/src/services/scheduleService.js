@@ -2,6 +2,7 @@ const pool = require('../db');
 const { randomBytes } = require('crypto');
 const masterPool = pool.master;
 const { TTLCache } = require('../utils/cache');
+const { getScheduleConfig } = require('./scheduler/configService');
 
 const scheduleCacheTtl = Number(process.env.SCHEDULE_CACHE_TTL_MS || 5000);
 const scheduleCache = new TTLCache(scheduleCacheTtl);
@@ -21,6 +22,50 @@ function createScheduleId() {
   const time = Date.now().toString(36).slice(-6).toUpperCase().padStart(6, '0');
   const rand = randomBytes(2).toString('hex').slice(0, 3).toUpperCase();
   return `J${time}${rand}`;
+}
+
+function extractTingkat(className) {
+  const n = String(className || '').toUpperCase().trim();
+  if (n.startsWith('XII') || n.startsWith('12')) return 'XII';
+  if (n.startsWith('XI') || n.startsWith('11')) return 'XI';
+  if (n.startsWith('X') || n.startsWith('10')) return 'X';
+  return '';
+}
+
+function timeToMinutes(value) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  const h = Math.min(23, Math.max(0, Number(match[1]) || 0));
+  const m = Math.min(59, Math.max(0, Number(match[2]) || 0));
+  return h * 60 + m;
+}
+
+function minutesToTime(totalMinutes) {
+  const mins = ((Number(totalMinutes) % 1440) + 1440) % 1440;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function getSlotTime(config, tingkat, hari, jamKe) {
+  const saved = config?.slotTimesByTingkat?.[tingkat]?.[hari]?.[jamKe] || config?.slotTimesByTingkat?.[tingkat]?.[hari]?.[String(jamKe)];
+  if (saved?.start && saved?.end) {
+    const startMin = timeToMinutes(saved.start);
+    const endMin = timeToMinutes(saved.end);
+    return {
+      startTime: saved.start,
+      endTime: saved.end,
+      durationMinutes: startMin != null && endMin != null ? Math.max(0, endMin - startMin) : null
+    };
+  }
+  const duration = Number(config?.slotDuration || 45);
+  const startBase = timeToMinutes(config?.startTimeByDay?.[hari]) ?? 7 * 60;
+  const start = startBase + (Number(jamKe) - 1) * duration;
+  return {
+    startTime: minutesToTime(start),
+    endTime: minutesToTime(start + duration),
+    durationMinutes: duration
+  };
 }
 
 function isPrimaryDuplicateError(err) {
@@ -79,18 +124,26 @@ async function getSchedule(filters = {}) {
     nama_guru: teacherMap.get(String(r.guru_id)) || String(r.guru_id),
     nama_kelas: classMap.get(String(r.kelas)) || String(r.kelas)
   }));
-  const result = mergedRows.map((r, idx) => ({
-    rowId: idx + 1,
-    id: r.id,
-    hari: r.hari,
-    jamKe: r.jam_ke,
-    kelas: r.kelas,
-    namaKelas: r.nama_kelas || String(r.kelas),
-    mapelId: r.mapel_id,
-    guruId: r.guru_id,
-    namaMapel: r.nama_mapel || String(r.mapel_id),
-    namaGuru: r.nama_guru || String(r.guru_id)
-  }));
+  const config = await getScheduleConfig().catch(() => null);
+  const result = mergedRows.map((r, idx) => {
+    const namaKelas = r.nama_kelas || String(r.kelas);
+    const tingkat = extractTingkat(namaKelas);
+    const slotTime = getSlotTime(config, tingkat, r.hari, r.jam_ke);
+    return {
+      rowId: idx + 1,
+      id: r.id,
+      hari: r.hari,
+      jamKe: r.jam_ke,
+      kelas: r.kelas,
+      namaKelas,
+      mapelId: r.mapel_id,
+      guruId: r.guru_id,
+      namaMapel: r.nama_mapel || String(r.mapel_id),
+      namaGuru: r.nama_guru || String(r.guru_id),
+      tingkat,
+      ...slotTime
+    };
+  });
   scheduleCache.set(key, result, scheduleCacheTtl);
   return result;
 }

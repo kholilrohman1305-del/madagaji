@@ -61,6 +61,33 @@ const router = express.Router();
   // dijadwalkan (mis. Penjas hanya jam 1-4 / pagi).
   await pool.query(`ALTER TABLE teacher_limits ADD COLUMN max_slot TINYINT NULL`).catch(() => {});
 
+  // Migration: available_slots (JSON) — jam tersedia guru berbasis centang,
+  // menggantikan max_slot. Data max_slot lama dikonversi jadi [1..max_slot].
+  await pool.query(`ALTER TABLE teacher_limits ADD COLUMN available_slots JSON NULL`).catch(() => {});
+  try {
+    const [legacy] = await pool.query(
+      `SELECT teacher_id, max_slot FROM teacher_limits WHERE max_slot IS NOT NULL AND available_slots IS NULL`
+    );
+    for (const row of legacy) {
+      const arr = Array.from({ length: row.max_slot }, (_, i) => i + 1);
+      await pool.query(
+        `UPDATE teacher_limits SET available_slots=?, max_slot=NULL WHERE teacher_id=?`,
+        [JSON.stringify(arr), row.teacher_id]
+      );
+    }
+  } catch (e) {
+    console.warn('[available_slots migration]', e.message);
+  }
+
+  // Migration: subject_limits — jam tersedia per MAPEL (mis. Penjas jam 1-4)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS subject_limits (
+      subject_id INT NOT NULL PRIMARY KEY,
+      available_slots JSON NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `).catch(() => {});
+
   // One-time migration: standardize day name 'Ahad' → 'Minggu'.
   // AutoSchedule always wrote 'Minggu', but old data/UI used 'Ahad', so
   // Sunday rows never matched the Sunday column in jadwal pages.
@@ -79,15 +106,16 @@ const router = express.Router();
 // Get all metadata (teachers now include gender; teacherSubjects include tingkat+is_linear; teacherLimits include available_days)
 router.get('/meta', async (req, res, next) => {
   try {
-    const [teachers, subjects, classes, teacherSubjects, classSubjects, teacherLimits] = await Promise.all([
+    const [teachers, subjects, classes, teacherSubjects, classSubjects, teacherLimits, subjectLimits] = await Promise.all([
       config.getTeachers(),
       config.getSubjects(),
       config.getClasses(),
       config.getTeacherSubjects(),
       config.getClassSubjects(),
-      config.getTeacherLimits()
+      config.getTeacherLimits(),
+      config.getSubjectLimits()
     ]);
-    res.json({ teachers, subjects, classes, teacherSubjects, classSubjects, teacherLimits });
+    res.json({ teachers, subjects, classes, teacherSubjects, classSubjects, teacherLimits, subjectLimits });
   } catch (e) { next(e); }
 });
 
@@ -127,11 +155,18 @@ router.put('/class-subjects-matrix', async (req, res, next) => {
 // Teacher limits — accepts availableDays and/or classGenderPref (partial update supported)
 router.put('/teacher-limit/:teacherId', async (req, res, next) => {
   try {
-    const { maxWeek, maxDay, minLinier, availableDays, classGenderPref, maxSlot } = req.body;
-    if (classGenderPref !== undefined && maxWeek === undefined && maxDay === undefined && minLinier === undefined && availableDays === undefined && maxSlot === undefined) {
+    const { maxWeek, maxDay, minLinier, availableDays, classGenderPref, availableSlots } = req.body;
+    if (classGenderPref !== undefined && maxWeek === undefined && maxDay === undefined && minLinier === undefined && availableDays === undefined && availableSlots === undefined) {
       return res.json(await config.updateTeacherClassGenderPref(req.params.teacherId, classGenderPref));
     }
-    res.json(await config.upsertTeacherLimit(req.params.teacherId, maxWeek, maxDay, minLinier, availableDays, classGenderPref, maxSlot));
+    res.json(await config.upsertTeacherLimit(req.params.teacherId, maxWeek, maxDay, minLinier, availableDays, classGenderPref, availableSlots));
+  } catch (e) { next(e); }
+});
+
+// Jam tersedia per mapel — bulk update
+router.put('/subject-limits-bulk', async (req, res, next) => {
+  try {
+    res.json(await config.upsertSubjectLimitsBulk(req.body.limits || []));
   } catch (e) { next(e); }
 });
 
