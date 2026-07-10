@@ -833,6 +833,70 @@ export default function AutoSchedule() {
 
   const cancelCellEdit = () => { setEditingCell(null); setEditTeacher(''); setEditMapel(''); setConflictAlert(null); };
 
+  // Rekomendasi untuk slot kosong: mapel kelas ini yang jam/minggu-nya belum
+  // terpenuhi di preview + guru pengampunya yang bebas di hari+jam tersebut
+  // (tidak bentrok, sesuai hari tersedia, batas jam, dan preferensi PA/PI).
+  const editRecs = useMemo(() => {
+    if (!editingCell || !meta || !generated) return [];
+    const { hari, jamKe, kelas } = editingCell;
+    const hasRow = generated.some(r => r.hari === hari && String(r.jamKe) === String(jamKe) && String(r.kelas) === String(kelas));
+    if (hasRow) return [];
+    const cls = meta.classes?.find(c => String(c.id) === String(kelas));
+    const tingkat = extractTingkat(cls?.name || '');
+    const kelasG = getKelasGender(cls);
+    const needs = classSubjectsLocal[kelas] || classSubjectsLocal[Number(kelas)] || {};
+    const recs = [];
+    for (const [sid, hours] of Object.entries(needs)) {
+      const scheduled = generated.filter(r => String(r.kelas) === String(kelas) && String(r.mapelId) === String(sid)).length;
+      const remaining = Number(hours) - scheduled;
+      if (remaining <= 0) continue;
+      for (const [tid, subs] of Object.entries(teacherSubjectsLocal)) {
+        const mapped = (subs || []).some(s => String(s.subjectId) === String(sid) && (
+          s.classId ? String(s.classId) === String(kelas) : (!s.tingkat || s.tingkat === tingkat)
+        ));
+        if (!mapped) continue;
+        const lim = teacherLimitsLocal[tid] || {};
+        if (lim.classGenderPref === 'PA' && kelasG === 'PI') continue;
+        if (lim.classGenderPref === 'PI' && kelasG === 'PA') continue;
+        if (lim.availableDays?.length && !lim.availableDays.includes(hari)) continue;
+        const busy = generated.some(r => String(r.guruId) === String(tid) && r.hari === hari && String(r.jamKe) === String(jamKe));
+        if (busy) continue;
+        const loadWeek = generated.filter(r => String(r.guruId) === String(tid)).length;
+        if (lim.maxWeek !== '' && lim.maxWeek != null && loadWeek >= Number(lim.maxWeek)) continue;
+        const loadDay = generated.filter(r => String(r.guruId) === String(tid) && r.hari === hari).length;
+        if (lim.maxDay !== '' && lim.maxDay != null && loadDay >= Number(lim.maxDay)) continue;
+        recs.push({
+          subjectId: String(sid),
+          teacherId: String(tid),
+          subjectName: meta.subjects?.find(s => String(s.id) === String(sid))?.name || String(sid),
+          teacherName: meta.teachers?.find(t => String(t.id) === String(tid))?.name || String(tid),
+          remaining,
+          teacherLoad: loadWeek
+        });
+      }
+    }
+    // Prioritas: kekurangan jam terbanyak dulu, lalu guru dengan beban paling ringan
+    recs.sort((a, b) => b.remaining - a.remaining || a.teacherLoad - b.teacherLoad || a.subjectName.localeCompare(b.subjectName));
+    return recs;
+  }, [editingCell, generated, meta, classSubjectsLocal, teacherSubjectsLocal, teacherLimitsLocal]);
+
+  const editCellIsEmpty = !!editingCell && !generated?.some(r =>
+    r.hari === editingCell.hari && String(r.jamKe) === String(editingCell.jamKe) && String(r.kelas) === String(editingCell.kelas));
+
+  // Satu klik pada rekomendasi → langsung isi slot dan tutup form edit
+  const applyRecommendation = (rec) => {
+    if (!editingCell) return;
+    const { hari, jamKe, kelas } = editingCell;
+    const conflict = checkClientConflict(generated, hari, String(jamKe), String(kelas), rec.teacherId, -1);
+    if (conflict) {
+      const cc = meta?.classes?.find(c => String(c.id) === String(conflict.kelas));
+      setConflictAlert({ message: `BENTROK! ${rec.teacherName} sudah mengajar di ${cc?.name || conflict.kelas} pada ${hari} jam ke-${jamKe}.` });
+      return;
+    }
+    setGenerated(prev => [...prev, { hari, jamKe: String(jamKe), kelas: String(kelas), mapelId: rec.subjectId, guruId: rec.teacherId }]);
+    setConflictAlert(null); setEditingCell(null); setEditTeacher(''); setEditMapel('');
+  };
+
   // ── Step 6 ───────────────────────────────────────────────────────────────
 
   const doFinalize = async () => {
@@ -1869,6 +1933,35 @@ export default function AutoSchedule() {
                         <button className="btn sm outline" onClick={cancelCellEdit}>Batal</button>
                       </div>
                     </div>
+
+                    {editCellIsEmpty && editRecs.length > 0 && (
+                      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed #93c5fd' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>
+                          💡 Rekomendasi untuk slot ini — mapel yang jamnya belum terpenuhi &amp; guru yang bebas ({editRecs.length}). Klik untuk langsung mengisi:
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 150, overflowY: 'auto' }}>
+                          {editRecs.map((rec, i) => (
+                            <button key={`${rec.subjectId}-${rec.teacherId}`}
+                              onClick={() => applyRecommendation(rec)}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px',
+                                borderRadius: 20, cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+                                background: i === 0 ? '#dcfce7' : '#f0fdf4',
+                                border: `1.5px solid ${i === 0 ? '#22c55e' : '#86efac'}`,
+                                color: '#166534', textAlign: 'left'
+                              }}>
+                              {rec.subjectName} — {rec.teacherName}
+                              <span style={{ fontWeight: 400, color: '#15803d', opacity: .85 }}>(kurang {rec.remaining} jam)</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {editCellIsEmpty && editRecs.length === 0 && (
+                      <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
+                        Tidak ada rekomendasi untuk slot ini — semua mapel kelas ini sudah terpenuhi jamnya, atau tidak ada guru pengampu yang bebas pada {editingCell.hari} jam ke-{editingCell.jamKe}.
+                      </div>
+                    )}
                   </div>
                 )}
                 <div style={{ marginBottom: 12 }}>
