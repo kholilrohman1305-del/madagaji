@@ -57,6 +57,10 @@ const router = express.Router();
     console.warn('[schedule_config migration]', e.message);
   }
 
+  // One-time migration: max_slot — batas jam ke-N terakhir seorang guru boleh
+  // dijadwalkan (mis. Penjas hanya jam 1-4 / pagi).
+  await pool.query(`ALTER TABLE teacher_limits ADD COLUMN max_slot TINYINT NULL`).catch(() => {});
+
   // One-time migration: standardize day name 'Ahad' → 'Minggu'.
   // AutoSchedule always wrote 'Minggu', but old data/UI used 'Ahad', so
   // Sunday rows never matched the Sunday column in jadwal pages.
@@ -123,11 +127,11 @@ router.put('/class-subjects-matrix', async (req, res, next) => {
 // Teacher limits — accepts availableDays and/or classGenderPref (partial update supported)
 router.put('/teacher-limit/:teacherId', async (req, res, next) => {
   try {
-    const { maxWeek, maxDay, minLinier, availableDays, classGenderPref } = req.body;
-    if (classGenderPref !== undefined && maxWeek === undefined && maxDay === undefined && minLinier === undefined && availableDays === undefined) {
+    const { maxWeek, maxDay, minLinier, availableDays, classGenderPref, maxSlot } = req.body;
+    if (classGenderPref !== undefined && maxWeek === undefined && maxDay === undefined && minLinier === undefined && availableDays === undefined && maxSlot === undefined) {
       return res.json(await config.updateTeacherClassGenderPref(req.params.teacherId, classGenderPref));
     }
-    res.json(await config.upsertTeacherLimit(req.params.teacherId, maxWeek, maxDay, minLinier, availableDays, classGenderPref));
+    res.json(await config.upsertTeacherLimit(req.params.teacherId, maxWeek, maxDay, minLinier, availableDays, classGenderPref, maxSlot));
   } catch (e) { next(e); }
 });
 

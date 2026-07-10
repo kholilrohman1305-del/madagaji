@@ -121,11 +121,15 @@ export default function AutoSchedule() {
   const [bulkMaxWeek, setBulkMaxWeek] = useState('');
   const [bulkMaxDay, setBulkMaxDay] = useState('');
   const [bulkMinLinier, setBulkMinLinier] = useState('');
+  const [bulkMaxSlot, setBulkMaxSlot] = useState('');
 
-  // Step 5 — Manual Plot (Locked Slots)
+  // Step 5 — Manual Plot (Locked Slots) — matriks per kelas
   const [lockedSlots, setLockedSlots] = useState([]);
   const [lockedSlotsLoading, setLockedSlotsLoading] = useState(false);
-  const [newLock, setNewLock] = useState({ teacher_id: '', subject_id: '', class_ids: [], hari: '', jam_kes: [] });
+  const [plotClass, setPlotClass] = useState('');
+  const [plotEdit, setPlotEdit] = useState(null); // { hari, jam }
+  const [plotTeacher, setPlotTeacher] = useState('');
+  const [plotMapel, setPlotMapel] = useState('');
   const [lockSaving, setLockSaving] = useState(false);
   const [importModal, setImportModal] = useState(null); // { phase: 'upload'|'preview', data }
 
@@ -229,6 +233,7 @@ export default function AutoSchedule() {
             maxWeek: tl.max_hours_per_week ?? '',
             maxDay: tl.max_hours_per_day ?? '',
             minLinier: tl.min_hours_linier ?? '',
+            maxSlot: tl.max_slot ?? '',
             availableDays: Array.isArray(tl.available_days) ? tl.available_days : [],
             classGenderPref: tl.class_gender_pref || 'both'
           };
@@ -548,7 +553,7 @@ export default function AutoSchedule() {
     setTeacherSubjectsLocal(prev => ({ ...prev, [teacherId]: subjects }));
     setTeacherLimitsLocal(prev => ({
       ...prev,
-      [teacherId]: { ...(prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', availableDays: [] }), classGenderPref: classGenderPref || 'both' }
+      [teacherId]: { ...(prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', maxSlot: '', availableDays: [] }), classGenderPref: classGenderPref || 'both' }
     }));
     setTeacherModalSaving(true);
     try {
@@ -624,13 +629,13 @@ export default function AutoSchedule() {
   const updateLimit = (teacherId, field, val) => {
     setTeacherLimitsLocal(prev => ({
       ...prev,
-      [teacherId]: { ...(prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', availableDays: [] }), [field]: val }
+      [teacherId]: { ...(prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', maxSlot: '', availableDays: [] }), [field]: val }
     }));
   };
 
   const toggleAvailableDay = (teacherId, day) => {
     setTeacherLimitsLocal(prev => {
-      const cur = prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', availableDays: [] };
+      const cur = prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', maxSlot: '', availableDays: [] };
       const ad = [...(cur.availableDays || [])];
       const idx = ad.indexOf(day);
       if (idx >= 0) ad.splice(idx, 1); else ad.push(day);
@@ -653,7 +658,8 @@ export default function AutoSchedule() {
           ...(prev[t.id] || { availableDays: [] }),
           ...(bulkMaxWeek !== '' ? { maxWeek: bulkMaxWeek } : {}),
           ...(bulkMaxDay !== '' ? { maxDay: bulkMaxDay } : {}),
-          ...(bulkMinLinier !== '' ? { minLinier: bulkMinLinier } : {})
+          ...(bulkMinLinier !== '' ? { minLinier: bulkMinLinier } : {}),
+          ...(bulkMaxSlot !== '' ? { maxSlot: bulkMaxSlot } : {})
         };
       });
       return next;
@@ -666,6 +672,7 @@ export default function AutoSchedule() {
       maxWeek: l.maxWeek !== '' ? Number(l.maxWeek) : null,
       maxDay: l.maxDay !== '' ? Number(l.maxDay) : null,
       minLinier: l.minLinier !== '' ? Number(l.minLinier) : null,
+      maxSlot: l.maxSlot !== '' && l.maxSlot != null ? Number(l.maxSlot) : null,
       availableDays: l.availableDays?.length > 0 ? l.availableDays : null
     }));
     await api.put('/scheduler/teacher-limits-bulk', { limits });
@@ -724,26 +731,34 @@ export default function AutoSchedule() {
 
   // ── Step 5 — Manual Plot (Locked Slots) ─────────────────────────────────
 
-  const addLockedSlot = async () => {
-    const { teacher_id, subject_id, class_ids, hari, jam_kes } = newLock;
-    if (!teacher_id || !subject_id || !class_ids.length || !hari || !jam_kes.length) {
-      toast.warn('Lengkapi semua field sebelum menyimpan.');
+  const savePlotCell = async () => {
+    if (!plotEdit || !plotClass || !plotTeacher || !plotMapel) {
+      toast.warn('Pilih guru dan mapel dulu.');
       return;
     }
     setLockSaving(true);
     try {
       await api.post('/scheduler/locked-slots', {
-        teacher_id: Number(teacher_id),
-        subject_id: Number(subject_id),
-        class_ids: class_ids.map(Number),
-        jam_kes: jam_kes.map(Number),
-        hari,
+        teacher_id: Number(plotTeacher),
+        subject_id: Number(plotMapel),
+        class_ids: [Number(plotClass)],
+        jam_kes: [Number(plotEdit.jam)],
+        hari: plotEdit.hari,
       });
-      const count = class_ids.length * jam_kes.length;
-      toast.success(`${count} slot terkunci ditambahkan.`);
-      setNewLock({ teacher_id: '', subject_id: '', class_ids: [], hari: '', jam_kes: [] });
+      toast.success(`Slot ${plotEdit.hari} jam ke-${plotEdit.jam} terkunci.`);
+      setPlotEdit(null); setPlotTeacher(''); setPlotMapel('');
       loadLockedSlots();
     } finally { setLockSaving(false); }
+  };
+
+  const removeLockedCell = async (r) => {
+    const ok = await showConfirm({
+      title: 'Hapus Slot Terkunci',
+      message: `Hapus ${r.teacher_name} — ${r.subject_name} (${r.hari} jam ke-${r.jam_ke})?`,
+      confirmLabel: 'Ya, Hapus', danger: true
+    });
+    if (!ok) return;
+    await deleteLockedSlot(r.id);
   };
 
   const deleteLockedSlot = async (id) => {
@@ -859,6 +874,7 @@ export default function AutoSchedule() {
         if (lim.classGenderPref === 'PA' && kelasG === 'PI') continue;
         if (lim.classGenderPref === 'PI' && kelasG === 'PA') continue;
         if (lim.availableDays?.length && !lim.availableDays.includes(hari)) continue;
+        if (lim.maxSlot !== '' && lim.maxSlot != null && Number(jamKe) > Number(lim.maxSlot)) continue;
         const busy = generated.some(r => String(r.guruId) === String(tid) && r.hari === hari && String(r.jamKe) === String(jamKe));
         if (busy) continue;
         const loadWeek = generated.filter(r => String(r.guruId) === String(tid)).length;
@@ -1479,7 +1495,7 @@ export default function AutoSchedule() {
         <div className="modern-table-card">
           <div className="modern-table-title">Step 4 — Aturan & Batasan Guru</div>
           <div style={{ padding: 14, borderRadius: 10, background: '#f1f5f9', marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            {[['Max Jam/Minggu', bulkMaxWeek, setBulkMaxWeek], ['Max Jam/Hari', bulkMaxDay, setBulkMaxDay], ['Min Jam Linier', bulkMinLinier, setBulkMinLinier]].map(([label, val, set]) => (
+            {[['Max Jam/Minggu', bulkMaxWeek, setBulkMaxWeek], ['Max Jam/Hari', bulkMaxDay, setBulkMaxDay], ['Min Jam Linier', bulkMinLinier, setBulkMinLinier], ['Max Jam Ke-', bulkMaxSlot, setBulkMaxSlot]].map(([label, val, set]) => (
               <div key={label}>
                 <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{label}</div>
                 <input type="number" min={0} value={val} onChange={e => set(e.target.value)} placeholder="—"
@@ -1492,16 +1508,16 @@ export default function AutoSchedule() {
             style={{ border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '7px 14px', width: '100%', marginBottom: 12 }} />
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: 720 }}>
-              <thead><tr><th>Guru</th><th style={{ textAlign: 'center' }}>Max/Minggu</th><th style={{ textAlign: 'center' }}>Max/Hari</th><th style={{ textAlign: 'center' }}>Min Linier</th><th>Hari Tersedia</th></tr></thead>
+              <thead><tr><th>Guru</th><th style={{ textAlign: 'center' }}>Max/Minggu</th><th style={{ textAlign: 'center' }}>Max/Hari</th><th style={{ textAlign: 'center' }}>Min Linier</th><th style={{ textAlign: 'center' }} title="Jam ke berapa terakhir guru boleh dijadwalkan. Contoh: 4 = hanya jam 1-4 (pagi), untuk mapel seperti Penjas.">Max Jam Ke- ⓘ</th><th>Hari Tersedia</th></tr></thead>
               <tbody>
                 {(meta?.teachers || []).filter(t => !limitSearch || t.name.toLowerCase().includes(limitSearch.toLowerCase())).map(t => {
-                  const lim = teacherLimitsLocal[t.id] || { maxWeek: '', maxDay: '', minLinier: '', availableDays: [] };
+                  const lim = teacherLimitsLocal[t.id] || { maxWeek: '', maxDay: '', minLinier: '', maxSlot: '', availableDays: [] };
                   return (
                     <tr key={t.id}>
                       <td style={{ fontWeight: 500, fontSize: 13 }}>{t.name}</td>
-                      {['maxWeek', 'maxDay', 'minLinier'].map(field => (
+                      {['maxWeek', 'maxDay', 'minLinier', 'maxSlot'].map(field => (
                         <td key={field} style={{ textAlign: 'center' }}>
-                          <input type="number" min={0} value={lim[field]} onChange={e => updateLimit(t.id, field, e.target.value)}
+                          <input type="number" min={0} value={lim[field] ?? ''} onChange={e => updateLimit(t.id, field, e.target.value)}
                             style={{ width: 62, textAlign: 'center', border: '1.5px solid #cbd5e1', borderRadius: 6, padding: '4px' }} />
                         </td>
                       ))}
@@ -1534,204 +1550,149 @@ export default function AutoSchedule() {
         <div className="modern-table-card">
           <div className="modern-table-title">Step 5 — Manual Plot (Slot Terkunci)</div>
           <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-            Set guru, mapel, hari, lalu centang kelas dan jam yang diinginkan. Slot ini akan <strong>terkunci</strong> dan tidak berubah saat generate jadwal otomatis.
-            Satu guru bisa mengajar beberapa kelas sekaligus di jam yang sama dengan memilih lebih dari 1 kelas.
+            Pilih kelas, lalu klik langsung sel pada matriks untuk mengunci guru + mapel di slot tersebut.
+            Slot terkunci <strong>tidak akan berubah</strong> saat generate jadwal otomatis.
+            Guru yang sama boleh dikunci di jam yang sama pada beberapa kelas (multi-kelas).
           </p>
 
-          {/* Form tambah slot */}
-          <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '16px 20px', marginBottom: 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 12 }}>Tambah Slot Terkunci</div>
-
-            {/* Row 1: Guru | Mapel | Hari */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
-              <div>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Guru</div>
-                <select value={newLock.teacher_id}
-                  onChange={e => setNewLock(p => ({ ...p, teacher_id: e.target.value, subject_id: '', class_ids: [], jam_kes: [] }))}
-                  style={{ width: '100%', border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '7px 10px', fontSize: 13 }}>
-                  <option value="">Pilih Guru</option>
-                  {(meta?.teachers || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Mapel</div>
-                {(() => {
-                  const subjectIds = newLock.teacher_id
-                    ? [...new Set((teacherSubjectsLocal[newLock.teacher_id] || []).map(x => String(x.subjectId)))]
-                    : null;
-                  const subjectsToShow = subjectIds
-                    ? (meta?.subjects || []).filter(s => subjectIds.includes(String(s.id)))
-                    : (meta?.subjects || []);
-                  return (
-                    <select value={newLock.subject_id}
-                      onChange={e => setNewLock(p => ({ ...p, subject_id: e.target.value, class_ids: [], jam_kes: [] }))}
-                      style={{ width: '100%', border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '7px 10px', fontSize: 13 }}>
-                      <option value="">{newLock.teacher_id && subjectsToShow.length === 0 ? 'Belum ada mapel' : 'Pilih Mapel'}</option>
-                      {subjectsToShow.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  );
-                })()}
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Hari</div>
-                <select value={newLock.hari}
-                  onChange={e => setNewLock(p => ({ ...p, hari: e.target.value, jam_kes: [] }))}
-                  style={{ width: '100%', border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '7px 10px', fontSize: 13 }}>
-                  <option value="">Pilih Hari</option>
-                  {days.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Row 2: Pilih Kelas (checkbox, filtered by teacher+subject) */}
-            {(() => {
-              if (!newLock.teacher_id || !newLock.subject_id) return (
-                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12, padding: '8px 12px', background: '#f1f5f9', borderRadius: 8 }}>
-                  Pilih guru dan mapel dulu untuk melihat daftar kelas yang diampu.
-                </div>
-              );
-              const assignments = (teacherSubjectsLocal[newLock.teacher_id] || [])
-                .filter(e => String(e.subjectId) === String(newLock.subject_id));
-              const specificIds = new Set(assignments.filter(e => e.classId).map(e => String(e.classId)));
-              const allowedTingkat = new Set(assignments.filter(e => !e.classId && e.tingkat).map(e => e.tingkat));
-              const filteredClasses = (meta?.classes || []).filter(c => {
-                if (specificIds.has(String(c.id))) return true;
-                if (allowedTingkat.size > 0) return allowedTingkat.has(extractTingkat(c.name));
-                return assignments.length === 0;
-              });
-              if (!filteredClasses.length) return (
-                <div style={{ fontSize: 12, color: '#f59e0b', marginBottom: 12, padding: '8px 12px', background: '#fef3c7', borderRadius: 8 }}>
-                  Guru ini belum memiliki kelas yang diampu untuk mapel ini. Atur di Step 3.
-                </div>
-              );
-              const toggleClass = (id) => {
-                const sid = String(id);
-                setNewLock(p => ({
-                  ...p,
-                  class_ids: p.class_ids.includes(sid) ? p.class_ids.filter(x => x !== sid) : [...p.class_ids, sid]
-                }));
-              };
-              return (
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>
-                    Kelas yang Diampu
-                    <span style={{ color: '#94a3b8', fontWeight: 400, marginLeft: 6 }}>({filteredClasses.length} kelas — centang yang ingin di-plot)</span>
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {filteredClasses.map(c => {
-                      const checked = newLock.class_ids.includes(String(c.id));
-                      return (
-                        <label key={c.id} onClick={() => toggleClass(c.id)} style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px',
-                          borderRadius: 20, cursor: 'pointer', userSelect: 'none', fontSize: 13, fontWeight: checked ? 700 : 400,
-                          background: checked ? '#dbeafe' : '#f1f5f9',
-                          border: `1.5px solid ${checked ? '#3b82f6' : '#e2e8f0'}`,
-                          color: checked ? '#1d4ed8' : '#475569',
-                          transition: 'all .15s'
-                        }}>
-                          <input type="checkbox" checked={checked} onChange={() => {}} style={{ accentColor: '#3b82f6', width: 14, height: 14 }} />
-                          {c.name}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Row 3: Pilih Jam (checkbox, based on hari + selected classes' tingkat) */}
-            {(() => {
-              if (!newLock.hari) return null;
-              const selectedClasses = (meta?.classes || []).filter(c => newLock.class_ids.includes(String(c.id)));
-              const tingkats = selectedClasses.length
-                ? [...new Set(selectedClasses.map(c => extractTingkat(c.name)).filter(Boolean))]
-                : [...new Set((meta?.classes || []).map(c => extractTingkat(c.name)).filter(Boolean))];
-              const allSlots = [...new Set(tingkats.flatMap(tk => slotsByTingkat[tk]?.[newLock.hari] || []))].sort((a,b) => a-b);
-              if (!allSlots.length) return (
-                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12, padding: '8px 12px', background: '#f1f5f9', borderRadius: 8 }}>
-                  Tidak ada slot jam untuk hari {newLock.hari}.
-                </div>
-              );
-              const toggleJam = (jam) => {
-                const sj = String(jam);
-                setNewLock(p => ({
-                  ...p,
-                  jam_kes: p.jam_kes.includes(sj) ? p.jam_kes.filter(x => x !== sj) : [...p.jam_kes, sj]
-                }));
-              };
-              return (
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>
-                    Jam Ke-
-                    <span style={{ color: '#94a3b8', fontWeight: 400, marginLeft: 6 }}>({allSlots.length} slot — centang jam yang ingin di-plot)</span>
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {allSlots.map(jam => {
-                      const checked = newLock.jam_kes.includes(String(jam));
-                      return (
-                        <label key={jam} onClick={() => toggleJam(jam)} style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px',
-                          borderRadius: 20, cursor: 'pointer', userSelect: 'none', fontSize: 13, fontWeight: checked ? 700 : 400,
-                          background: checked ? '#ede9fe' : '#f1f5f9',
-                          border: `1.5px solid ${checked ? '#7c3aed' : '#e2e8f0'}`,
-                          color: checked ? '#5b21b6' : '#475569',
-                          transition: 'all .15s'
-                        }}>
-                          <input type="checkbox" checked={checked} onChange={() => {}} style={{ accentColor: '#7c3aed', width: 14, height: 14 }} />
-                          Jam {jam}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Preview */}
-            {(newLock.teacher_id || newLock.class_ids.length > 0 || newLock.hari) && (() => {
-              const t = (meta?.teachers || []).find(x => String(x.id) === String(newLock.teacher_id));
-              const s = (meta?.subjects || []).find(x => String(x.id) === String(newLock.subject_id));
-              const selectedClassNames = (meta?.classes || []).filter(c => newLock.class_ids.includes(String(c.id))).map(c => c.name);
-              const isComplete = newLock.teacher_id && newLock.subject_id && newLock.class_ids.length > 0 && newLock.hari && newLock.jam_kes.length > 0;
-              const totalSlots = newLock.class_ids.length * newLock.jam_kes.length;
-              return (
-                <div style={{ marginBottom: 12, padding: '12px 16px', borderRadius: 10, border: `2px ${isComplete ? 'solid #6366f1' : 'dashed #cbd5e1'}`, background: isComplete ? '#f5f3ff' : '#f8fafc' }}>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', minWidth: 60 }}>Preview:</span>
-                    {[
-                      { label: 'Guru', val: t?.name, color: '#1e40af', bg: '#dbeafe' },
-                      { label: 'Mapel', val: s?.name, color: '#166534', bg: '#dcfce7' },
-                      { label: 'Hari', val: newLock.hari, color: '#92400e', bg: '#fef3c7' },
-                    ].map(({ label, val, color, bg }) => (
-                      <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 8, background: val ? bg : '#f1f5f9', border: `1px solid ${val ? color + '40' : '#e2e8f0'}` }}>
-                        <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>{label}</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: val ? color : '#cbd5e1' }}>{val || '—'}</span>
-                      </span>
-                    ))}
-                    {selectedClassNames.length > 0 && (
-                      <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 8, background: '#dbeafe', color: '#1d4ed8', fontWeight: 600, border: '1px solid #93c5fd' }}>
-                        {selectedClassNames.length} Kelas: {selectedClassNames.join(', ')}
-                      </span>
-                    )}
-                    {newLock.jam_kes.length > 0 && (
-                      <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 8, background: '#ede9fe', color: '#5b21b6', fontWeight: 600, border: '1px solid #c4b5fd' }}>
-                        Jam {newLock.jam_kes.sort((a,b) => Number(a)-Number(b)).join(', ')}
-                      </span>
-                    )}
-                    {isComplete && (
-                      <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 700 }}>→ {totalSlots} slot akan dibuat</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div>
-              <button className="btn success sm" onClick={addLockedSlot} disabled={lockSaving}>
-                {lockSaving ? 'Menyimpan...' : '+ Tambah Slot'}
-              </button>
-            </div>
+          {/* Matriks plot per kelas */}
+          <div style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select value={plotClass}
+              onChange={e => { setPlotClass(e.target.value); setPlotEdit(null); setPlotTeacher(''); setPlotMapel(''); }}
+              style={{ border: '1.5px solid #cbd5e1', borderRadius: 8, padding: '7px 14px', minWidth: 200 }}>
+              <option value="">— Pilih Kelas —</option>
+              {(meta?.classes || []).map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+            </select>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>
+              Klik sel kosong untuk mengunci slot · klik sel terisi 🔒 untuk menghapus
+            </span>
           </div>
+
+          {plotClass && (() => {
+            const cls = meta.classes?.find(c => String(c.id) === plotClass);
+            const plotTingkat = extractTingkat(cls?.name || '');
+            const maxH = Math.max(0, ...days.map(d => {
+              const arr = slotsByTingkat[plotTingkat]?.[d];
+              return arr?.length ? Math.max(...arr) : Number(hoursByDay[d] || 0);
+            }));
+            const eligibleTeachers = (meta?.teachers || []).filter(t => {
+              const subs = teacherSubjectsLocal[t.id] || teacherSubjectsLocal[String(t.id)] || [];
+              return subs.some(s => s.classId ? String(s.classId) === plotClass : (!s.tingkat || s.tingkat === plotTingkat));
+            });
+            const mapelOptions = plotTeacher
+              ? [...new Set((teacherSubjectsLocal[plotTeacher] || [])
+                  .filter(s => s.classId ? String(s.classId) === plotClass : (!s.tingkat || s.tingkat === plotTingkat))
+                  .map(s => String(s.subjectId)))]
+              : [];
+            const tLim = teacherLimitsLocal[plotTeacher] || {};
+            const warns = [];
+            if (plotEdit && plotTeacher) {
+              if (tLim.maxSlot !== '' && tLim.maxSlot != null && Number(plotEdit.jam) > Number(tLim.maxSlot)) {
+                warns.push(`Guru ini dibatasi maksimal jam ke-${tLim.maxSlot} (Step 4) — slot ini melewatinya.`);
+              }
+              if (tLim.availableDays?.length && !tLim.availableDays.includes(plotEdit.hari)) {
+                warns.push(`Hari ${plotEdit.hari} di luar hari tersedia guru (${tLim.availableDays.join(', ')}).`);
+              }
+              const multi = lockedSlots.filter(r => String(r.teacher_id) === plotTeacher && r.hari === plotEdit.hari && String(r.jam_ke) === String(plotEdit.jam) && String(r.class_id) !== plotClass);
+              if (multi.length) {
+                warns.push(`Guru sudah terkunci di ${multi.map(m => m.class_name).join(', ')} pada jam yang sama (multi-kelas diperbolehkan).`);
+              }
+            }
+            return (
+              <div style={{ marginBottom: 20 }}>
+                {plotEdit && (
+                  <div style={{ padding: '12px 16px', borderRadius: 10, background: '#f5f3ff', border: '1.5px solid #a5b4fc', marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, color: '#4338ca', marginBottom: 8, fontWeight: 700 }}>
+                      🔒 Kunci Slot — {cls?.name} · {plotEdit.hari} Jam ke-{plotEdit.jam}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <span style={{ fontSize: 11, color: '#64748b' }}>Guru (yang mengampu kelas ini)</span>
+                        <select value={plotTeacher} onChange={e => {
+                          setPlotTeacher(e.target.value);
+                          setPlotMapel('');
+                        }} style={{ border: '1.5px solid #a5b4fc', borderRadius: 6, padding: '6px 8px', minWidth: 220 }}>
+                          <option value="">— pilih guru —</option>
+                          {eligibleTeachers.map(t => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
+                        </select>
+                      </div>
+                      {plotTeacher && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <span style={{ fontSize: 11, color: '#64748b' }}>Mapel</span>
+                          <select value={plotMapel} onChange={e => setPlotMapel(e.target.value)}
+                            style={{ border: '1.5px solid #a5b4fc', borderRadius: 6, padding: '6px 8px', minWidth: 180 }}>
+                            <option value="">— pilih mapel —</option>
+                            {mapelOptions.map(sid => {
+                              const s = meta.subjects?.find(x => String(x.id) === sid);
+                              return <option key={sid} value={sid}>{s?.name || sid}</option>;
+                            })}
+                          </select>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn sm success" onClick={savePlotCell} disabled={lockSaving || !plotTeacher || !plotMapel}>
+                          {lockSaving ? 'Menyimpan...' : 'Kunci Slot'}
+                        </button>
+                        <button className="btn sm outline" onClick={() => { setPlotEdit(null); setPlotTeacher(''); setPlotMapel(''); }}>Batal</button>
+                      </div>
+                    </div>
+                    {eligibleTeachers.length === 0 && (
+                      <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 8 }}>
+                        Belum ada guru yang di-mapping untuk kelas ini — atur di Step 3.
+                      </div>
+                    )}
+                    {warns.map((w, i) => (
+                      <div key={i} style={{ fontSize: 12, color: '#b45309', marginTop: 6 }}>⚠ {w}</div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ borderCollapse: 'collapse', minWidth: 560 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '8px 10px', background: '#f1f5f9', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: 12, width: 44 }}>Jam</th>
+                        {days.map(d => <th key={d} style={{ padding: '8px 10px', background: '#f1f5f9', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: 13, minWidth: 110 }}>{d}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from({ length: maxH }, (_, i) => i + 1).map(jam => (
+                        <tr key={jam}>
+                          <td style={{ padding: '5px', textAlign: 'center', fontWeight: 700, fontSize: 13, color: 'var(--primary-700)', background: '#f8fafc', border: '1px solid #e2e8f0' }}>{jam}</td>
+                          {days.map(hari => {
+                            const activeCell = (slotsByTingkat[plotTingkat]?.[hari]
+                              || Array.from({ length: Number(hoursByDay[hari] || 0) }, (_, i) => i + 1)).includes(jam);
+                            if (!activeCell) return <td key={hari} style={{ border: '1px solid #e2e8f0', background: '#f1f5f9' }} />;
+                            const locked = lockedSlots.find(r => String(r.class_id) === plotClass && r.hari === hari && String(r.jam_ke) === String(jam));
+                            const isEditing = plotEdit?.hari === hari && String(plotEdit.jam) === String(jam);
+                            return (
+                              <td key={hari}
+                                style={{ padding: '4px', border: `1px solid ${isEditing ? '#6366f1' : '#e2e8f0'}`, background: isEditing ? '#eef2ff' : '#fff', cursor: 'pointer', verticalAlign: 'middle' }}
+                                onClick={() => {
+                                  if (locked) { removeLockedCell(locked); return; }
+                                  setPlotEdit({ hari, jam });
+                                  setPlotTeacher(''); setPlotMapel('');
+                                }}
+                                title={locked ? 'Klik untuk menghapus slot terkunci ini' : 'Klik untuk mengunci slot ini'}>
+                                {locked ? (
+                                  <div style={{ borderRadius: 7, padding: '5px 8px', background: '#ede9fe', color: '#4c1d95', minHeight: 42, fontSize: 12, border: '1px solid #c4b5fd' }}>
+                                    <div style={{ fontWeight: 700, lineHeight: 1.3 }}>🔒 {locked.teacher_name}</div>
+                                    <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{locked.subject_name}</div>
+                                  </div>
+                                ) : (
+                                  <div style={{ height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: 16 }}>+</div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Daftar locked slots */}
           <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

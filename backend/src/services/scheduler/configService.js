@@ -101,7 +101,7 @@ async function getTeacherLimits() {
   const cached = cacheGet('teacherLimits');
   if (cached) return cached;
   const [rows] = await pool.query(
-    'SELECT teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, class_gender_pref FROM teacher_limits'
+    'SELECT teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, class_gender_pref, max_slot FROM teacher_limits'
   );
   const parsed = rows.map(r => ({
     ...r,
@@ -114,19 +114,20 @@ async function getTeacherLimits() {
   return parsed;
 }
 
-async function upsertTeacherLimit(teacherId, maxWeek, maxDay, minLinier, availableDays, classGenderPref) {
+async function upsertTeacherLimit(teacherId, maxWeek, maxDay, minLinier, availableDays, classGenderPref, maxSlot) {
   await pool.query(
-    `INSERT INTO teacher_limits (teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, class_gender_pref)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO teacher_limits (teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, class_gender_pref, max_slot)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        max_hours_per_week=VALUES(max_hours_per_week),
        max_hours_per_day=VALUES(max_hours_per_day),
        min_hours_linier=VALUES(min_hours_linier),
        available_days=VALUES(available_days),
-       class_gender_pref=VALUES(class_gender_pref)`,
+       class_gender_pref=VALUES(class_gender_pref),
+       max_slot=VALUES(max_slot)`,
     [teacherId, maxWeek ?? null, maxDay ?? null, minLinier ?? null,
      availableDays != null ? JSON.stringify(availableDays) : null,
-     classGenderPref || 'both']
+     classGenderPref || 'both', maxSlot ?? null]
   );
   invalidateMetaCache();
   return { success: true, message: 'Batas jam guru diperbarui.' };
@@ -148,16 +149,18 @@ async function upsertTeacherLimitsBulk(limits) {
   }
   const queries = limits.map(l =>
     pool.query(
-      `INSERT INTO teacher_limits (teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO teacher_limits (teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, max_slot)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          max_hours_per_week=VALUES(max_hours_per_week),
          max_hours_per_day=VALUES(max_hours_per_day),
          min_hours_linier=VALUES(min_hours_linier),
-         available_days=VALUES(available_days)`,
+         available_days=VALUES(available_days),
+         max_slot=VALUES(max_slot)`,
       [l.teacherId || l.teacher_id,
        l.maxWeek ?? null, l.maxDay ?? null, l.minLinier ?? null,
-       l.availableDays != null ? JSON.stringify(l.availableDays) : null]
+       l.availableDays != null ? JSON.stringify(l.availableDays) : null,
+       l.maxSlot ?? null]
     )
   );
   await Promise.all(queries);
