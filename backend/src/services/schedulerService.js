@@ -128,10 +128,15 @@ function slotAllowed(limits, h) {
   return limits.maxSlot == null || Number(h) <= Number(limits.maxSlot);
 }
 
-// Jam ke-h termasuk jam tersedia mapel? subjectSlots: Map(String(id) -> Set|null)
+// Batasan per mapel. subjectSlots: Map(String(id) -> { slots: Set|null, days: Set|null })
 function subjectSlotAllowed(subjectSlots, subjectId, h) {
-  const set = subjectSlots?.get(String(subjectId));
-  return !set || set.has(Number(h));
+  const lim = subjectSlots?.get(String(subjectId));
+  return !lim?.slots || lim.slots.has(Number(h));
+}
+
+function subjectDayAllowed(subjectSlots, subjectId, day) {
+  const lim = subjectSlots?.get(String(subjectId));
+  return !lim?.days || lim.days.has(day);
 }
 
 // classKelasType: 'PA', 'PI', or 'PA_PI' (no restriction)
@@ -185,6 +190,7 @@ function greedyPass(lessons, teachers, days, slotsByTingkat, hoursByDayByTingkat
           const limits = teacherLimits.get(teacher.id) || {};
           for (const day of shuffle([...days])) {
             if (preferNewDay && usedDays.has(day)) continue;
+            if (!subjectDayAllowed(subjectSlots, subjectId, day)) continue;
             if (limits.availableDays && !limits.availableDays.has(day)) continue;
             const wl = teacherLoadWeek.get(teacher.id) || 0;
             if (limits.maxWeek != null && wl + 2 > limits.maxWeek) continue;
@@ -246,6 +252,7 @@ function greedyPass(lessons, teachers, days, slotsByTingkat, hoursByDayByTingkat
 
         const allSlots = [];
         for (const day of days) {
+          if (!subjectDayAllowed(subjectSlots, subjectId, day)) continue;
           if (limits.availableDays && !limits.availableDays.has(day)) continue;
           const wl = teacherLoadWeek.get(teacher.id) || 0;
           if (limits.maxWeek != null && wl >= limits.maxWeek) continue;
@@ -327,6 +334,7 @@ function swapRepair(schedule, unassigned, teachers, days, slotsByTingkat, hoursB
           const wl = teacherLoadWeek.get(String(teacher.id)) || 0;
           if (limits.maxWeek != null && wl + 2 > limits.maxWeek) continue;
           for (const day of shuffle([...days])) {
+            if (!subjectDayAllowed(subjectSlots, subjectId, day)) continue;
             if (limits.availableDays && !limits.availableDays.has(day)) continue;
             const dl = teacherLoadDay.get(`${teacher.id}-${day}`) || 0;
             if (limits.maxDay != null && dl + 2 > limits.maxDay) continue;
@@ -378,6 +386,7 @@ function swapRepair(schedule, unassigned, teachers, days, slotsByTingkat, hoursB
 
     for (const { day, hour } of shuffle(freeClassSlots)) {
       if (fixed) break;
+      if (!subjectDayAllowed(subjectSlots, subjectId, day)) continue;
 
       for (const teacher of shuffle(viable)) {
         if (fixed) break;
@@ -407,6 +416,7 @@ function swapRepair(schedule, unassigned, teachers, days, slotsByTingkat, hoursB
           const conflictTingkat = extractTingkat(conflict.kelasName || '');
           const altSlots = [];
           for (const d2 of days) {
+            if (!subjectDayAllowed(subjectSlots, conflict.mapelId, d2)) continue;
             if (limits.availableDays && !limits.availableDays.has(d2)) continue;
             const h2slots = getActiveSlots(d2, conflictTingkat || classTingkat, slotsByTingkat, hoursByDayByTingkat, hoursByDay);
             for (const h2 of h2slots) {
@@ -528,6 +538,7 @@ function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, ho
     const need = group.length;
 
     for (const d2 of shuffle([...days])) {
+      if (!subjectDayAllowed(subjectSlots, r.mapelId, d2)) continue;
       if (limits.availableDays && !limits.availableDays.has(d2)) continue;
       if (d2 !== r.hari && limits.maxDay != null && (loadDay.get(`${r.guruId}-${d2}`) || 0) + need > limits.maxDay) continue;
       const slots = getActiveSlots(d2, tkt, slotsByTingkat, hoursByDayByTingkat, hoursByDay)
@@ -635,6 +646,7 @@ function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, ho
 
       for (const day of shuffle([...days])) {
         if (fixed) break;
+        if (!subjectDayAllowed(subjectSlots, subjectId, day)) continue;
         if (limits.availableDays && !limits.availableDays.has(day)) continue;
         const dl = loadDay.get(`${tid}-${day}`) || 0;
         if (limits.maxDay != null && dl + need > limits.maxDay) continue;
@@ -766,6 +778,7 @@ function consolidatePairs(schedule, classNameMap, slotsByTingkat, hoursByDayByTi
         if (targetJam < 1) return false;
         if (!slotAllowed(teacherLimits.get(Number(movable.guruId)), targetJam)) return false;
         if (!subjectSlotAllowed(subjectSlots, schedule[movable.idx].mapelId, targetJam)) return false;
+        if (!subjectDayAllowed(subjectSlots, schedule[movable.idx].mapelId, targetHari)) return false;
         const active = getActiveSlots(targetHari, classTingkat, slotsByTingkat, hoursByDayByTingkat, hoursByDay);
         if (!active.includes(targetJam)) return false;
         const newCK = `${movable.kelas}-${targetHari}-${targetJam}`;
@@ -822,10 +835,17 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
 
   const teacherSubjects = buildTeacherSubjectsMap(teacherSubjectsRaw);
   const teacherLimits = buildTeacherLimitsMap(teacherLimitsRaw);
-  // Jam tersedia per mapel: Map(String(subjectId) -> Set jam). Kosong/null = semua jam.
+  // Batasan per mapel: jam tersedia (slots) dan hari tersedia (days).
+  // Kosong/null = tanpa pembatasan.
   const subjectSlots = new Map(subjectLimitsRaw
-    .filter(r => Array.isArray(r.available_slots) && r.available_slots.length > 0)
-    .map(r => [String(r.subject_id), new Set(r.available_slots.map(Number))]));
+    .filter(r => (Array.isArray(r.available_slots) && r.available_slots.length > 0) ||
+                 (Array.isArray(r.available_days) && r.available_days.length > 0))
+    .map(r => [String(r.subject_id), {
+      slots: Array.isArray(r.available_slots) && r.available_slots.length > 0
+        ? new Set(r.available_slots.map(Number)) : null,
+      days: Array.isArray(r.available_days) && r.available_days.length > 0
+        ? new Set(r.available_days) : null
+    }]));
   const classNameMap = new Map(classes.map(c => [c.id, c.name]));
 
   // Class kelas_type: 'PA', 'PI', or 'PA_PI' (no restriction)
@@ -1209,12 +1229,17 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
           if (!classBusyFinal.has(`${g.classId}-${day}-${h}`)) allFreeSlots.push({ day, hour: h });
         }
       }
-      const freeSlots = allFreeSlots.filter(s => subjectSlotAllowed(subjectSlots, g.subjectId, s.hour));
+      const freeSlots = allFreeSlots.filter(s =>
+        subjectSlotAllowed(subjectSlots, g.subjectId, s.hour) &&
+        subjectDayAllowed(subjectSlots, g.subjectId, s.day));
       if (allFreeSlots.length === 0) {
         reason = `Semua ${capacity} slot aktif kelas ${kelasName} sudah terisi, sedangkan total kebutuhan kurikulum kelas ini ${required} jam/minggu. Tambah hari aktif / jam per hari di Step 1, atau kurangi jam mapel di Step 2.`;
       } else if (freeSlots.length === 0) {
-        const jamMapel = [...(subjectSlots.get(String(g.subjectId)) || [])].sort((a, b) => a - b).join(', ');
-        reason = `Mapel ${mapelName} dibatasi hanya boleh di jam ke-${jamMapel} (Step 4), dan semua slot tersebut di kelas ${kelasName} sudah terisi mapel lain.`;
+        const sLim = subjectSlots.get(String(g.subjectId));
+        const parts = [];
+        if (sLim?.slots) parts.push(`jam ke-${[...sLim.slots].sort((a, b) => a - b).join(', ')}`);
+        if (sLim?.days) parts.push(`hari ${[...sLim.days].join(', ')}`);
+        reason = `Mapel ${mapelName} dibatasi hanya boleh di ${parts.join(' dan ')} (Step 4), dan semua slot tersebut di kelas ${kelasName} sudah terisi mapel lain.`;
       } else {
         reason = `${g.count} jam ${mapelName} belum terjadwal. Kondisi tiap guru pengampu:`;
         guruDetail = candidates.map(t => {

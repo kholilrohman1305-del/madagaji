@@ -107,9 +107,12 @@ export default function JadwalGuru() {
       </div>
 
       {filteredTeachers.map(t => {
+        // Multi-kelas: guru bisa mengampu 2+ kelas di jam yang sama — kumpulkan semua
         const grid = new Map();
         t.items.forEach(i => {
-          grid.set(`${i.hari}-${i.jamKe}`, {
+          const key = `${i.hari}-${i.jamKe}`;
+          if (!grid.has(key)) grid.set(key, []);
+          grid.get(key).push({
             kelas: kelasNameById.get(String(i.kelas)) || i.kelas,
             mapel: subjectNameById.get(String(i.mapelId)) || i.mapelId,
             mapelId: i.mapelId
@@ -144,13 +147,15 @@ export default function JadwalGuru() {
                     <th className="teacher-day">{d}</th>
                     {Array.from({ length: maxJam }).map((_, i) => {
                       const jamKe = i + 1;
-                      const val = grid.get(`${d}-${jamKe}`);
+                      const vals = grid.get(`${d}-${jamKe}`) || [];
+                      const first = vals[0];
+                      const mapels = [...new Set(vals.map(v => v.mapel))];
                       return (
-                        <td key={`${d}-${jamKe}`} className="teacher-cell" style={{ background: subjectColor(val?.mapelId) }}>
-                          {val ? (
+                        <td key={`${d}-${jamKe}`} className="teacher-cell" style={{ background: subjectColor(first?.mapelId) }}>
+                          {first ? (
                             <div className="teacher-cell-content">
-                              <div className="teacher-cell-kelas">{val.kelas}</div>
-                              <div className="teacher-cell-mapel">{val.mapel}</div>
+                              <div className="teacher-cell-kelas">{vals.map(v => v.kelas).join(', ')}</div>
+                              <div className="teacher-cell-mapel">{mapels.join(', ')}</div>
                             </div>
                           ) : null}
                         </td>

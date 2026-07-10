@@ -268,7 +268,10 @@ export default function AutoSchedule() {
         setTeacherLimitsLocal(tlMap);
         const slMap = {};
         (metaRes.data?.subjectLimits || []).forEach(sl => {
-          slMap[sl.subject_id] = Array.isArray(sl.available_slots) ? sl.available_slots.map(Number) : [];
+          slMap[sl.subject_id] = {
+            slots: Array.isArray(sl.available_slots) ? sl.available_slots.map(Number) : [],
+            days: Array.isArray(sl.available_days) ? sl.available_days : []
+          };
         });
         setSubjectLimitsLocal(slMap);
       })
@@ -779,18 +782,36 @@ export default function AutoSchedule() {
     }));
   };
 
-  // Jam tersedia per MAPEL (berlaku untuk semua guru pengampu mapel itu)
+  // Jam & hari tersedia per MAPEL (berlaku untuk semua guru pengampu mapel itu)
+  const getSubjectLim = (prev, subjectId) =>
+    prev[subjectId] || prev[String(subjectId)] || { slots: [], days: [] };
+
   const toggleSubjectSlot = (subjectId, jam) => {
     setSubjectLimitsLocal(prev => {
-      const cur = [...(prev[subjectId] || prev[String(subjectId)] || [])].map(Number);
-      const idx = cur.indexOf(Number(jam));
-      if (idx >= 0) cur.splice(idx, 1); else cur.push(Number(jam));
-      return { ...prev, [subjectId]: cur.sort((a, b) => a - b) };
+      const cur = getSubjectLim(prev, subjectId);
+      const slots = [...(cur.slots || [])].map(Number);
+      const idx = slots.indexOf(Number(jam));
+      if (idx >= 0) slots.splice(idx, 1); else slots.push(Number(jam));
+      return { ...prev, [subjectId]: { ...cur, slots: slots.sort((a, b) => a - b) } };
     });
   };
 
   const clearSubjectSlots = (subjectId) => {
-    setSubjectLimitsLocal(prev => ({ ...prev, [subjectId]: [] }));
+    setSubjectLimitsLocal(prev => ({ ...prev, [subjectId]: { ...getSubjectLim(prev, subjectId), slots: [] } }));
+  };
+
+  const toggleSubjectDay = (subjectId, day) => {
+    setSubjectLimitsLocal(prev => {
+      const cur = getSubjectLim(prev, subjectId);
+      const daysArr = [...(cur.days || [])];
+      const idx = daysArr.indexOf(day);
+      if (idx >= 0) daysArr.splice(idx, 1); else daysArr.push(day);
+      return { ...prev, [subjectId]: { ...cur, days: daysArr } };
+    });
+  };
+
+  const clearSubjectDays = (subjectId) => {
+    setSubjectLimitsLocal(prev => ({ ...prev, [subjectId]: { ...getSubjectLim(prev, subjectId), days: [] } }));
   };
 
   const applyBulkLimits = () => {
@@ -818,9 +839,10 @@ export default function AutoSchedule() {
       availableDays: l.availableDays?.length > 0 ? l.availableDays : null
     }));
     await api.put('/scheduler/teacher-limits-bulk', { limits });
-    const subjectLimits = Object.entries(subjectLimitsLocal).map(([subjectId, arr]) => ({
+    const subjectLimits = Object.entries(subjectLimitsLocal).map(([subjectId, v]) => ({
       subjectId,
-      availableSlots: arr?.length > 0 ? arr.map(Number) : null
+      availableSlots: v?.slots?.length > 0 ? v.slots.map(Number) : null,
+      availableDays: v?.days?.length > 0 ? v.days : null
     }));
     if (subjectLimits.length > 0) {
       await api.put('/scheduler/subject-limits-bulk', { limits: subjectLimits });
@@ -1025,7 +1047,8 @@ export default function AutoSchedule() {
         if (lim.availableDays?.length && !lim.availableDays.includes(hari)) continue;
         if (lim.availableSlots?.length && !lim.availableSlots.includes(Number(jamKe))) continue;
         const sLim = subjectLimitsLocal[sid] || subjectLimitsLocal[String(sid)];
-        if (sLim?.length && !sLim.includes(Number(jamKe))) continue;
+        if (sLim?.slots?.length && !sLim.slots.map(Number).includes(Number(jamKe))) continue;
+        if (sLim?.days?.length && !sLim.days.includes(hari)) continue;
         const busy = generated.some(r => String(r.guruId) === String(tid) && r.hari === hari && String(r.jamKe) === String(jamKe));
         if (busy) continue;
         const loadWeek = generated.filter(r => String(r.guruId) === String(tid)).length;
@@ -1750,23 +1773,30 @@ export default function AutoSchedule() {
           </div>
           {/* Jam tersedia per mapel */}
           <div style={{ marginTop: 26 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#334155', marginBottom: 6 }}>Jam Tersedia per Mapel</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#334155', marginBottom: 6 }}>Jam & Hari Tersedia per Mapel</div>
             <p style={{ fontSize: 12.5, color: '#64748b', marginBottom: 10 }}>
-              Tanpa centang = mapel boleh di semua jam. Contoh: centang jam 1–4 untuk Penjas agar selalu terjadwal pagi — berlaku untuk semua guru pengampunya.
+              Tanpa centang = mapel boleh di semua jam/hari. Contoh: centang jam 1–4 untuk Penjas agar selalu terjadwal pagi — berlaku untuk semua guru pengampunya.
             </p>
             <div style={{ overflowX: 'auto' }}>
-              <table className="table" style={{ minWidth: 560 }}>
-                <thead><tr><th>Mapel</th><th>Jam Tersedia</th></tr></thead>
+              <table className="table" style={{ minWidth: 720 }}>
+                <thead><tr><th>Mapel</th><th>Jam Tersedia</th><th>Hari Tersedia</th></tr></thead>
                 <tbody>
                   {(meta?.subjects || []).map(s => {
-                    const arr = (subjectLimitsLocal[s.id] || subjectLimitsLocal[String(s.id)] || []).map(Number);
+                    const sl = subjectLimitsLocal[s.id] || subjectLimitsLocal[String(s.id)] || { slots: [], days: [] };
+                    const slotArr = (sl.slots || []).map(Number);
+                    const dayArr = sl.days || [];
                     return (
                       <tr key={s.id}>
                         <td style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap' }}>
                           {s.name}
-                          {arr.length > 0 && (
+                          {slotArr.length > 0 && (
                             <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8, background: '#fef3c7', color: '#92400e' }}>
-                              jam {arr.join(',')}
+                              jam {slotArr.join(',')}
+                            </span>
+                          )}
+                          {dayArr.length > 0 && (
+                            <span style={{ marginLeft: 4, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8, background: '#dbeafe', color: '#1e40af' }}>
+                              {dayArr.map(d => d.slice(0, 3)).join(',')}
                             </span>
                           )}
                         </td>
@@ -1774,13 +1804,28 @@ export default function AutoSchedule() {
                           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                             {Array.from({ length: globalMaxHours || 8 }, (_, i) => i + 1).map(jam => (
                               <label key={jam} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
-                                <input type="checkbox" checked={arr.includes(jam)} onChange={() => toggleSubjectSlot(s.id, jam)} />
+                                <input type="checkbox" checked={slotArr.includes(jam)} onChange={() => toggleSubjectSlot(s.id, jam)} />
                                 {jam}
                               </label>
                             ))}
-                            {arr.length > 0 && (
+                            {slotArr.length > 0 && (
                               <button className="btn sm outline" style={{ fontSize: 10, padding: '2px 7px' }} onClick={() => clearSubjectSlots(s.id)}>
                                 Semua Jam
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                            {days.map(day => (
+                              <label key={day} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                                <input type="checkbox" checked={dayArr.includes(day)} onChange={() => toggleSubjectDay(s.id, day)} />
+                                {day.slice(0, 3)}
+                              </label>
+                            ))}
+                            {dayArr.length > 0 && (
+                              <button className="btn sm outline" style={{ fontSize: 10, padding: '2px 7px' }} onClick={() => clearSubjectDays(s.id)}>
+                                Semua Hari
                               </button>
                             )}
                           </div>
@@ -1854,9 +1899,13 @@ export default function AutoSchedule() {
               }
             }
             if (plotEdit && plotMapel) {
-              const sLim = (subjectLimitsLocal[plotMapel] || subjectLimitsLocal[String(plotMapel)] || []).map(Number);
-              if (sLim.length && !sLim.includes(Number(plotEdit.jam))) {
-                warns.push(`Jam ke-${plotEdit.jam} di luar jam tersedia mapel ini (jam ${sLim.join(', ')}).`);
+              const sLim = subjectLimitsLocal[plotMapel] || subjectLimitsLocal[String(plotMapel)] || {};
+              const sSlots = (sLim.slots || []).map(Number);
+              if (sSlots.length && !sSlots.includes(Number(plotEdit.jam))) {
+                warns.push(`Jam ke-${plotEdit.jam} di luar jam tersedia mapel ini (jam ${sSlots.join(', ')}).`);
+              }
+              if (sLim.days?.length && !sLim.days.includes(plotEdit.hari)) {
+                warns.push(`Hari ${plotEdit.hari} di luar hari tersedia mapel ini (${sLim.days.join(', ')}).`);
               }
             }
             return (
@@ -2326,16 +2375,24 @@ export default function AutoSchedule() {
                               <tr key={jam}>
                                 <td style={{ padding: '5px', textAlign: 'center', fontWeight: 700, fontSize: 13, color: 'var(--primary-700)', background: '#f8fafc', border: '1px solid #e2e8f0' }}>{jam}</td>
                                 {days.map(hari => {
-                                  const row = guruRows.find(r => r.hari === hari && String(r.jamKe) === String(jam));
-                                  const cls = row ? meta.classes?.find(c => String(c.id) === String(row.kelas)) : null;
-                                  const subj = row ? meta.subjects?.find(s => String(s.id) === String(row.mapelId)) : null;
-                                  const color = row ? (mapelColors[row.mapelId] || { bg: '#f1f5f9', text: '#475569' }) : null;
+                                  // Multi-kelas: satu guru bisa mengampu 2+ kelas di jam
+                                  // yang sama (plot manual) — tampilkan semuanya
+                                  const rowsAt = guruRows.filter(r => r.hari === hari && String(r.jamKe) === String(jam));
+                                  const first = rowsAt[0];
+                                  const color = first ? (mapelColors[first.mapelId] || { bg: '#f1f5f9', text: '#475569' }) : null;
+                                  const kelasNames = rowsAt.map(r =>
+                                    meta.classes?.find(c => String(c.id) === String(r.kelas))?.name || r.kelas);
+                                  const mapelNames = [...new Set(rowsAt.map(r =>
+                                    meta.subjects?.find(s => String(s.id) === String(r.mapelId))?.name || r.mapelId))];
                                   return (
                                     <td key={hari} style={{ padding: '4px', border: '1px solid #e2e8f0', background: '#fff', verticalAlign: 'middle' }}>
-                                      {row ? (
+                                      {first ? (
                                         <div style={{ borderRadius: 7, padding: '5px 8px', background: color.bg, color: color.text, minHeight: 42, fontSize: 12 }}>
-                                          <div style={{ fontWeight: 700, lineHeight: 1.3 }}>{cls?.name || row.kelas}</div>
-                                          <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{subj?.name || row.mapelId}</div>
+                                          <div style={{ fontWeight: 700, lineHeight: 1.3 }}>
+                                            {kelasNames.join(', ')}
+                                            {rowsAt.length > 1 && <span style={{ fontSize: 9, fontWeight: 800, marginLeft: 4, padding: '1px 5px', borderRadius: 6, background: 'rgba(0,0,0,.12)' }}>{rowsAt.length} kelas</span>}
+                                          </div>
+                                          <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{mapelNames.join(', ')}</div>
                                         </div>
                                       ) : (
                                         <div style={{ height: 42 }} />

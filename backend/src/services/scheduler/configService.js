@@ -173,17 +173,18 @@ async function upsertTeacherLimitsBulk(limits) {
   return { success: true, message: `${limits.length} batas jam guru diperbarui.` };
 }
 
-// Jam tersedia per mapel: [{ subject_id, available_slots }] — null = semua jam
+// Jam & hari tersedia per mapel: [{ subject_id, available_slots, available_days }]
+// null = tanpa pembatasan
 async function getSubjectLimits() {
   const cached = cacheGet('subjectLimits');
   if (cached) return cached;
   try {
-    const [rows] = await pool.query('SELECT subject_id, available_slots FROM subject_limits');
+    const [rows] = await pool.query('SELECT subject_id, available_slots, available_days FROM subject_limits');
+    const parseJson = (v) => v ? (typeof v === 'string' ? JSON.parse(v) : v) : null;
     const parsed = rows.map(r => ({
       subject_id: r.subject_id,
-      available_slots: r.available_slots
-        ? (typeof r.available_slots === 'string' ? JSON.parse(r.available_slots) : r.available_slots)
-        : null
+      available_slots: parseJson(r.available_slots),
+      available_days: parseJson(r.available_days)
     }));
     cacheSet('subjectLimits', parsed);
     return parsed;
@@ -198,15 +199,18 @@ async function upsertSubjectLimitsBulk(limits) {
   }
   const queries = limits.map(l =>
     pool.query(
-      `INSERT INTO subject_limits (subject_id, available_slots) VALUES (?, ?)
-       ON DUPLICATE KEY UPDATE available_slots=VALUES(available_slots)`,
+      `INSERT INTO subject_limits (subject_id, available_slots, available_days) VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         available_slots=VALUES(available_slots),
+         available_days=VALUES(available_days)`,
       [l.subjectId || l.subject_id,
-       l.availableSlots != null ? JSON.stringify(l.availableSlots) : null]
+       l.availableSlots != null ? JSON.stringify(l.availableSlots) : null,
+       l.availableDays != null ? JSON.stringify(l.availableDays) : null]
     )
   );
   await Promise.all(queries);
   invalidateMetaCache();
-  return { success: true, message: `Jam tersedia ${limits.length} mapel diperbarui.` };
+  return { success: true, message: `Batasan ${limits.length} mapel diperbarui.` };
 }
 
 async function getScheduleConfig(name = 'default') {

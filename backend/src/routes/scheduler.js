@@ -79,7 +79,7 @@ const router = express.Router();
     console.warn('[available_slots migration]', e.message);
   }
 
-  // Migration: subject_limits — jam tersedia per MAPEL (mis. Penjas jam 1-4)
+  // Migration: subject_limits — jam & hari tersedia per MAPEL (mis. Penjas jam 1-4)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS subject_limits (
       subject_id INT NOT NULL PRIMARY KEY,
@@ -87,6 +87,7 @@ const router = express.Router();
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `).catch(() => {});
+  await pool.query(`ALTER TABLE subject_limits ADD COLUMN available_days JSON NULL`).catch(() => {});
 
   // One-time migration: standardize day name 'Ahad' → 'Minggu'.
   // AutoSchedule always wrote 'Minggu', but old data/UI used 'Ahad', so
