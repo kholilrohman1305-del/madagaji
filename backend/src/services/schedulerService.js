@@ -868,8 +868,8 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
       unassigned = ej.remaining;
       if (unassigned.length >= before) break;
     }
-    // Last resort: pairs may take any 2 same-day slots (still never split
-    // across days); consolidatePairs merges them afterwards when possible.
+    // Pairs may take any 2 same-day slots (still never split across days);
+    // consolidatePairs merges them afterwards when possible.
     if (unassigned.length > 0) {
       const ej2 = ejectionRepair(
         schedule, unassigned, teachers, days,
@@ -878,6 +878,24 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
       );
       schedule = ej2.schedule;
       unassigned = ej2.remaining;
+    }
+    // FINAL last resort: daripada jam dibiarkan kosong, sisa pasangan dipecah
+    // jadi slot 1-jam dan diisikan ke slot valid mana pun yang tersisa
+    // (persis rekomendasi "masih bisa diisi manual" — kini otomatis).
+    // consolidatePairs tetap mencoba merapatkannya kembali setelah ini.
+    if (unassigned.length > 0) {
+      const singles = [];
+      for (const l of unassigned) {
+        if (l.slotCount === 2) singles.push({ ...l, slotCount: 1 }, { ...l, slotCount: 1 });
+        else singles.push(l);
+      }
+      const ej3 = ejectionRepair(
+        schedule, singles, teachers, days,
+        slotsByTingkat, hoursByDayByTingkat, hoursByDay,
+        teacherSubjects, teacherLimits, classNameMap, true
+      );
+      schedule = ej3.schedule;
+      unassigned = ej3.remaining;
     }
 
     if (unassigned.length < bestUnassigned.length) {
