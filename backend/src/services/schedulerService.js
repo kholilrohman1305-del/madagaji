@@ -624,7 +624,9 @@ function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, ho
   };
 
   const remaining = [];
-  const ordered = [...unassigned].sort((a, b) => (b.slotCount || 1) - (a.slotCount || 1)); // pairs first
+  // Shuffle dulu agar tiap percobaan memproses urutan berbeda (lesson di
+  // ujung antrian tidak kelaparan waktu saat deadline ketat), lalu pairs first
+  const ordered = shuffle([...unassigned]).sort((a, b) => (b.slotCount || 1) - (a.slotCount || 1));
 
   for (const lesson of ordered) {
     if (Date.now() > deadline) { remaining.push(lesson); continue; }
@@ -729,6 +731,217 @@ function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, ho
     if (!fixed) remaining.push(lesson);
   }
 
+  return { schedule, remaining };
+}
+
+// Cycle-swap repair: gerakan TUKAR (bukan relokasi ke slot kosong).
+// Kasus: lesson (kelas C, guru T) butuh slot t1 (C kosong di t1) tapi T sedang
+// mengajar kelas D di t1. Solusi: tukar jam dua pelajaran DI DALAM kelas D —
+// pelajaran T (di t1) bertukar dengan pelajaran guru lain T2 (di t2, dengan
+// T bebas di t2 dan T2 bebas di t1). Okupansi kelas D tidak berubah, tapi
+// T menjadi bebas di t1 → lesson bisa masuk. Tidak butuh slot kosong,
+// sehingga menembus kebuntuan saat semua guru jenuh. Hanya slot tunggal
+// (dipanggil pada fase akhir setelah pasangan dipecah).
+function cycleSwapRepair(schedule, unassigned, teachers, days, slotsByTingkat, hoursByDayByTingkat, hoursByDay, teacherSubjects, teacherLimits, classNameMap, subjectSlots, deadline = Infinity) {
+  if (unassigned.length === 0) return { schedule, remaining: [] };
+
+  const classAt = new Map();
+  const teacherCount = new Map();
+  const teacherAt = new Map();
+  const loadWeek = new Map();
+  const loadDay = new Map();
+  const classRows = new Map(); // kelas -> [indices]
+  schedule.forEach((r, i) => {
+    classAt.set(`${r.kelas}-${r.hari}-${r.jamKe}`, i);
+    const tk = `${r.guruId}-${r.hari}-${r.jamKe}`;
+    teacherCount.set(tk, (teacherCount.get(tk) || 0) + 1);
+    teacherAt.set(tk, i);
+    loadWeek.set(String(r.guruId), (loadWeek.get(String(r.guruId)) || 0) + 1);
+    loadDay.set(`${r.guruId}-${r.hari}`, (loadDay.get(`${r.guruId}-${r.hari}`) || 0) + 1);
+    if (!classRows.has(String(r.kelas))) classRows.set(String(r.kelas), []);
+    classRows.get(String(r.kelas)).push(i);
+  });
+
+  const tingkatOfClass = (kelasId) => extractTingkat(classNameMap.get(Number(kelasId)) || '');
+
+  const setRowTime = (idx, d2, h2) => {
+    const r = schedule[idx];
+    classAt.delete(`${r.kelas}-${r.hari}-${r.jamKe}`);
+    const oldTK = `${r.guruId}-${r.hari}-${r.jamKe}`;
+    const c = teacherCount.get(oldTK) || 1;
+    if (c <= 1) { teacherCount.delete(oldTK); teacherAt.delete(oldTK); }
+    else teacherCount.set(oldTK, c - 1);
+    loadDay.set(`${r.guruId}-${r.hari}`, Math.max(0, (loadDay.get(`${r.guruId}-${r.hari}`) || 1) - 1));
+    schedule[idx] = { ...r, hari: d2, jamKe: String(h2) };
+    classAt.set(`${r.kelas}-${d2}-${h2}`, idx);
+    const nTK = `${r.guruId}-${d2}-${h2}`;
+    teacherCount.set(nTK, (teacherCount.get(nTK) || 0) + 1);
+    teacherAt.set(nTK, idx);
+    loadDay.set(`${r.guruId}-${d2}`, (loadDay.get(`${r.guruId}-${d2}`) || 0) + 1);
+  };
+
+  // Boleh-tidaknya sebuah row dipindah ke (day, hour): guru & mapel row itu
+  const rowFitsAt = (row, day, hour, ignoreTeacherBusy) => {
+    const lim = teacherLimits.get(Number(row.guruId)) || {};
+    if (lim.availableDays && !lim.availableDays.has(day)) return false;
+    if (!slotAllowed(lim, hour)) return false;
+    if (!subjectDayAllowed(subjectSlots, row.mapelId, day)) return false;
+    if (!subjectSlotAllowed(subjectSlots, row.mapelId, hour)) return false;
+    if (!ignoreTeacherBusy && (teacherCount.get(`${row.guruId}-${day}-${hour}`) || 0) > 0) return false;
+    if (day !== row.hari && lim.maxDay != null && (loadDay.get(`${row.guruId}-${day}`) || 0) >= lim.maxDay) return false;
+    return true;
+  };
+
+  const remaining = [];
+  for (const lesson of unassigned) {
+    if (Date.now() > deadline) { remaining.push(lesson); continue; }
+    if (lesson.slotCount === 2) { remaining.push(lesson); continue; }
+    const { classId, classTingkat, classKelasType, subjectId } = lesson;
+    const candidates = shuffle(teachers.filter(t => {
+      if (!canTeachSubject(teacherSubjects, t.id, subjectId, classTingkat, classId)) return false;
+      const pref = (teacherLimits.get(t.id) || {}).classGenderPref || 'both';
+      return canTeachKelas(pref, classKelasType);
+    }));
+    let fixed = false;
+
+    for (const teacher of candidates) {
+      if (fixed) break;
+      const tid = String(teacher.id);
+      const limits = teacherLimits.get(teacher.id) || {};
+      if (limits.maxWeek != null && (loadWeek.get(tid) || 0) + 1 > limits.maxWeek) continue;
+
+      for (const day of shuffle([...days])) {
+        if (fixed) break;
+        if (!subjectDayAllowed(subjectSlots, subjectId, day)) continue;
+        if (limits.availableDays && !limits.availableDays.has(day)) continue;
+        if (limits.maxDay != null && (loadDay.get(`${tid}-${day}`) || 0) + 1 > limits.maxDay) continue;
+
+        const slots = getActiveSlots(day, classTingkat, slotsByTingkat, hoursByDayByTingkat, hoursByDay)
+          .filter(h => slotAllowed(limits, h) && subjectSlotAllowed(subjectSlots, subjectId, h));
+        for (const t1 of shuffle([...slots])) {
+          if (fixed) break;
+          if (classAt.has(`${classId}-${day}-${t1}`)) continue; // slot kelas harus kosong
+          const tk1 = `${tid}-${day}-${t1}`;
+          const busyCount = teacherCount.get(tk1) || 0;
+
+          if (busyCount === 0) {
+            // langsung isi (jarang sampai sini, ejection biasanya sudah)
+            schedule.push({ hari: day, jamKe: String(t1), kelas: String(classId), mapelId: String(subjectId), guruId: tid });
+            const ni = schedule.length - 1;
+            classAt.set(`${classId}-${day}-${t1}`, ni);
+            teacherCount.set(tk1, 1); teacherAt.set(tk1, ni);
+            loadWeek.set(tid, (loadWeek.get(tid) || 0) + 1);
+            loadDay.set(`${tid}-${day}`, (loadDay.get(`${tid}-${day}`) || 0) + 1);
+            if (!classRows.has(String(classId))) classRows.set(String(classId), []);
+            classRows.get(String(classId)).push(ni);
+            fixed = true;
+            break;
+          }
+          if (busyCount > 1) continue; // multi-kelas locked
+          const rIdx = teacherAt.get(tk1);
+          if (rIdx === undefined || schedule[rIdx].locked) continue;
+          const R = schedule[rIdx]; // pelajaran T di kelas D pada t1
+
+          // Gerakan 1 — SUBSTITUSI GURU: alihkan pelajaran R ke guru lain
+          // yang juga mengampu mapel itu di kelas D dan bebas di t1.
+          // T langsung bebas tanpa memindah slot apa pun.
+          const dTingkat = tingkatOfClass(R.kelas);
+          const subs = shuffle(teachers.filter(t3 => {
+            if (String(t3.id) === tid || String(t3.id) === String(R.guruId)) return false;
+            return canTeachSubject(teacherSubjects, t3.id, R.mapelId, dTingkat, R.kelas);
+          }));
+          // Blok mapel yang sama satu hari (pasangan) disubstitusi UTUH
+          const subGroup = [rIdx];
+          for (const gi of (classRows.get(String(R.kelas)) || [])) {
+            if (gi === rIdx) continue;
+            const g = schedule[gi];
+            if (String(g.mapelId) === String(R.mapelId) && g.hari === day && String(g.guruId) === String(R.guruId) && !g.locked) {
+              subGroup.push(gi);
+            }
+          }
+          for (const t3 of subs) {
+            const l3 = teacherLimits.get(t3.id) || {};
+            const t3id = String(t3.id);
+            const fits = subGroup.every(gi => {
+              const h = Number(schedule[gi].jamKe);
+              if ((teacherCount.get(`${t3id}-${day}-${h}`) || 0) > 0) return false;
+              if (!slotAllowed(l3, h)) return false;
+              return true;
+            });
+            if (!fits) continue;
+            if (l3.availableDays && !l3.availableDays.has(day)) continue;
+            if (l3.maxWeek != null && (loadWeek.get(t3id) || 0) + subGroup.length > l3.maxWeek) continue;
+            if (l3.maxDay != null && (loadDay.get(`${t3id}-${day}`) || 0) + subGroup.length > l3.maxDay) continue;
+            // ganti guru seluruh blok: T → t3
+            for (const gi of subGroup) {
+              const g = schedule[gi];
+              const oldK = `${g.guruId}-${day}-${g.jamKe}`;
+              teacherCount.delete(oldK); teacherAt.delete(oldK);
+              loadWeek.set(String(g.guruId), Math.max(0, (loadWeek.get(String(g.guruId)) || 1) - 1));
+              loadDay.set(`${g.guruId}-${day}`, Math.max(0, (loadDay.get(`${g.guruId}-${day}`) || 1) - 1));
+              schedule[gi] = { ...g, guruId: t3id };
+              const k3 = `${t3id}-${day}-${g.jamKe}`;
+              teacherCount.set(k3, 1); teacherAt.set(k3, gi);
+              loadWeek.set(t3id, (loadWeek.get(t3id) || 0) + 1);
+              loadDay.set(`${t3id}-${day}`, (loadDay.get(`${t3id}-${day}`) || 0) + 1);
+            }
+            // tempatkan lesson dengan T di t1
+            schedule.push({ hari: day, jamKe: String(t1), kelas: String(classId), mapelId: String(subjectId), guruId: tid });
+            const ni2 = schedule.length - 1;
+            classAt.set(`${classId}-${day}-${t1}`, ni2);
+            teacherCount.set(tk1, 1); teacherAt.set(tk1, ni2);
+            loadWeek.set(tid, (loadWeek.get(tid) || 0) + 1);
+            loadDay.set(`${tid}-${day}`, (loadDay.get(`${tid}-${day}`) || 0) + 1);
+            if (!classRows.has(String(classId))) classRows.set(String(classId), []);
+            classRows.get(String(classId)).push(ni2);
+            fixed = true;
+            break;
+          }
+          if (fixed) break;
+
+          // Gerakan 2 — TUKAR SIKLIK: cari partner tukar di kelas D: R2 (guru
+          // lain) yang jamnya bisa ditempati R, dan R2 bisa menempati t1
+          for (const r2Idx of shuffle([...(classRows.get(String(R.kelas)) || [])])) {
+            if (r2Idx === rIdx) continue;
+            const R2 = schedule[r2Idx];
+            if (R2.locked) continue;
+            if (String(R2.guruId) === tid) continue; // harus guru berbeda agar t1 benar-benar bebas
+            const d2 = R2.hari, h2 = Number(R2.jamKe);
+            // R pindah ke (d2,h2): guru T bebas di sana + semua batasan
+            if (!rowFitsAt(R, d2, h2, false)) continue;
+            // R2 pindah ke (day,t1): guru R2 bebas di t1 + batasan (abaikan
+            // okupansi T di t1 karena T akan pindah)
+            const lim2 = teacherLimits.get(Number(R2.guruId)) || {};
+            if (lim2.availableDays && !lim2.availableDays.has(day)) continue;
+            if (!slotAllowed(lim2, t1)) continue;
+            if (!subjectDayAllowed(subjectSlots, R2.mapelId, day)) continue;
+            if (!subjectSlotAllowed(subjectSlots, R2.mapelId, t1)) continue;
+            if ((teacherCount.get(`${R2.guruId}-${day}-${t1}`) || 0) > 0) continue;
+            if (day !== d2 && lim2.maxDay != null && (loadDay.get(`${R2.guruId}-${day}`) || 0) >= lim2.maxDay) continue;
+
+            // Lakukan tukar: keluarkan R dulu (bebaskan t1), pindah R2 ke t1, R ke t2
+            setRowTime(rIdx, d2, h2 + 10000); // parkir sementara di key unik palsu
+            setRowTime(r2Idx, day, t1);
+            setRowTime(rIdx, d2, h2);
+            // Tempatkan lesson di t1
+            schedule.push({ hari: day, jamKe: String(t1), kelas: String(classId), mapelId: String(subjectId), guruId: tid });
+            const ni = schedule.length - 1;
+            classAt.set(`${classId}-${day}-${t1}`, ni);
+            const ntk = `${tid}-${day}-${t1}`;
+            teacherCount.set(ntk, (teacherCount.get(ntk) || 0) + 1);
+            teacherAt.set(ntk, ni);
+            loadWeek.set(tid, (loadWeek.get(tid) || 0) + 1);
+            loadDay.set(`${tid}-${day}`, (loadDay.get(`${tid}-${day}`) || 0) + 1);
+            if (!classRows.has(String(classId))) classRows.set(String(classId), []);
+            classRows.get(String(classId)).push(ni);
+            fixed = true;
+            break;
+          }
+        }
+      }
+    }
+    if (!fixed) remaining.push(lesson);
+  }
   return { schedule, remaining };
 }
 
@@ -911,11 +1124,15 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
     }
   }
 
-  const RUNS = 12;
-  const TIMEOUT_MS = 9000;
+  // Budget waktu total. Pipeline penuh (restart + repair dalam) DIULANG dari
+  // awal selama budget tersisa dan belum 100% terisi — tiap ulangan memulai
+  // dari susunan greedy acak berbeda, sehingga peluang menemukan susunan
+  // yang 100% terisi bertambah di tiap putaran. Berhenti seketika saat 0.
+  const TOTAL_BUDGET_MS = Number(process.env.SCHEDULER_BUDGET_MS || 40000);
   const start = Date.now();
-  let bestSchedule = [];
-  let bestUnassigned = [...allLessons];
+  const totalDeadline = start + TOTAL_BUDGET_MS;
+  let globalSchedule = [];
+  let globalUnassigned = [...allLessons];
 
   // Lesson difficulty: fewest valid teachers first, then most-restricted
   // teacher availability (guru dengan hari tersedia sedikit dijadwalkan
@@ -932,8 +1149,47 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
     return [l, cands.length * 100 + minDays];
   }));
 
-  for (let run = 0; run < RUNS; run++) {
-    if (Date.now() - start > TIMEOUT_MS) break;
+  // Skor kualitas: prioritas utama jumlah jam gagal, lalu blok mapel yang
+  // terpecah 1-jam (untuk kebutuhan genap), lalu pasangan sehari yang tidak
+  // berurutan. Dipakai memilih hasil terbaik antar-restart — karena banyak
+  // restart mencapai 0 gagal, pemenangnya adalah susunan yang paling rapi.
+  const hoursNeeded = new Map(classSubjectsRaw.map(cs => [`${cs.class_id}|${cs.subject_id}`, cs.hours_per_week || 2]));
+  const qualityScore = (sched, unassignedLen) => {
+    const byGroup = new Map();
+    for (const r of sched) {
+      const k = `${r.kelas}|${r.mapelId}|${r.hari}`;
+      if (!byGroup.has(k)) byGroup.set(k, []);
+      byGroup.get(k).push(Number(r.jamKe));
+    }
+    let lonely = 0, noncons = 0;
+    for (const [k, jams] of byGroup) {
+      const csKey = k.slice(0, k.lastIndexOf('|'));
+      const need = hoursNeeded.get(csKey) || 2;
+      if (need % 2 === 0 && jams.length % 2 === 1) lonely++;
+      jams.sort((a, b) => a - b);
+      for (let j = 0; j + 1 < jams.length; j += 2) {
+        if (jams[j + 1] !== jams[j] + 1) noncons++;
+      }
+    }
+    return unassignedLen * 100000 + lonely * 100 + noncons;
+  };
+
+  let globalScore = Infinity;
+  let outerRound = 0;
+  // Selama belum 0 gagal: terus berputar sampai budget penuh. Setelah 0
+  // tercapai: lanjutkan sebentar (jendela poles) untuk mencari susunan
+  // dengan blok paling rapi, lalu berhenti.
+  const polishDeadline = start + Math.min(15000, TOTAL_BUDGET_MS);
+  while (Date.now() < totalDeadline &&
+         (globalUnassigned.length > 0 || (Date.now() < polishDeadline && globalScore > 0))) {
+  outerRound++;
+  let bestSchedule = [];
+  let bestUnassigned = [...allLessons];
+  let bestScore = Infinity;
+  const restartDeadline = Math.min(Date.now() + 4000, totalDeadline);
+
+  for (let run = 0; run < 12; run++) {
+    if (Date.now() > restartDeadline) break;
 
     const sorted = shuffle([...allLessons]).sort((a, b) => lessonKeys.get(a) - lessonKeys.get(b));
 
@@ -957,7 +1213,7 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
       unassigned = repaired.remaining;
     }
 
-    const deadline = start + TIMEOUT_MS;
+    const deadline = restartDeadline;
     // Ejection: relocate blocking rows (whole 2-hour blocks) to open slots
     for (let round = 0; round < 4 && unassigned.length > 0; round++) {
       const before = unassigned.length;
@@ -981,9 +1237,18 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
       schedule = ej2.schedule;
       unassigned = ej2.remaining;
     }
-    // Last resort in-run: sisa pasangan dipecah jadi slot 1-jam dan diisikan
-    // ke slot valid mana pun (murah, depth 0). Chain dalam (depth 1-2)
-    // dijalankan SEKALI di hasil terbaik setelah semua restart selesai.
+    // Blok utuh dengan ejection depth-1 dulu (tanpa memecah apa pun)
+    if (unassigned.length > 0) {
+      const ej25 = ejectionRepair(
+        schedule, unassigned, teachers, days,
+        slotsByTingkat, hoursByDayByTingkat, hoursByDay,
+        teacherSubjects, teacherLimits, classNameMap, true, 1, deadline, false, subjectSlots
+      );
+      schedule = ej25.schedule;
+      unassigned = ej25.remaining;
+    }
+    // Last resort in-run: sisa pasangan yang benar-benar buntu dipecah jadi
+    // slot 1-jam dan diisikan via ejection depth-1 (blok lain tetap utuh).
     if (unassigned.length > 0) {
       const singles = [];
       for (const l of unassigned) {
@@ -993,48 +1258,92 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
       const ej3 = ejectionRepair(
         schedule, singles, teachers, days,
         slotsByTingkat, hoursByDayByTingkat, hoursByDay,
-        teacherSubjects, teacherLimits, classNameMap, true, 0, deadline, false, subjectSlots
+        teacherSubjects, teacherLimits, classNameMap, true, 1, deadline, false, subjectSlots
       );
       schedule = ej3.schedule;
       unassigned = ej3.remaining;
     }
 
-    if (unassigned.length < bestUnassigned.length) {
+    const runScore = qualityScore(schedule, unassigned.length);
+    if (runScore < bestScore) {
+      bestScore = runScore;
       bestSchedule = schedule;
       bestUnassigned = unassigned;
     }
-    if (bestUnassigned.length === 0) break;
+    if (bestUnassigned.length === 0 && bestScore < 100) break; // 0 gagal & sangat rapi
   }
 
   // Deep ejection chains (depth 1 lalu 2) pada HASIL TERBAIK saja: geser A
   // yang menggeser B untuk membuka slot ketika semua kelas sudah padat.
   // Dijalankan sekali dengan budget waktu tambahan, coba blok utuh dulu,
   // baru pecahan 1-jam sebagai pilihan paling akhir.
-  const deepDeadline = Date.now() + 10000;
-  let deepAttempt = 0;
-  while (bestUnassigned.length > 0 && Date.now() < deepDeadline && deepAttempt < 15) {
-    deepAttempt++;
-    const rPair = ejectionRepair(
-      bestSchedule, bestUnassigned, teachers, days,
-      slotsByTingkat, hoursByDayByTingkat, hoursByDay,
-      teacherSubjects, teacherLimits, classNameMap, true, 2, deepDeadline, false, subjectSlots
-    );
-    bestSchedule = rPair.schedule;
-    bestUnassigned = rPair.remaining;
-    if (bestUnassigned.length === 0 || Date.now() > deepDeadline) break;
-    const singles = [];
-    for (const l of bestUnassigned) {
-      if (l.slotCount === 2) singles.push({ ...l, slotCount: 1 }, { ...l, slotCount: 1 });
-      else singles.push(l);
+  // Dua fase pendalaman. Fase A: depth-2 diulang acak (murah, banyak
+  // percobaan — tiap shuffle membuka jalur rantai berbeda). Fase B: sisa
+  // waktu untuk depth-3 (mahal tapi menjangkau rantai panjang saat semua
+  // guru jenuh dan lubang tersisa sedikit).
+  const runDeepPhase = (phaseDeadline, depth) => {
+    const dbgStart = bestUnassigned.length;
+    let dbgIter = 0;
+    while (bestUnassigned.length > 0 && Date.now() < phaseDeadline) {
+      dbgIter++;
+      const rPair = ejectionRepair(
+        bestSchedule, bestUnassigned, teachers, days,
+        slotsByTingkat, hoursByDayByTingkat, hoursByDay,
+        teacherSubjects, teacherLimits, classNameMap, true, depth, phaseDeadline, false, subjectSlots
+      );
+      bestSchedule = rPair.schedule;
+      bestUnassigned = rPair.remaining;
+      if (bestUnassigned.length === 0 || Date.now() > phaseDeadline) break;
+      const singles = [];
+      for (const l of bestUnassigned) {
+        if (l.slotCount === 2) singles.push({ ...l, slotCount: 1 }, { ...l, slotCount: 1 });
+        else singles.push(l);
+      }
+      const rSingle = ejectionRepair(
+        bestSchedule, singles, teachers, days,
+        slotsByTingkat, hoursByDayByTingkat, hoursByDay,
+        teacherSubjects, teacherLimits, classNameMap, true, depth, phaseDeadline, true, subjectSlots
+      );
+      bestSchedule = rSingle.schedule;
+      bestUnassigned = rSingle.remaining;
+      // Gerakan tukar siklik — menembus kebuntuan tanpa butuh slot kosong
+      if (bestUnassigned.length > 0 && Date.now() < phaseDeadline) {
+        const singles2 = [];
+        for (const l of bestUnassigned) {
+          if (l.slotCount === 2) singles2.push({ ...l, slotCount: 1 }, { ...l, slotCount: 1 });
+          else singles2.push(l);
+        }
+        const rc = cycleSwapRepair(
+          bestSchedule, singles2, teachers, days,
+          slotsByTingkat, hoursByDayByTingkat, hoursByDay,
+          teacherSubjects, teacherLimits, classNameMap, subjectSlots, phaseDeadline
+        );
+        bestSchedule = rc.schedule;
+        bestUnassigned = rc.remaining;
+      }
     }
-    const rSingle = ejectionRepair(
-      bestSchedule, singles, teachers, days,
-      slotsByTingkat, hoursByDayByTingkat, hoursByDay,
-      teacherSubjects, teacherLimits, classNameMap, true, 2, deepDeadline, true, subjectSlots
-    );
-    bestSchedule = rSingle.schedule;
-    bestUnassigned = rSingle.remaining;
+    if (process.env.SCHED_DEBUG) {
+      console.log(`[putaran ${outerRound} deep d${depth}] iter=${dbgIter} sisa ${dbgStart} -> ${bestUnassigned.length}`);
+    }
+  };
+  // Eskalasi murah-dulu: depth-1 menyapu semua kemenangan mudah dengan cepat
+  // (banyak percobaan urutan acak), baru sisa yang bandel diserang depth-2/3.
+  runDeepPhase(Math.min(Date.now() + 3000, totalDeadline), 1);
+  if (bestUnassigned.length > 0) runDeepPhase(Math.min(Date.now() + 3000, totalDeadline), 2);
+  if (bestUnassigned.length > 0) runDeepPhase(Math.min(Date.now() + 2000, totalDeadline), 3);
+
+  const roundScore = qualityScore(bestSchedule, bestUnassigned.length);
+  if (roundScore < globalScore) {
+    globalScore = roundScore;
+    globalSchedule = bestSchedule;
+    globalUnassigned = bestUnassigned;
   }
+  if (process.env.SCHED_DEBUG) {
+    console.log(`[putaran ${outerRound}] gagal=${bestUnassigned.length} skor=${roundScore} | global gagal=${globalUnassigned.length} skor=${globalScore}`);
+  }
+  } // end outer while
+  let bestSchedule = globalSchedule;
+  let bestUnassigned = globalUnassigned;
 
   // Post-process: consolidate same-subject slots per class to same day + consecutive.
   // Run twice: first pass moves cross-day slots together; second pass cleans up any remaining gaps.
@@ -1130,24 +1439,29 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
   // Per-teacher overload: total hours from class+subject combos where this
   // teacher is the ONLY eligible candidate, vs their weekly capacity.
   // (Catches e.g. guru tersedia 2 hari = 16 slot tapi beban wajib 17 jam.)
+  // Demand dihitung dari allLessons (sudah dikurangi slot terkunci), dan
+  // kapasitas dikurangi waktu yang sudah terpakai kunci manual — kunci
+  // multi-kelas (1 waktu guru untuk 2+ kelas) tidak lagi memicu alarm palsu.
   const exclusiveDemand = new Map();
-  for (const cs of classSubjectsRaw) {
-    const className = classNameMap.get(cs.class_id) || '';
-    const ct = extractTingkat(className);
-    const kt = classKelasTypeMap.get(cs.class_id) || 'PA_PI';
+  for (const l of allLessons) {
     const cands = teachers.filter(t => {
-      if (!canTeachSubject(teacherSubjects, t.id, cs.subject_id, ct, cs.class_id)) return false;
+      if (!canTeachSubject(teacherSubjects, t.id, l.subjectId, l.classTingkat, l.classId)) return false;
       const pref = (teacherLimits.get(t.id) || {}).classGenderPref || 'both';
-      return canTeachKelas(pref, kt);
+      return canTeachKelas(pref, l.classKelasType);
     });
     if (cands.length === 1) {
       const id = cands[0].id;
-      exclusiveDemand.set(id, (exclusiveDemand.get(id) || 0) + (cs.hours_per_week || 2));
+      exclusiveDemand.set(id, (exclusiveDemand.get(id) || 0) + (l.slotCount === 2 ? 2 : 1));
     }
+  }
+  const lockedTimesByTeacher = new Map();
+  for (const r of lockedRows) {
+    if (!lockedTimesByTeacher.has(r.teacher_id)) lockedTimesByTeacher.set(r.teacher_id, new Set());
+    lockedTimesByTeacher.get(r.teacher_id).add(`${r.hari}|${r.jam_ke}`);
   }
   capacityWarnings.teachers = [];
   for (const [tid, req] of exclusiveDemand) {
-    const capT = teacherWeekCap(teacherLimits.get(tid));
+    const capT = teacherWeekCap(teacherLimits.get(tid)) - (lockedTimesByTeacher.get(tid)?.size || 0);
     if (req > capT) {
       const t = teachers.find(x => x.id === tid);
       const lim = teacherLimits.get(tid) || {};

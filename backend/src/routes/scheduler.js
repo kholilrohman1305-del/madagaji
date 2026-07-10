@@ -89,6 +89,16 @@ const router = express.Router();
   `).catch(() => {});
   await pool.query(`ALTER TABLE subject_limits ADD COLUMN available_days JSON NULL`).catch(() => {});
 
+  // Normalisasi: kunci manual dengan guru+hari+jam sama di beberapa kelas
+  // (dibuat satu-per-satu via matriks Step 5) adalah multi-kelas yang sah
+  await pool.query(`
+    UPDATE locked_slots ls JOIN (
+      SELECT teacher_id, hari, jam_ke FROM locked_slots
+      GROUP BY teacher_id, hari, jam_ke HAVING COUNT(DISTINCT class_id) > 1
+    ) m ON m.teacher_id = ls.teacher_id AND m.hari = ls.hari AND m.jam_ke = ls.jam_ke
+    SET ls.allow_multi_class = 1
+  `).catch(() => {});
+
   // One-time migration: standardize day name 'Ahad' → 'Minggu'.
   // AutoSchedule always wrote 'Minggu', but old data/UI used 'Ahad', so
   // Sunday rows never matched the Sunday column in jadwal pages.
@@ -299,6 +309,15 @@ router.post('/locked-slots', async (req, res, next) => {
         insertedIds.push(r.insertId || null);
       }
     }
+    // Kunci baru bisa membuat kombinasi multi-kelas dengan kunci lama
+    // (matriks menyimpan satu kelas per simpan) — normalisasi flag-nya
+    await pool.query(`
+      UPDATE locked_slots ls JOIN (
+        SELECT teacher_id, hari, jam_ke FROM locked_slots WHERE teacher_id = ?
+        GROUP BY teacher_id, hari, jam_ke HAVING COUNT(DISTINCT class_id) > 1
+      ) m ON m.teacher_id = ls.teacher_id AND m.hari = ls.hari AND m.jam_ke = ls.jam_ke
+      SET ls.allow_multi_class = 1
+    `, [teacher_id]).catch(() => {});
     res.json({ ids: insertedIds, success: true });
   } catch (e) { next(e); }
 });
