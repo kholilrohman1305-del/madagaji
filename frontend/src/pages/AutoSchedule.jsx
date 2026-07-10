@@ -122,7 +122,7 @@ export default function AutoSchedule() {
   const [slotDuration, setSlotDuration] = useState(45);
   const [startTimeByDay, setStartTimeByDay] = useState({});
   const [slotTimesByTingkat, setSlotTimesByTingkat] = useState({ X: {}, XI: {}, XII: {} });
-  const [copySlotTime, setCopySlotTime] = useState({ start: '07:00', end: '07:45' });
+  const [copyDayTimes, setCopyDayTimes] = useState({ 1: { start: '07:00', end: '07:45' } });
   const [step1Saving, setStep1Saving] = useState(false);
 
   // Step 2
@@ -409,11 +409,30 @@ export default function AutoSchedule() {
     });
   };
 
-  const applyOneTimeToAllSlots = () => {
-    const startMin = timeToMinutes(copySlotTime.start);
-    const endMin = timeToMinutes(copySlotTime.end);
+  const getCopyDayTime = (jam) => {
+    const saved = copyDayTimes[jam] || copyDayTimes[String(jam)];
+    if (saved?.start && saved?.end) return saved;
+    const first = copyDayTimes[1] || { start: '07:00', end: '07:45' };
+    const firstStart = timeToMinutes(first.start) ?? 7 * 60;
+    const firstEnd = timeToMinutes(first.end) ?? firstStart + Number(slotDuration || 45);
+    const duration = Math.max(1, firstEnd - firstStart);
+    const start = firstStart + (Number(jam) - 1) * duration;
+    return { start: minutesToTime(start), end: minutesToTime(start + duration) };
+  };
+
+  const updateCopyDayTime = (jam, field, value) => {
+    setCopyDayTimes(prev => ({
+      ...prev,
+      [jam]: { ...getCopyDayTime(jam), [field]: value }
+    }));
+  };
+
+  const applyDayTemplateToAllSlots = () => {
+    const first = getCopyDayTime(1);
+    const startMin = timeToMinutes(first.start);
+    const endMin = timeToMinutes(first.end);
     if (startMin == null || endMin == null || endMin <= startMin) {
-      toast.error('Jam selesai harus lebih besar dari jam mulai.');
+      toast.error('Jam selesai Slot 1 harus lebih besar dari jam mulai.');
       return;
     }
     const duration = endMin - startMin;
@@ -424,17 +443,13 @@ export default function AutoSchedule() {
         nextTimes[t][day] = {};
         const activeSlots = slotsByTingkat[t]?.[day] || [];
         activeSlots.forEach(jam => {
-          const start = startMin + (Number(jam) - 1) * duration;
-          nextTimes[t][day][jam] = {
-            start: minutesToTime(start),
-            end: minutesToTime(start + duration)
-          };
+          nextTimes[t][day][jam] = getCopyDayTime(jam);
         });
       });
     });
     setSlotDuration(duration);
     setSlotTimesByTingkat(nextTimes);
-    toast.success('Waktu slot disalin ke semua tingkat.');
+    toast.success('Pola waktu 1 hari disalin ke semua hari dan tingkat.');
   };
 
   const toggleAllSlotsForDay = (tingkat, day) => {
@@ -1130,31 +1145,41 @@ export default function AutoSchedule() {
               <span style={{ fontSize: 12, color: '#94a3b8' }}>jam/hari (maksimal)</span>
             </div>
 
-            <div style={{ marginBottom: 16, padding: '12px 14px', borderRadius: 10, background: '#ecfeff', border: '1.5px solid #67e8f9', display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#0e7490', marginBottom: 6 }}>Waktu Slot 1</div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    type="time"
-                    value={copySlotTime.start}
-                    onChange={e => setCopySlotTime(prev => ({ ...prev, start: e.target.value }))}
-                    style={{ width: 112, border: '1.5px solid #22d3ee', borderRadius: 7, padding: '5px 8px', fontSize: 13 }}
-                  />
-                  <span style={{ color: '#0891b2', fontWeight: 700 }}>s/d</span>
-                  <input
-                    type="time"
-                    value={copySlotTime.end}
-                    onChange={e => setCopySlotTime(prev => ({ ...prev, end: e.target.value }))}
-                    style={{ width: 112, border: '1.5px solid #22d3ee', borderRadius: 7, padding: '5px 8px', fontSize: 13 }}
-                  />
+            <div style={{ marginBottom: 16, padding: '12px 14px', borderRadius: 10, background: '#ecfeff', border: '1.5px solid #67e8f9' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#0e7490', marginBottom: 3 }}>Template Waktu 1 Hari</div>
+                  <div style={{ fontSize: 12, color: '#0e7490' }}>Isi jam mulai dan selesai untuk slot dalam 1 hari, lalu salin ke semua hari dan tingkat.</div>
                 </div>
+                <button className="btn sm" onClick={applyDayTemplateToAllSlots}>
+                  Copy ke Semua Hari & Tingkatan
+                </button>
               </div>
-              <button className="btn sm" onClick={applyOneTimeToAllSlots}>
-                Copy ke Semua Slot & Tingkatan
-              </button>
-              <span style={{ color: '#0e7490', fontSize: 12 }}>
-                Slot berikutnya otomatis maju sesuai durasi dari waktu Slot 1.
-              </span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 10 }}>
+                {Array.from({ length: globalMaxHours || maxHoursByTingkat[tingkatSlotTab] || 0 }, (_, i) => i + 1).map(jam => {
+                  const time = getCopyDayTime(jam);
+                  return (
+                    <div key={jam} style={{ display: 'grid', gridTemplateColumns: '48px 1fr 1fr', gap: 7, alignItems: 'center', padding: 8, borderRadius: 8, background: '#fff', border: '1px solid #a5f3fc' }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: '#0e7490' }}>Slot {jam}</span>
+                      <input
+                        type="time"
+                        value={time.start}
+                        onChange={e => updateCopyDayTime(jam, 'start', e.target.value)}
+                        style={{ width: '100%', border: '1.5px solid #22d3ee', borderRadius: 7, padding: '5px 6px', fontSize: 12 }}
+                      />
+                      <input
+                        type="time"
+                        value={time.end}
+                        onChange={e => updateCopyDayTime(jam, 'end', e.target.value)}
+                        style={{ width: '100%', border: '1.5px solid #22d3ee', borderRadius: 7, padding: '5px 6px', fontSize: 12 }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              {globalMaxHours === 0 && (
+                <div style={{ color: '#0e7490', fontSize: 12 }}>Isi jumlah jam terlebih dahulu untuk menampilkan template waktu.</div>
+              )}
             </div>
 
             {/* Checkbox grid */}
