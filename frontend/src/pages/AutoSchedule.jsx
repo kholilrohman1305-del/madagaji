@@ -1809,7 +1809,7 @@ export default function AutoSchedule() {
           {generating && (
             <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748b' }}>
               <div style={{ fontSize: 36, marginBottom: 14 }}>⏳</div>
-              Sedang generate jadwal... (estimasi 5-10 detik)
+              Sedang generate jadwal... (estimasi 15-30 detik, mengoptimalkan agar semua slot terisi)
             </div>
           )}
 

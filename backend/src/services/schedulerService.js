@@ -433,7 +433,7 @@ function swapRepair(schedule, unassigned, teachers, days, slotsByTingkat, hoursB
 // this pass opens slots by moving blockers elsewhere (depth-1 ejection with
 // rollback), which resolves "teacher busy at every free class slot" and
 // "teacher's days don't intersect free class slots" dead-ends.
-function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, hoursByDayByTingkat, hoursByDay, teacherSubjects, teacherLimits, classNameMap, loosePairs = false) {
+function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, hoursByDayByTingkat, hoursByDay, teacherSubjects, teacherLimits, classNameMap, loosePairs = false, evictDepth = 0, deadline = Infinity, allowSplit = false) {
   if (unassigned.length === 0) return { schedule, remaining: [] };
 
   const classAt = new Map();      // `${kelas}-${hari}-${jam}` -> schedule index
@@ -469,27 +469,36 @@ function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, ho
   };
 
   // Move blocker at `idx` to another valid slot. A blocker that is part of a
-  // same-day 2-hour block is moved TOGETHER with its sibling (to consecutive
-  // slots) so pairs are never torn into lone 1-hour slots.
-  const tryRelocate = (idx, forbiddenClass, forbiddenTeacher) => {
+  // same-day 2-hour block is moved TOGETHER with its sibling so pairs are
+  // never torn into lone 1-hour slots. With depth > 0, occupied targets can
+  // be opened by recursively relocating their occupants (ejection chain) —
+  // needed when every class is packed and depth-1 moves have nowhere to go.
+  // Appends performed moves to movesOut; caller rolls back via undoMoves.
+  const tryRelocate = (idx, forbiddenClass, forbiddenTeacher, depth, movesOut) => {
+    if (Date.now() > deadline) return false;
     const r = schedule[idx];
-    if (r.locked) return null;
+    if (r.locked) return false;
     const limits = teacherLimits.get(Number(r.guruId)) || {};
     const tkt = tingkatOfClass(r.kelas);
 
-    // Same-day siblings of the same class+subject (the other half of a block)
-    const siblings = [];
-    for (let j = 0; j < schedule.length; j++) {
-      if (j === idx) continue;
-      const s = schedule[j];
-      if (String(s.kelas) === String(r.kelas) && String(s.mapelId) === String(r.mapelId) && s.hari === r.hari) {
-        siblings.push(j);
+    // Same-day siblings of the same class+subject (the other half of a block).
+    // allowSplit (pass pamungkas): blocker boleh dipindah sendirian meski
+    // memecah blok — sesuai aturan "1 jam pun boleh asal semua slot terisi".
+    let group = [idx];
+    if (!allowSplit) {
+      const siblings = [];
+      for (let j = 0; j < schedule.length; j++) {
+        if (j === idx) continue;
+        const s = schedule[j];
+        if (String(s.kelas) === String(r.kelas) && String(s.mapelId) === String(r.mapelId) && s.hari === r.hari) {
+          siblings.push(j);
+        }
       }
+      if (siblings.length > 1) return false; // 3+ same-day: don't touch
+      group = siblings.length === 1 ? [idx, siblings[0]] : [idx];
+      if (group.some(g => schedule[g].locked)) return false;
+      if (group.length === 2 && String(schedule[group[1]].guruId) !== String(r.guruId)) return false;
     }
-    if (siblings.length > 1) return null; // 3+ same-day: don't touch
-    const group = siblings.length === 1 ? [idx, siblings[0]] : [idx];
-    if (group.some(g => schedule[g].locked)) return null;
-    if (group.length === 2 && String(schedule[group[1]].guruId) !== String(r.guruId)) return null;
     const need = group.length;
 
     for (const d2 of shuffle([...days])) {
@@ -504,35 +513,70 @@ function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, ho
         }
         if (loosePairs) {
           // Fallback: any 2 slots on the same day (consolidatePairs tidies later)
+          const loose = [];
           for (let a = 0; a < slots.length; a++) {
             for (let b = a + 1; b < slots.length; b++) {
-              if (slots[b] !== slots[a] + 1) targets.push([slots[a], slots[b]]);
+              if (slots[b] !== slots[a] + 1) loose.push([slots[a], slots[b]]);
             }
           }
+          targets.push(...shuffle(loose).slice(0, 10));
         }
       } else {
         slots.forEach(h => targets.push([h]));
       }
 
       for (const tgt of shuffle(targets)) {
-        const free = tgt.every(h => {
+        if (Date.now() > deadline) return false;
+        // Gather occupants; without depth they make the target unusable
+        const evict = new Set();
+        let bad = false;
+        for (const h of tgt) {
           const ck = `${r.kelas}-${d2}-${h}`;
           const tk2 = `${r.guruId}-${d2}-${h}`;
-          if (forbiddenClass.has(ck) || forbiddenTeacher.has(tk2)) return false;
-          if (classAt.has(ck)) return false;
-          if ((teacherCount.get(tk2) || 0) > 0) return false;
-          return true;
-        });
-        if (!free) continue;
-        const moves = group.map((gIdx, i2) => {
-          const from = { hari: schedule[gIdx].hari, jamKe: schedule[gIdx].jamKe };
+          if (forbiddenClass.has(ck) || forbiddenTeacher.has(tk2)) { bad = true; break; }
+          const ci = classAt.get(ck);
+          if (ci !== undefined) {
+            if (depth <= 0 || schedule[ci].locked || group.includes(ci)) { bad = true; break; }
+            evict.add(ci);
+          }
+          if ((teacherCount.get(tk2) || 0) > 0) {
+            const ti = teacherAt.get(tk2);
+            if (depth <= 0 || ti === undefined || schedule[ti].locked ||
+                (teacherCount.get(tk2) || 0) > 1 || group.includes(ti)) { bad = true; break; }
+            evict.add(ti);
+          }
+        }
+        if (bad) continue;
+
+        const movesLocal = [];
+        if (evict.size > 0) {
+          const fc2 = new Set([...forbiddenClass, ...tgt.map(h => `${r.kelas}-${d2}-${h}`)]);
+          const ft2 = new Set([...forbiddenTeacher, ...tgt.map(h => `${r.guruId}-${d2}-${h}`)]);
+          let ok = true;
+          for (const e of evict) {
+            const cur = schedule[e];
+            const stillBlocking = cur.hari === d2 && tgt.includes(Number(cur.jamKe)) &&
+              (String(cur.kelas) === String(r.kelas) || String(cur.guruId) === String(r.guruId));
+            if (!stillBlocking) continue; // moved along with an earlier eviction group
+            if (!tryRelocate(e, fc2, ft2, depth - 1, movesLocal)) { ok = false; break; }
+          }
+          if (ok) {
+            ok = tgt.every(h =>
+              !classAt.has(`${r.kelas}-${d2}-${h}`) &&
+              (teacherCount.get(`${r.guruId}-${d2}-${h}`) || 0) === 0);
+          }
+          if (!ok) { undoMoves(movesLocal); continue; }
+        }
+
+        group.forEach((gIdx, i2) => {
+          movesLocal.push({ idx: gIdx, from: { hari: schedule[gIdx].hari, jamKe: schedule[gIdx].jamKe } });
           moveRow(gIdx, d2, tgt[i2]);
-          return { idx: gIdx, from };
         });
-        return moves;
+        movesOut.push(...movesLocal);
+        return true;
       }
     }
-    return null;
+    return false;
   };
 
   const undoMoves = (moves) => {
@@ -545,6 +589,7 @@ function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, ho
   const ordered = [...unassigned].sort((a, b) => (b.slotCount || 1) - (a.slotCount || 1)); // pairs first
 
   for (const lesson of ordered) {
+    if (Date.now() > deadline) { remaining.push(lesson); continue; }
     const { classId, classTingkat, classKelasType, subjectId } = lesson;
     const need = lesson.slotCount === 2 ? 2 : 1;
     const candidates = shuffle(teachers.filter(t => {
@@ -574,17 +619,20 @@ function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, ho
             if (slots[k + 1] === slots[k] + 1) positions.push([slots[k], slots[k + 1]]);
           }
           if (loosePairs) {
+            const loose = [];
             for (let a = 0; a < slots.length; a++) {
               for (let b = a + 1; b < slots.length; b++) {
-                if (slots[b] !== slots[a] + 1) positions.push([slots[a], slots[b]]);
+                if (slots[b] !== slots[a] + 1) loose.push([slots[a], slots[b]]);
               }
             }
+            positions.push(...shuffle(loose).slice(0, 10));
           }
         } else {
           slots.forEach(h => positions.push([h]));
         }
 
         for (const pos of shuffle(positions)) {
+          if (Date.now() > deadline) break;
           // Blockers = rows of THIS class at pos + rows of THIS teacher at pos
           // (in other classes). All must be non-locked and relocatable.
           const blockerSet = new Set();
@@ -615,9 +663,7 @@ function ejectionRepair(schedule, unassigned, teachers, days, slotsByTingkat, ho
             const stillBlocking = cur.hari === day && pos.includes(Number(cur.jamKe)) &&
               (String(cur.kelas) === String(classId) || String(cur.guruId) === tid);
             if (!stillBlocking) continue;
-            const mv = tryRelocate(bIdx, forbiddenClass, forbiddenTeacher);
-            if (!mv) { ok = false; break; }
-            moves.push(...mv);
+            if (!tryRelocate(bIdx, forbiddenClass, forbiddenTeacher, evictDepth, moves)) { ok = false; break; }
           }
           // Safety: position must now be completely free
           if (ok) {
@@ -856,13 +902,14 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
       unassigned = repaired.remaining;
     }
 
+    const deadline = start + TIMEOUT_MS;
     // Ejection: relocate blocking rows (whole 2-hour blocks) to open slots
     for (let round = 0; round < 4 && unassigned.length > 0; round++) {
       const before = unassigned.length;
       const ej = ejectionRepair(
         schedule, unassigned, teachers, days,
         slotsByTingkat, hoursByDayByTingkat, hoursByDay,
-        teacherSubjects, teacherLimits, classNameMap
+        teacherSubjects, teacherLimits, classNameMap, false, 0, deadline
       );
       schedule = ej.schedule;
       unassigned = ej.remaining;
@@ -874,15 +921,14 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
       const ej2 = ejectionRepair(
         schedule, unassigned, teachers, days,
         slotsByTingkat, hoursByDayByTingkat, hoursByDay,
-        teacherSubjects, teacherLimits, classNameMap, true
+        teacherSubjects, teacherLimits, classNameMap, true, 0, deadline
       );
       schedule = ej2.schedule;
       unassigned = ej2.remaining;
     }
-    // FINAL last resort: daripada jam dibiarkan kosong, sisa pasangan dipecah
-    // jadi slot 1-jam dan diisikan ke slot valid mana pun yang tersisa
-    // (persis rekomendasi "masih bisa diisi manual" — kini otomatis).
-    // consolidatePairs tetap mencoba merapatkannya kembali setelah ini.
+    // Last resort in-run: sisa pasangan dipecah jadi slot 1-jam dan diisikan
+    // ke slot valid mana pun (murah, depth 0). Chain dalam (depth 1-2)
+    // dijalankan SEKALI di hasil terbaik setelah semua restart selesai.
     if (unassigned.length > 0) {
       const singles = [];
       for (const l of unassigned) {
@@ -892,7 +938,7 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
       const ej3 = ejectionRepair(
         schedule, singles, teachers, days,
         slotsByTingkat, hoursByDayByTingkat, hoursByDay,
-        teacherSubjects, teacherLimits, classNameMap, true
+        teacherSubjects, teacherLimits, classNameMap, true, 0, deadline
       );
       schedule = ej3.schedule;
       unassigned = ej3.remaining;
@@ -903,6 +949,36 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
       bestUnassigned = unassigned;
     }
     if (bestUnassigned.length === 0) break;
+  }
+
+  // Deep ejection chains (depth 1 lalu 2) pada HASIL TERBAIK saja: geser A
+  // yang menggeser B untuk membuka slot ketika semua kelas sudah padat.
+  // Dijalankan sekali dengan budget waktu tambahan, coba blok utuh dulu,
+  // baru pecahan 1-jam sebagai pilihan paling akhir.
+  const deepDeadline = Date.now() + 10000;
+  let deepAttempt = 0;
+  while (bestUnassigned.length > 0 && Date.now() < deepDeadline && deepAttempt < 15) {
+    deepAttempt++;
+    const rPair = ejectionRepair(
+      bestSchedule, bestUnassigned, teachers, days,
+      slotsByTingkat, hoursByDayByTingkat, hoursByDay,
+      teacherSubjects, teacherLimits, classNameMap, true, 2, deepDeadline
+    );
+    bestSchedule = rPair.schedule;
+    bestUnassigned = rPair.remaining;
+    if (bestUnassigned.length === 0 || Date.now() > deepDeadline) break;
+    const singles = [];
+    for (const l of bestUnassigned) {
+      if (l.slotCount === 2) singles.push({ ...l, slotCount: 1 }, { ...l, slotCount: 1 });
+      else singles.push(l);
+    }
+    const rSingle = ejectionRepair(
+      bestSchedule, singles, teachers, days,
+      slotsByTingkat, hoursByDayByTingkat, hoursByDay,
+      teacherSubjects, teacherLimits, classNameMap, true, 2, deepDeadline, true
+    );
+    bestSchedule = rSingle.schedule;
+    bestUnassigned = rSingle.remaining;
   }
 
   // Post-process: consolidate same-subject slots per class to same day + consecutive.
