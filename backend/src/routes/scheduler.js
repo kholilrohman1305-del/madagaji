@@ -56,6 +56,20 @@ const router = express.Router();
   } catch (e) {
     console.warn('[schedule_config migration]', e.message);
   }
+
+  // One-time migration: standardize day name 'Ahad' → 'Minggu'.
+  // AutoSchedule always wrote 'Minggu', but old data/UI used 'Ahad', so
+  // Sunday rows never matched the Sunday column in jadwal pages.
+  try {
+    await pool.query(`UPDATE jadwal SET hari='Minggu' WHERE hari='Ahad'`);
+    await pool.query(`UPDATE locked_slots SET hari='Minggu' WHERE hari='Ahad'`);
+    await pool.query(
+      `UPDATE schedule_config SET config_json = REPLACE(config_json, '"Ahad"', '"Minggu"')
+       WHERE config_json LIKE '%"Ahad"%'`
+    );
+  } catch (e) {
+    console.warn('[ahad→minggu migration]', e.message);
+  }
 })();
 
 // Get all metadata (teachers now include gender; teacherSubjects include tingkat+is_linear; teacherLimits include available_days)

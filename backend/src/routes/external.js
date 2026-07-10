@@ -113,7 +113,7 @@ router.post('/journal-sync', async (req, res, next) => {
 
     // Verifikasi guru_id & kelas dari jadwal (guru_id di jadwal = master teachers.id)
     // Lookup jadwal untuk mendapat guru_id dan kelas yang valid di gaji DB
-    const DAY_NAMES = ['Ahad', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const hari = DAY_NAMES[new Date(tanggal).getDay()];
     const [jadwalRows] = await pool.query(
       'SELECT guru_id, kelas FROM jadwal WHERE guru_id = ? AND kelas = ? AND hari = ? AND jam_ke IN (?) LIMIT 1',

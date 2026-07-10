@@ -14,7 +14,7 @@ const MAPEL_COLORS = [
   { bg: '#f0fdf4', color: '#14532d', border: '#86efac' },
 ];
 
-const DAYS_ORDER = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Ahad'];
+const DAYS_ORDER = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
 function sortSlots(slots) {
   return [...slots].sort((a, b) => {

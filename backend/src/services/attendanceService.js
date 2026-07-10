@@ -3,7 +3,7 @@ const masterPool = pool.master;
 const { TTLCache } = require('../utils/cache');
 const { formatDateToYMD, monthKey } = require('../utils/date');
 
-const DAY_NAMES = ['Ahad', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const scheduleDayCacheTtl = Number(process.env.SCHEDULE_DAY_CACHE_TTL_MS || 5000);
 const scheduleDayCache = new TTLCache(scheduleDayCacheTtl);
 const guruCacheTtl = Number(process.env.GURU_CACHE_TTL_MS || 30000);

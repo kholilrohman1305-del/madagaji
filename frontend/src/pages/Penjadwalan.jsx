@@ -3,7 +3,7 @@ import api from "../api";
 import { toast } from "../utils/toast";
 import { CalendarClock, Save, Clock, Trash2 } from "lucide-react";
 
-const DAYS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Ahad"];
+const DAYS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
 
 export default function Penjadwalan() {
   const [meta, setMeta] = useState(null);

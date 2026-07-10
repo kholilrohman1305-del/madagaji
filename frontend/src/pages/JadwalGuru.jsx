@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../api';
 import { UserCheck, Printer } from 'lucide-react';
 
-const DAYS = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Ahad'];
+const DAYS = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
 const subjectColor = (subjectId) => {
   if (!subjectId) return 'transparent';
   const str = String(subjectId);
