@@ -1828,7 +1828,7 @@ export default function AutoSchedule() {
               ))}
             </div>
 
-            {(capacityWarnings?.classes?.length > 0 || capacityWarnings?.subjects?.length > 0) && (
+            {(capacityWarnings?.classes?.length > 0 || capacityWarnings?.subjects?.length > 0 || capacityWarnings?.teachers?.length > 0) && (
               <div style={{ marginBottom: 16, padding: 14, borderRadius: 10, background: '#fef2f2', border: '1.5px solid #fca5a5' }}>
                 <div style={{ fontWeight: 800, color: '#b91c1c', marginBottom: 8 }}>
                   🚨 Kapasitas tidak mencukupi — jadwal tidak mungkin terisi penuh dengan konfigurasi saat ini
@@ -1856,6 +1856,19 @@ export default function AutoSchedule() {
                           • <b>{w.subjectName}</b>: butuh <b>{w.required} jam</b> di {w.classCount} kelas, {w.teacherNames?.length
                             ? <>kapasitas {w.teacherNames.length} guru pengampu ({w.teacherNames.join(', ')}) maksimal <b>{w.totalCap} jam</b></>
                             : <b>belum ada guru pengampu</b>} → kekurangan <b>{w.required - (w.totalCap || 0)} jam</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {capacityWarnings.teachers?.length > 0 && (
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#991b1b', marginBottom: 4 }}>
+                        Guru kelebihan beban — beban wajib melebihi kapasitas jamnya (tambah guru pengampu di Step 3 atau tambah hari tersedia di Step 4):
+                      </div>
+                      {capacityWarnings.teachers.map(w => (
+                        <div key={w.teacherId} style={{ fontSize: 12.5, color: '#7f1d1d', lineHeight: 1.6 }}>
+                          • <b>{w.teacherName}</b>: satu-satunya pengampu untuk <b>{w.required} jam</b>, kapasitas maksimal <b>{w.capacity} jam</b>
+                          {w.availableDays ? ` (hari tersedia: ${w.availableDays.join(', ')})` : ''} → kekurangan <b>{w.required - w.capacity} jam</b>
                         </div>
                       ))}
                     </div>

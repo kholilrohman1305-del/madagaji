@@ -168,7 +168,14 @@ async function upsertTeacherLimitsBulk(limits) {
 async function getScheduleConfig(name = 'default') {
   // ORDER BY id DESC: legacy rows may be duplicated (pre-unique-key era) — always take the latest save
   const [rows] = await pool.query('SELECT config_json FROM schedule_config WHERE name=? ORDER BY id DESC LIMIT 1', [name]);
-  return rows[0]?.config_json || null;
+  const raw = rows[0]?.config_json;
+  if (!raw) return null;
+  // MariaDB (hosting) stores JSON as LONGTEXT → driver returns a string;
+  // without parsing, the frontend gets a string and cfg.days is undefined.
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  return raw;
 }
 
 async function upsertScheduleConfig(name, config) {
