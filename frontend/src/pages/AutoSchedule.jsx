@@ -258,6 +258,20 @@ export default function AutoSchedule() {
     return max;
   }, [slotsByTingkat]);
 
+  // Kapasitas slot mingguan per tingkat = jumlah slot yang TERCENTANG saja
+  // pada hari-hari aktif. Hari aktif yang belum pernah disentuh dihitung penuh
+  // (1..maxJam), sama seperti normalisasi di saveStep1.
+  const capacityByTingkat = useMemo(() => {
+    const cap = {};
+    TINGKAT_LIST.forEach(t => {
+      cap[t] = days.reduce((sum, day) => {
+        const arr = slotsByTingkat[t]?.[day];
+        return sum + (arr !== undefined ? arr.length : (maxHoursByTingkat[t] || 0));
+      }, 0);
+    });
+    return cap;
+  }, [days, slotsByTingkat, maxHoursByTingkat]);
+
   const guruSummary = useMemo(() => {
     if (!generated || !meta) return [];
     const map = new Map();
@@ -965,6 +979,26 @@ export default function AutoSchedule() {
             )}
           </div>
 
+          {/* Total slot mingguan mengikuti centang — inilah kapasitas yang dipakai step berikutnya */}
+          <div style={{ marginBottom: 20, padding: '12px 16px', borderRadius: 10, background: '#f0f9ff', border: '1.5px solid #7dd3fc' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#0369a1', marginBottom: 6 }}>
+              Total Slot Mingguan (hanya jam yang dicentang)
+            </div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              {TINGKAT_LIST.map(t => (
+                <div key={t} style={{ fontSize: 13, color: '#075985' }}>
+                  Tingkat <b>{t}</b>: <b style={{ fontSize: 15 }}>{capacityByTingkat[t] || 0}</b> jam/minggu
+                  <span style={{ color: '#0ea5e9', marginLeft: 4, fontSize: 12 }}>
+                    ({days.map(d => (slotsByTingkat[t]?.[d] !== undefined ? slotsByTingkat[t][d].length : (maxHoursByTingkat[t] || 0))).join('+')})
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11.5, color: '#0284c7', marginTop: 6 }}>
+              Angka ini menjadi kapasitas maksimal jam pelajaran per kelas di Step 2 dan perhitungan generate.
+            </div>
+          </div>
+
           <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="form-label" style={{ marginBottom: 0 }}>Durasi Slot</span>
             <input type="number" min={20} max={90} value={slotDuration} onChange={e => setSlotDuration(Number(e.target.value))}
@@ -1023,7 +1057,21 @@ export default function AutoSchedule() {
                           : <span style={{ fontSize: 11, color: '#94a3b8' }}>—</span>}
                       </td>
                       <td style={{ fontSize: 13 }}>
-                        {subCount > 0 ? `${subCount} mapel · ${totalH} jam/minggu` : <span style={{ color: '#94a3b8' }}>Belum diatur</span>}
+                        {subCount > 0 ? (() => {
+                          const cap = capacityByTingkat[tingkat] || 0;
+                          const over = totalH > cap;
+                          return (
+                            <span>
+                              {subCount} mapel · <b style={{ color: over ? '#dc2626' : '#15803d' }}>{totalH}</b>
+                              <span style={{ color: '#94a3b8' }}> / {cap} slot</span>
+                              {over && (
+                                <span style={{ display: 'block', fontSize: 11, color: '#dc2626', fontWeight: 600 }}>
+                                  ⚠ melebihi kapasitas slot tingkat {tingkat || '—'} ({cap} jam) — kurangi jam mapel atau tambah slot di Step 1
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })() : <span style={{ color: '#94a3b8' }}>Belum diatur</span>}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
