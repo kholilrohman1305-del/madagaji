@@ -779,6 +779,20 @@ export default function AutoSchedule() {
     }));
   };
 
+  // Jam tersedia per MAPEL (berlaku untuk semua guru pengampu mapel itu)
+  const toggleSubjectSlot = (subjectId, jam) => {
+    setSubjectLimitsLocal(prev => {
+      const cur = [...(prev[subjectId] || prev[String(subjectId)] || [])].map(Number);
+      const idx = cur.indexOf(Number(jam));
+      if (idx >= 0) cur.splice(idx, 1); else cur.push(Number(jam));
+      return { ...prev, [subjectId]: cur.sort((a, b) => a - b) };
+    });
+  };
+
+  const clearSubjectSlots = (subjectId) => {
+    setSubjectLimitsLocal(prev => ({ ...prev, [subjectId]: [] }));
+  };
+
   const applyBulkLimits = () => {
     setTeacherLimitsLocal(prev => {
       const next = { ...prev };
@@ -804,6 +818,13 @@ export default function AutoSchedule() {
       availableDays: l.availableDays?.length > 0 ? l.availableDays : null
     }));
     await api.put('/scheduler/teacher-limits-bulk', { limits });
+    const subjectLimits = Object.entries(subjectLimitsLocal).map(([subjectId, arr]) => ({
+      subjectId,
+      availableSlots: arr?.length > 0 ? arr.map(Number) : null
+    }));
+    if (subjectLimits.length > 0) {
+      await api.put('/scheduler/subject-limits-bulk', { limits: subjectLimits });
+    }
     setStep(5);
   };
 
@@ -1727,6 +1748,51 @@ export default function AutoSchedule() {
               </tbody>
             </table>
           </div>
+          {/* Jam tersedia per mapel */}
+          <div style={{ marginTop: 26 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#334155', marginBottom: 6 }}>Jam Tersedia per Mapel</div>
+            <p style={{ fontSize: 12.5, color: '#64748b', marginBottom: 10 }}>
+              Tanpa centang = mapel boleh di semua jam. Contoh: centang jam 1–4 untuk Penjas agar selalu terjadwal pagi — berlaku untuk semua guru pengampunya.
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table" style={{ minWidth: 560 }}>
+                <thead><tr><th>Mapel</th><th>Jam Tersedia</th></tr></thead>
+                <tbody>
+                  {(meta?.subjects || []).map(s => {
+                    const arr = (subjectLimitsLocal[s.id] || subjectLimitsLocal[String(s.id)] || []).map(Number);
+                    return (
+                      <tr key={s.id}>
+                        <td style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap' }}>
+                          {s.name}
+                          {arr.length > 0 && (
+                            <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8, background: '#fef3c7', color: '#92400e' }}>
+                              jam {arr.join(',')}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                            {Array.from({ length: globalMaxHours || 8 }, (_, i) => i + 1).map(jam => (
+                              <label key={jam} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                                <input type="checkbox" checked={arr.includes(jam)} onChange={() => toggleSubjectSlot(s.id, jam)} />
+                                {jam}
+                              </label>
+                            ))}
+                            {arr.length > 0 && (
+                              <button className="btn sm outline" style={{ fontSize: 10, padding: '2px 7px' }} onClick={() => clearSubjectSlots(s.id)}>
+                                Semua Jam
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div style={{ marginTop: 18, display: 'flex', gap: 10 }}>
             <button className="btn success" onClick={saveAllLimits}>Simpan & Lanjut →</button>
             <button className="btn outline" onClick={() => setStep(3)}>← Kembali</button>
@@ -1785,6 +1851,12 @@ export default function AutoSchedule() {
               const multi = lockedSlots.filter(r => String(r.teacher_id) === plotTeacher && r.hari === plotEdit.hari && String(r.jam_ke) === String(plotEdit.jam) && String(r.class_id) !== plotClass);
               if (multi.length) {
                 warns.push(`Guru sudah terkunci di ${multi.map(m => m.class_name).join(', ')} pada jam yang sama (multi-kelas diperbolehkan).`);
+              }
+            }
+            if (plotEdit && plotMapel) {
+              const sLim = (subjectLimitsLocal[plotMapel] || subjectLimitsLocal[String(plotMapel)] || []).map(Number);
+              if (sLim.length && !sLim.includes(Number(plotEdit.jam))) {
+                warns.push(`Jam ke-${plotEdit.jam} di luar jam tersedia mapel ini (jam ${sLim.join(', ')}).`);
               }
             }
             return (
