@@ -132,6 +132,7 @@ export default function AutoSchedule() {
   // Step 6
   const [generated, setGenerated] = useState(null);
   const [failed, setFailed] = useState([]);
+  const [capacityWarnings, setCapacityWarnings] = useState(null);
   const [linearWarnings, setLinearWarnings] = useState([]);
   const [generating, setGenerating] = useState(false);
   const [previewTab, setPreviewTab] = useState('matrix');
@@ -277,6 +278,39 @@ export default function AutoSchedule() {
 
   // ── Step 1 ───────────────────────────────────────────────────────────────
 
+  // Toggle hari aktif. Saat hari diaktifkan, langsung isi slot penuh (1..maxJam)
+  // untuk SEMUA tingkat — tanpa ini, hari baru (mis. Minggu) tidak punya slot
+  // aktif dan hasil generate akan kosong di hari tersebut.
+  const toggleActiveDay = (d) => {
+    const isActive = days.includes(d);
+    if (isActive) {
+      setDays(prev => prev.filter(x => x !== d));
+      setSlotsByTingkat(prev => {
+        const next = {};
+        TINGKAT_LIST.forEach(t => {
+          const dayMap = { ...(prev[t] || {}) };
+          delete dayMap[d];
+          next[t] = dayMap;
+        });
+        return next;
+      });
+    } else {
+      setDays(prev => ALL_DAYS.filter(x => prev.includes(x) || x === d));
+      setSlotsByTingkat(prev => {
+        const next = {};
+        TINGKAT_LIST.forEach(t => {
+          const maxH = maxHoursByTingkat[t] || 0;
+          const existing = prev[t]?.[d];
+          next[t] = {
+            ...(prev[t] || {}),
+            [d]: existing?.length ? existing : Array.from({ length: maxH }, (_, i) => i + 1)
+          };
+        });
+        return next;
+      });
+    }
+  };
+
   const setMaxForTingkat = (tingkat, rawVal) => {
     const n = Math.max(0, Math.min(12, Number(rawVal) || 0));
     const oldMax = maxHoursByTingkat[tingkat] || 0;
@@ -334,20 +368,34 @@ export default function AutoSchedule() {
 
   const saveStep1 = async () => {
     setStep1Saving(true);
+    // Normalize slotsByTingkat: only active days, and any active day a tingkat
+    // never touched defaults to full slots (1..maxJam) so it is never silently empty.
+    const cleanSts = {};
+    TINGKAT_LIST.forEach(t => {
+      cleanSts[t] = {};
+      const maxH = maxHoursByTingkat[t] || 0;
+      days.forEach(day => {
+        const existing = slotsByTingkat[t]?.[day];
+        cleanSts[t][day] = existing !== undefined
+          ? existing
+          : Array.from({ length: maxH }, (_, i) => i + 1);
+      });
+    });
     // Compute hoursByDay as max slot per day across all tingkat (backward compat)
     const newHbd = {};
     days.forEach(day => {
       let max = 0;
       TINGKAT_LIST.forEach(t => {
-        const slots = slotsByTingkat[t]?.[day] || [];
+        const slots = cleanSts[t]?.[day] || [];
         const m = slots.length ? Math.max(...slots) : 0;
         if (m > max) max = m;
       });
       newHbd[day] = max;
     });
+    setSlotsByTingkat(cleanSts);
     setHoursByDay(newHbd);
     try {
-      await api.put('/scheduler/config', { days, hoursByDay: newHbd, slotsByTingkat, slotDuration, startTimeByDay });
+      await api.put('/scheduler/config', { days, hoursByDay: newHbd, slotsByTingkat: cleanSts, slotDuration, startTimeByDay });
       setStep(2);
     } finally { setStep1Saving(false); }
   };
@@ -707,6 +755,7 @@ export default function AutoSchedule() {
       const res = await api.post('/scheduler/generate', { days, hoursByDay, slotsByTingkat });
       setGenerated(res.data.generated || []);
       setFailed(res.data.failed || []);
+      setCapacityWarnings(res.data.capacityWarnings || null);
       setLinearWarnings(res.data.linearWarnings || []);
       setPreviewTab('matrix');
       setSelectedClass('');
@@ -792,6 +841,9 @@ export default function AutoSchedule() {
     { id: 5, label: 'Plot Manual' }, { id: 6, label: 'Generate' }, { id: 7, label: 'Finalisasi' }
   ];
 
+  // Total jam pelajaran yang gagal dijadwalkan (failed berisi grup per kelas+mapel)
+  const totalFailedJam = failed.reduce((s, f) => s + (Number(f.jumlahJam) || 1), 0);
+
   const GenderBadge = ({ gender, long }) => {
     if (!gender) return null;
     const isL = gender === 'L';
@@ -837,7 +889,7 @@ export default function AutoSchedule() {
                 const active = days.includes(d);
                 return (
                   <label key={d} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '6px 14px', borderRadius: 8, background: active ? 'var(--primary-50)' : '#f8fafc', border: `1.5px solid ${active ? 'var(--primary-400)' : '#e2e8f0'}`, fontWeight: active ? 600 : 400, color: active ? 'var(--primary-700)' : '#64748b' }}>
-                    <input type="checkbox" checked={active} onChange={() => setDays(prev => active ? prev.filter(x => x !== d) : [...prev, d])} />
+                    <input type="checkbox" checked={active} onChange={() => toggleActiveDay(d)} />
                     {d}
                   </label>
                 );
@@ -1653,7 +1705,7 @@ export default function AutoSchedule() {
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
               {[
                 { label: 'Total Slot', val: generated.length, ok: true },
-                { label: 'Belum Terjadwal', val: failed.length, ok: failed.length === 0 },
+                { label: 'Jam Belum Terjadwal', val: totalFailedJam, ok: totalFailedJam === 0 },
                 { label: 'Guru Terlibat', val: new Set(generated.map(r => r.guruId)).size, ok: true },
                 { label: 'Warning Linier', val: linearWarnings.length, ok: linearWarnings.length === 0 }
               ].map(s => (
@@ -1663,6 +1715,42 @@ export default function AutoSchedule() {
                 </div>
               ))}
             </div>
+
+            {(capacityWarnings?.classes?.length > 0 || capacityWarnings?.subjects?.length > 0) && (
+              <div style={{ marginBottom: 16, padding: 14, borderRadius: 10, background: '#fef2f2', border: '1.5px solid #fca5a5' }}>
+                <div style={{ fontWeight: 800, color: '#b91c1c', marginBottom: 8 }}>
+                  🚨 Kapasitas tidak mencukupi — jadwal tidak mungkin terisi penuh dengan konfigurasi saat ini
+                </div>
+                <div style={{ maxHeight: 260, overflowY: 'auto', display: 'grid', gap: 10 }}>
+                  {capacityWarnings.classes?.length > 0 && (
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#991b1b', marginBottom: 4 }}>
+                        Slot kelas kurang — tambah hari aktif / jam per hari di Step 1:
+                      </div>
+                      {capacityWarnings.classes.map(w => (
+                        <div key={w.classId} style={{ fontSize: 12.5, color: '#7f1d1d', lineHeight: 1.6 }}>
+                          • Kelas <b>{w.className}</b>: kurikulum butuh <b>{w.required} jam/minggu</b>, slot aktif hanya <b>{w.capacity}</b> → kekurangan <b>{w.shortfall} jam</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {capacityWarnings.subjects?.length > 0 && (
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#991b1b', marginBottom: 4 }}>
+                        Guru pengampu kurang — tambah guru untuk mapel ini di Step 3:
+                      </div>
+                      {capacityWarnings.subjects.map(w => (
+                        <div key={w.subjectId} style={{ fontSize: 12.5, color: '#7f1d1d', lineHeight: 1.6 }}>
+                          • <b>{w.subjectName}</b>: butuh <b>{w.required} jam</b> di {w.classCount} kelas, {w.teacherNames?.length
+                            ? <>kapasitas {w.teacherNames.length} guru pengampu ({w.teacherNames.join(', ')}) maksimal <b>{w.totalCap} jam</b></>
+                            : <b>belum ada guru pengampu</b>} → kekurangan <b>{w.required - (w.totalCap || 0)} jam</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {conflictAlert && (
               <div style={{ padding: '12px 16px', borderRadius: 10, background: '#fef2f2', border: '1.5px solid #fca5a5', color: '#991b1b', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1792,12 +1880,24 @@ export default function AutoSchedule() {
 
                 {failed.length > 0 && (
                   <div style={{ marginTop: 18, padding: 14, borderRadius: 10, background: '#fff7ed', border: '1.5px solid #fdba74' }}>
-                    <div style={{ fontWeight: 700, color: '#c2410c', marginBottom: 8 }}>⚠️ {failed.length} Slot Belum Terjadwal</div>
-                    <div style={{ maxHeight: 160, overflowY: 'auto', display: 'grid', gap: 4 }}>
+                    <div style={{ fontWeight: 700, color: '#c2410c', marginBottom: 8 }}>
+                      ⚠️ {totalFailedJam} Jam Pelajaran Belum Terjadwal ({failed.length} kombinasi kelas–mapel)
+                    </div>
+                    <div style={{ maxHeight: 340, overflowY: 'auto', display: 'grid', gap: 10 }}>
                       {failed.map((f, i) => {
-                        const cls = meta.classes?.find(c => String(c.id) === String(f.kelas));
-                        const subj = meta.subjects?.find(s => String(s.id) === String(f.mapelId));
-                        return <div key={i} style={{ fontSize: 12, color: '#92400e' }}>• {cls?.name || f.kelas} — {subj?.name || f.mapelId}: {f.reason}</div>;
+                        const kelasName = f.kelasName || meta.classes?.find(c => String(c.id) === String(f.kelas))?.name || f.kelas;
+                        const mapelName = f.mapelName || meta.subjects?.find(s => String(s.id) === String(f.mapelId))?.name || f.mapelId;
+                        return (
+                          <div key={i} style={{ fontSize: 12.5, color: '#92400e', borderLeft: '3px solid #fdba74', paddingLeft: 10, lineHeight: 1.55 }}>
+                            <div style={{ fontWeight: 700 }}>
+                              {kelasName} — {mapelName}{f.jumlahJam ? ` (${f.jumlahJam} jam belum terjadwal)` : ''}
+                            </div>
+                            <div>{f.reason}</div>
+                            {(f.guruDetail || []).map((d, j) => (
+                              <div key={j} style={{ paddingLeft: 12 }}>– {d}</div>
+                            ))}
+                          </div>
+                        );
                       })}
                     </div>
                   </div>
@@ -1929,7 +2029,7 @@ export default function AutoSchedule() {
                 { label: 'Total Slot Jadwal', val: generated?.length || 0 },
                 { label: 'Guru Terlibat', val: generated ? new Set(generated.map(r => r.guruId)).size : 0 },
                 { label: 'Kelas Terlibat', val: generated ? new Set(generated.map(r => r.kelas)).size : 0 },
-                { label: 'Slot Belum Terisi', val: failed.length }
+                { label: 'Jam Belum Terisi', val: totalFailedJam }
               ].map(s => (
                 <div key={s.label} style={{ padding: '14px 16px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', textAlign: 'center' }}>
                   <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--primary-700)' }}>{s.val}</div>

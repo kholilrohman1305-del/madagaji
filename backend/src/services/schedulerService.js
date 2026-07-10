@@ -113,7 +113,7 @@ function canTeachSubject(teacherSubjectsMap, teacherId, subjectId, classTingkat,
 
 function isLinearSubject(teacherSubjectsMap, teacherId, subjectId) {
   const subs = teacherSubjectsMap.get(teacherId) || [];
-  const found = subs.find(s => s.subjectId === subjectId);
+  const found = subs.find(s => String(s.subjectId) === String(subjectId));
   return found ? found.isLinear : false;
 }
 
@@ -496,10 +496,6 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
   const teacherSubjects = buildTeacherSubjectsMap(teacherSubjectsRaw);
   const teacherLimits = buildTeacherLimitsMap(teacherLimitsRaw);
   const classNameMap = new Map(classes.map(c => [c.id, c.name]));
-  const subjectNameMap = new Map();
-  teacherSubjectsRaw.forEach(r => { /* subjects built below */ });
-  // Build subject name map from classSubjectsRaw + teacher subjects raw
-  const subjectIds = new Set([...classSubjectsRaw.map(r => r.subject_id), ...teacherSubjectsRaw.map(r => r.subject_id)]);
 
   // Class kelas_type: 'PA', 'PI', or 'PA_PI' (no restriction)
   const classKelasTypeMap = new Map(classes.map(c => {
@@ -628,25 +624,182 @@ async function generateSchedule({ days, hoursByDay, slotsByTingkat, hoursByDayBy
     }
   });
 
-  const failed = bestUnassigned.map(l => ({
-    hari: null, jamKe: null,
-    kelas: String(l.classId),
-    kelasName: classNameMap.get(l.classId) || String(l.classId),
-    mapelId: String(l.subjectId),
-    reason: teachers.filter(t => {
-      if (!canTeachSubject(teacherSubjects, t.id, l.subjectId, l.classTingkat, l.classId)) return false;
+  // ── Diagnostics: capacity analysis + detailed per-lesson failure reasons ──
+  const TINGKATS = ['X', 'XI', 'XII'];
+  const activeSlotCount = (tingkat) => days.reduce((sum, day) =>
+    sum + getActiveSlots(day, tingkat, slotsByTingkat, hoursByDayByTingkat, hoursByDay).length, 0);
+
+  // Max slots a teacher could possibly attend per day (across all tingkat)
+  const dayCapMax = new Map();
+  for (const day of days) {
+    let m = getActiveSlots(day, '', slotsByTingkat, hoursByDayByTingkat, hoursByDay).length;
+    for (const t of TINGKATS) {
+      m = Math.max(m, getActiveSlots(day, t, slotsByTingkat, hoursByDayByTingkat, hoursByDay).length);
+    }
+    dayCapMax.set(day, m);
+  }
+  const teacherWeekCap = (limits) => {
+    let cap = 0;
+    for (const day of days) {
+      if (limits?.availableDays && !limits.availableDays.has(day)) continue;
+      let d = dayCapMax.get(day) || 0;
+      if (limits?.maxDay != null) d = Math.min(d, limits.maxDay);
+      cap += d;
+    }
+    if (limits?.maxWeek != null) cap = Math.min(cap, limits.maxWeek);
+    return cap;
+  };
+
+  // Class capacity: total curriculum hours vs active slots per week
+  const classDemand = new Map();
+  for (const cs of classSubjectsRaw) {
+    classDemand.set(cs.class_id, (classDemand.get(cs.class_id) || 0) + (cs.hours_per_week || 2));
+  }
+  const capacityWarnings = { classes: [], subjects: [] };
+  for (const [classId, required] of classDemand) {
+    const className = classNameMap.get(classId) || String(classId);
+    const capacity = activeSlotCount(extractTingkat(className));
+    if (required > capacity) {
+      capacityWarnings.classes.push({ classId, className, required, capacity, shortfall: required - capacity });
+    }
+  }
+  capacityWarnings.classes.sort((a, b) => String(a.className).localeCompare(String(b.className)));
+
+  // Subject capacity: total demand across classes vs combined capacity of mapped teachers
+  const subjectDemand = new Map();
+  for (const cs of classSubjectsRaw) {
+    if (!subjectDemand.has(cs.subject_id)) subjectDemand.set(cs.subject_id, { required: 0, classCount: 0 });
+    const d = subjectDemand.get(cs.subject_id);
+    d.required += cs.hours_per_week || 2;
+    d.classCount += 1;
+  }
+  for (const [subjectId, d] of subjectDemand) {
+    const cands = teachers.filter(t =>
+      (teacherSubjects.get(t.id) || []).some(s => String(s.subjectId) === String(subjectId)));
+    const totalCap = cands.reduce((sum, t) => sum + teacherWeekCap(teacherLimits.get(t.id)), 0);
+    if (cands.length === 0 || totalCap < d.required) {
+      capacityWarnings.subjects.push({
+        subjectId,
+        subjectName: lkSubjectMap.get(subjectId) || String(subjectId),
+        required: d.required,
+        classCount: d.classCount,
+        teacherNames: cands.map(t => t.name),
+        totalCap
+      });
+    }
+  }
+  capacityWarnings.subjects.sort((a, b) => (b.required - b.totalCap) - (a.required - a.totalCap));
+
+  // Final occupancy state — used to explain exactly why each leftover lesson failed
+  const teacherBusyFinal = new Set(bestSchedule.map(r => `${r.guruId}-${r.hari}-${r.jamKe}`));
+  const classBusyFinal = new Set(bestSchedule.map(r => `${r.kelas}-${r.hari}-${r.jamKe}`));
+  const loadWeekFinal = new Map();
+  const loadDayFinal = new Map();
+  for (const r of bestSchedule) {
+    loadWeekFinal.set(String(r.guruId), (loadWeekFinal.get(String(r.guruId)) || 0) + 1);
+    loadDayFinal.set(`${r.guruId}-${r.hari}`, (loadDayFinal.get(`${r.guruId}-${r.hari}`) || 0) + 1);
+  }
+
+  // Aggregate unassigned lessons per (class, subject)
+  const failedGroups = new Map();
+  for (const l of bestUnassigned) {
+    const key = `${l.classId}|${l.subjectId}`;
+    if (!failedGroups.has(key)) failedGroups.set(key, { ...l, count: 0 });
+    failedGroups.get(key).count += l.slotCount === 2 ? 2 : 1;
+  }
+
+  const failed = [...failedGroups.values()].map(g => {
+    const classIdNum = Number(g.classId);
+    const kelasName = classNameMap.get(classIdNum) || String(g.classId);
+    const mapelName = lkSubjectMap.get(Number(g.subjectId)) || String(g.subjectId);
+    const required = classDemand.get(classIdNum) || 0;
+    const capacity = activeSlotCount(g.classTingkat);
+
+    const candidates = teachers.filter(t => {
+      if (!canTeachSubject(teacherSubjects, t.id, g.subjectId, g.classTingkat, g.classId)) return false;
       const pref = (teacherLimits.get(t.id) || {}).classGenderPref || 'both';
-      if (!canTeachKelas(pref, l.classKelasType)) return false;
-      return true;
-    }).length === 0
-      ? `Tidak ada guru untuk mapel ini di tingkat ${l.classTingkat || 'ini'}`
-      : 'Slot tidak tersedia (bentrok jadwal atau batas jam tercapai)'
-  }));
+      return canTeachKelas(pref, g.classKelasType);
+    });
+
+    let reason;
+    let guruDetail = [];
+
+    if (candidates.length === 0) {
+      // Distinguish: blocked by PA/PI preference vs mapped elsewhere vs no teacher at all
+      const mappedToClass = teachers.filter(t =>
+        canTeachSubject(teacherSubjects, t.id, g.subjectId, g.classTingkat, g.classId));
+      const subjectTeachers = teachers.filter(t =>
+        (teacherSubjects.get(t.id) || []).some(s => String(s.subjectId) === String(g.subjectId)));
+      if (mappedToClass.length > 0) {
+        reason = `Guru ${mapelName} untuk kelas ${kelasName} terblokir preferensi jenis kelas (PA/PI):`;
+        guruDetail = mappedToClass.map(t => {
+          const pref = (teacherLimits.get(t.id) || {}).classGenderPref || 'both';
+          return `${t.name} — preferensi kelas guru "${pref}", sedangkan ${kelasName} bertipe ${g.classKelasType}. Ubah di Step 3 atau Step 4.`;
+        });
+      } else if (subjectTeachers.length > 0) {
+        reason = `Tidak ada guru ${mapelName} yang di-mapping untuk kelas ${kelasName}. Tambahkan mapping kelas ini di Step 3 (Guru & Mapel). Guru pengampu ${mapelName} saat ini:`;
+        guruDetail = subjectTeachers.map(t => {
+          const maps = (teacherSubjects.get(t.id) || []).filter(s => String(s.subjectId) === String(g.subjectId));
+          const kelasList = [...new Set(maps.filter(m => Number(m.classId) > 0)
+            .map(m => classNameMap.get(Number(m.classId)) || String(m.classId)))].sort();
+          const tingkatList = [...new Set(maps.filter(m => !(Number(m.classId) > 0))
+            .map(m => m.tingkat ? `tingkat ${m.tingkat}` : 'semua tingkat'))];
+          const scope = [...tingkatList, ...(kelasList.length ? [`kelas ${kelasList.join(', ')}`] : [])].join('; ');
+          return `${t.name} — hanya di-mapping untuk ${scope || 'lingkup tidak dikenal'}`;
+        });
+      } else {
+        reason = `Belum ada satu pun guru yang di-mapping untuk mapel ${mapelName}. Tambahkan guru pengampu di Step 3 (Guru & Mapel).`;
+      }
+    } else {
+      const freeSlots = [];
+      for (const day of days) {
+        for (const h of getActiveSlots(day, g.classTingkat, slotsByTingkat, hoursByDayByTingkat, hoursByDay)) {
+          if (!classBusyFinal.has(`${g.classId}-${day}-${h}`)) freeSlots.push({ day, hour: h });
+        }
+      }
+      if (freeSlots.length === 0) {
+        reason = `Semua ${capacity} slot aktif kelas ${kelasName} sudah terisi, sedangkan total kebutuhan kurikulum kelas ini ${required} jam/minggu. Tambah hari aktif / jam per hari di Step 1, atau kurangi jam mapel di Step 2.`;
+      } else {
+        reason = `${g.count} jam ${mapelName} belum terjadwal. Kondisi tiap guru pengampu:`;
+        guruDetail = candidates.map(t => {
+          const limits = teacherLimits.get(t.id) || {};
+          const tid = String(t.id);
+          const load = loadWeekFinal.get(tid) || 0;
+          if (limits.maxWeek != null && load >= limits.maxWeek) {
+            return `${t.name} — batas ${limits.maxWeek} jam/minggu sudah penuh (terpakai ${load} jam)`;
+          }
+          const availFree = freeSlots.filter(s => !limits.availableDays || limits.availableDays.has(s.day));
+          if (availFree.length === 0) {
+            const hariGuru = limits.availableDays ? [...limits.availableDays].join(', ') : 'semua hari';
+            return `${t.name} — hari tersedia guru (${hariGuru}) tidak beririsan dengan slot kosong kelas ${kelasName}`;
+          }
+          const open = availFree.filter(s =>
+            !teacherBusyFinal.has(`${tid}-${s.day}-${s.hour}`) &&
+            !(limits.maxDay != null && (loadDayFinal.get(`${tid}-${s.day}`) || 0) >= limits.maxDay));
+          if (open.length === 0) {
+            return `${t.name} — sudah mengajar di kelas lain pada semua slot kosong kelas ${kelasName} (beban saat ini ${load} jam/minggu)`;
+          }
+          return `${t.name} — masih bisa diisi manual di ${open.slice(0, 3).map(s => `${s.day} jam ke-${s.hour}`).join(', ')}${open.length > 3 ? ` (+${open.length - 3} slot lain)` : ''} — klik sel di tabel preview`;
+        });
+      }
+    }
+
+    return {
+      hari: null, jamKe: null,
+      kelas: String(g.classId), kelasName,
+      mapelId: String(g.subjectId), mapelName,
+      jumlahJam: g.count,
+      reason, guruDetail
+    };
+  }).sort((a, b) =>
+    String(a.kelasName).localeCompare(String(b.kelasName)) ||
+    String(a.mapelName).localeCompare(String(b.mapelName)));
 
   const failedByClass = {};
-  failed.forEach(f => { failedByClass[f.kelas] = (failedByClass[f.kelas] || 0) + 1; });
+  failed.forEach(f => { failedByClass[f.kelas] = (failedByClass[f.kelas] || 0) + f.jumlahJam; });
+  const totalUnassigned = failed.reduce((s, f) => s + f.jumlahJam, 0);
 
-  return { schedule: bestSchedule, failed, failedByClass, linearWarnings };
+  return { schedule: bestSchedule, failed, failedByClass, linearWarnings, capacityWarnings, totalUnassigned };
 }
 
 async function applyGeneratedSchedule(rows) {

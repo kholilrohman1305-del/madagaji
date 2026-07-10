@@ -39,6 +39,23 @@ const router = express.Router();
   } catch (e) {
     console.warn('[locked_slots migration]', e.message);
   }
+
+  // One-time migration: schedule_config never had UNIQUE(name), so every save
+  // INSERTed a new row and reads returned the oldest config (stale active days).
+  // Keep only the latest row per name, then enforce uniqueness.
+  try {
+    const [dups] = await pool.query(
+      `SELECT name, MAX(id) AS keep_id, COUNT(*) AS n FROM schedule_config GROUP BY name HAVING n > 1`
+    );
+    for (const d of dups) {
+      await pool.query(`DELETE FROM schedule_config WHERE name=? AND id<>?`, [d.name, d.keep_id]);
+    }
+    await pool.query(
+      `ALTER TABLE schedule_config ADD UNIQUE INDEX uq_schedule_config_name (name)`
+    ).catch(() => {});
+  } catch (e) {
+    console.warn('[schedule_config migration]', e.message);
+  }
 })();
 
 // Get all metadata (teachers now include gender; teacherSubjects include tingkat+is_linear; teacherLimits include available_days)
@@ -116,7 +133,9 @@ router.post('/generate', async (req, res, next) => {
       generated: result.schedule,
       failed: result.failed,
       failedByClass: result.failedByClass,
-      linearWarnings: result.linearWarnings
+      linearWarnings: result.linearWarnings,
+      capacityWarnings: result.capacityWarnings,
+      totalUnassigned: result.totalUnassigned
     });
   } catch (e) { next(e); }
 });

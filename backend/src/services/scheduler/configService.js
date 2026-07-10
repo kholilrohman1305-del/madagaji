@@ -166,7 +166,8 @@ async function upsertTeacherLimitsBulk(limits) {
 }
 
 async function getScheduleConfig(name = 'default') {
-  const [rows] = await pool.query('SELECT config_json FROM schedule_config WHERE name=? LIMIT 1', [name]);
+  // ORDER BY id DESC: legacy rows may be duplicated (pre-unique-key era) — always take the latest save
+  const [rows] = await pool.query('SELECT config_json FROM schedule_config WHERE name=? ORDER BY id DESC LIMIT 1', [name]);
   return rows[0]?.config_json || null;
 }
 
