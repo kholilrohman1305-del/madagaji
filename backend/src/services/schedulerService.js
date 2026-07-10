@@ -151,49 +151,23 @@ function greedyPass(lessons, teachers, days, slotsByTingkat, hoursByDayByTingkat
     });
 
     if (slotCount === 2) {
-      // Try to place as 2 consecutive slots (back-to-back on same day)
+      // Pairs must stay as a 2-hour block on ONE day (never split into lone
+      // 1-hour slots). Multiple pairs of the same class+subject prefer
+      // different days (2+2 across 2 days beats 4 stacked on one day).
       let placed = false;
       const shuffledCandidates = shuffle([...candidates]);
+      const usedDays = new Set(schedule
+        .filter(r => String(r.kelas) === String(classId) && String(r.mapelId) === String(subjectId))
+        .map(r => r.hari));
 
-      outerPair:
-      for (const teacher of shuffledCandidates) {
-        const limits = teacherLimits.get(teacher.id) || {};
-        const shuffledDays = shuffle([...days]);
-        for (const day of shuffledDays) {
-          if (limits.availableDays && !limits.availableDays.has(day)) continue;
-          const wl = teacherLoadWeek.get(teacher.id) || 0;
-          if (limits.maxWeek != null && wl + 2 > limits.maxWeek) continue;
-          const dayKey = `${teacher.id}-${day}`;
-          const dl = teacherLoadDay.get(dayKey) || 0;
-          if (limits.maxDay != null && dl + 2 > limits.maxDay) continue;
-
-          const slots = getActiveSlots(day, classTingkat, slotsByTingkat, hoursByDayByTingkat, hoursByDay);
-          for (let k = 0; k < slots.length - 1; k++) {
-            const h1 = slots[k], h2 = slots[k + 1];
-            if (h2 !== h1 + 1) continue; // must be numerically consecutive
-            if (classBusy.has(`${classId}-${day}-${h1}`) || classBusy.has(`${classId}-${day}-${h2}`)) continue;
-            if (teacherBusy.has(`${teacher.id}-${day}-${h1}`) || teacherBusy.has(`${teacher.id}-${day}-${h2}`)) continue;
-
-            schedule.push({ hari: day, jamKe: String(h1), kelas: String(classId), mapelId: String(subjectId), guruId: String(teacher.id) });
-            schedule.push({ hari: day, jamKe: String(h2), kelas: String(classId), mapelId: String(subjectId), guruId: String(teacher.id) });
-            teacherBusy.add(`${teacher.id}-${day}-${h1}`);
-            teacherBusy.add(`${teacher.id}-${day}-${h2}`);
-            classBusy.add(`${classId}-${day}-${h1}`);
-            classBusy.add(`${classId}-${day}-${h2}`);
-            teacherLoadWeek.set(teacher.id, wl + 2);
-            teacherLoadDay.set(dayKey, dl + 2);
-            placed = true;
-            break outerPair;
-          }
-        }
-      }
-
-      // Priority 2: Any 2 free slots on the SAME day (non-consecutive OK; consolidatePairs will fix)
-      if (!placed) {
-        outerSameDay:
+      // preferNewDay: skip days already holding this class+subject.
+      // requireConsecutive: slots must be back-to-back; otherwise any 2 free
+      // slots on the same day (consolidatePairs merges them afterwards).
+      const tryPlacePair = (preferNewDay, requireConsecutive) => {
         for (const teacher of shuffledCandidates) {
           const limits = teacherLimits.get(teacher.id) || {};
           for (const day of shuffle([...days])) {
+            if (preferNewDay && usedDays.has(day)) continue;
             if (limits.availableDays && !limits.availableDays.has(day)) continue;
             const wl = teacherLoadWeek.get(teacher.id) || 0;
             if (limits.maxWeek != null && wl + 2 > limits.maxWeek) continue;
@@ -202,32 +176,44 @@ function greedyPass(lessons, teachers, days, slotsByTingkat, hoursByDayByTingkat
             if (limits.maxDay != null && dl + 2 > limits.maxDay) continue;
 
             const slots = getActiveSlots(day, classTingkat, slotsByTingkat, hoursByDayByTingkat, hoursByDay);
-            const freeSlots = slots.filter(h =>
-              !classBusy.has(`${classId}-${day}-${h}`) &&
-              !teacherBusy.has(`${teacher.id}-${day}-${h}`)
-            );
-            if (freeSlots.length < 2) continue;
+            let pair = null;
+            if (requireConsecutive) {
+              for (let k = 0; k < slots.length - 1 && !pair; k++) {
+                const h1 = slots[k], h2 = slots[k + 1];
+                if (h2 !== h1 + 1) continue;
+                if (classBusy.has(`${classId}-${day}-${h1}`) || classBusy.has(`${classId}-${day}-${h2}`)) continue;
+                if (teacherBusy.has(`${teacher.id}-${day}-${h1}`) || teacherBusy.has(`${teacher.id}-${day}-${h2}`)) continue;
+                pair = [h1, h2];
+              }
+            } else {
+              const free = slots.filter(h =>
+                !classBusy.has(`${classId}-${day}-${h}`) &&
+                !teacherBusy.has(`${teacher.id}-${day}-${h}`));
+              if (free.length >= 2) pair = [free[0], free[1]];
+            }
+            if (!pair) continue;
 
-            const h1 = freeSlots[0], h2 = freeSlots[1];
-            schedule.push({ hari: day, jamKe: String(h1), kelas: String(classId), mapelId: String(subjectId), guruId: String(teacher.id) });
-            schedule.push({ hari: day, jamKe: String(h2), kelas: String(classId), mapelId: String(subjectId), guruId: String(teacher.id) });
-            teacherBusy.add(`${teacher.id}-${day}-${h1}`);
-            teacherBusy.add(`${teacher.id}-${day}-${h2}`);
-            classBusy.add(`${classId}-${day}-${h1}`);
-            classBusy.add(`${classId}-${day}-${h2}`);
+            for (const h of pair) {
+              schedule.push({ hari: day, jamKe: String(h), kelas: String(classId), mapelId: String(subjectId), guruId: String(teacher.id) });
+              teacherBusy.add(`${teacher.id}-${day}-${h}`);
+              classBusy.add(`${classId}-${day}-${h}`);
+            }
             teacherLoadWeek.set(teacher.id, wl + 2);
             teacherLoadDay.set(dayKey, dl + 2);
-            placed = true;
-            break outerSameDay;
+            return true;
           }
         }
-      }
+        return false;
+      };
 
-      if (!placed) {
-        // Last resort: 2 independent singles
-        unassigned.push({ ...lesson, slotCount: 1 });
-        unassigned.push({ ...lesson, slotCount: 1 });
-      }
+      placed = tryPlacePair(true, true)   // hari baru + berurutan (ideal)
+        || tryPlacePair(false, true)      // hari apa pun + berurutan
+        || tryPlacePair(true, false)      // hari baru + 2 slot bebas sehari
+        || tryPlacePair(false, false);    // hari apa pun + 2 slot bebas sehari
+
+      // Never split a pair into singles — keep it whole so swapRepair/report
+      // treats it as a 2-hour block.
+      if (!placed) unassigned.push(lesson);
     } else {
       // Single slot: teacher-first, prefer slots adjacent to same teacher+subject on same day
       let placed = false;
@@ -306,6 +292,52 @@ function swapRepair(schedule, unassigned, teachers, days, slotsByTingkat, hoursB
   for (const lesson of unassigned) {
     const { classId, classTingkat, classKelasType, subjectId } = lesson;
     let fixed = false;
+
+    // 2-hour block: place both slots on one day (consecutive first), never split
+    if (lesson.slotCount === 2) {
+      const viablePair = teachers.filter(t => {
+        if (!canTeachSubject(teacherSubjects, t.id, subjectId, classTingkat, classId)) return false;
+        const pref = (teacherLimits.get(t.id) || {}).classGenderPref || 'both';
+        return canTeachKelas(pref, classKelasType);
+      });
+      pairSearch:
+      for (const requireConsecutive of [true, false]) {
+        for (const teacher of shuffle([...viablePair])) {
+          const limits = teacherLimits.get(teacher.id) || {};
+          const wl = teacherLoadWeek.get(String(teacher.id)) || 0;
+          if (limits.maxWeek != null && wl + 2 > limits.maxWeek) continue;
+          for (const day of shuffle([...days])) {
+            if (limits.availableDays && !limits.availableDays.has(day)) continue;
+            const dl = teacherLoadDay.get(`${teacher.id}-${day}`) || 0;
+            if (limits.maxDay != null && dl + 2 > limits.maxDay) continue;
+            const slots = getActiveSlots(day, classTingkat, slotsByTingkat, hoursByDayByTingkat, hoursByDay);
+            const free = slots.filter(h =>
+              !classBusy.has(`${classId}-${day}-${h}`) &&
+              !teacherBusy.has(`${teacher.id}-${day}-${h}`));
+            let pair = null;
+            if (requireConsecutive) {
+              for (let k = 0; k < free.length - 1 && !pair; k++) {
+                if (free[k + 1] === free[k] + 1) pair = [free[k], free[k + 1]];
+              }
+            } else if (free.length >= 2) {
+              pair = [free[0], free[1]];
+            }
+            if (!pair) continue;
+            for (const h of pair) {
+              schedule.push({ hari: day, jamKe: String(h), kelas: String(classId), mapelId: String(subjectId), guruId: String(teacher.id) });
+              teacherBusy.add(`${teacher.id}-${day}-${h}`);
+              classBusy.add(`${classId}-${day}-${h}`);
+            }
+            teacherLoadWeek.set(String(teacher.id), wl + 2);
+            teacherLoadDay.set(`${teacher.id}-${day}`, dl + 2);
+            fixed = true;
+            break pairSearch;
+          }
+        }
+      }
+      if (!fixed) remaining.push(lesson);
+      continue;
+    }
 
     const freeClassSlots = [];
     for (const day of days) {
