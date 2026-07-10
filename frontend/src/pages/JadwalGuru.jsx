@@ -67,6 +67,16 @@ export default function JadwalGuru() {
     return Math.max(8, max || 0);
   }, [rows]);
 
+  const slotTimeByJam = useMemo(() => {
+    const map = new Map();
+    rows.forEach(r => {
+      if (!map.has(String(r.jamKe)) && r.startTime && r.endTime) {
+        map.set(String(r.jamKe), `${r.startTime}-${r.endTime}`);
+      }
+    });
+    return map;
+  }, [rows]);
+
   const kelasNameById = useMemo(() => {
     const map = new Map();
     (meta?.classes || []).forEach(c => map.set(String(c.id), c.name));
@@ -102,8 +112,7 @@ export default function JadwalGuru() {
           grid.set(`${i.hari}-${i.jamKe}`, {
             kelas: kelasNameById.get(String(i.kelas)) || i.kelas,
             mapel: subjectNameById.get(String(i.mapelId)) || i.mapelId,
-            mapelId: i.mapelId,
-            waktu: i.startTime && i.endTime ? `${i.startTime}-${i.endTime}` : ''
+            mapelId: i.mapelId
           });
         });
         const usedDays = effectiveDays.length > 0 ? effectiveDays : DAYS;
@@ -118,7 +127,14 @@ export default function JadwalGuru() {
                 <tr>
                   <th className="teacher-corner"></th>
                   {Array.from({ length: maxJam }).map((_, i) => (
-                    <th key={i}>Jam {i + 1}</th>
+                    <th key={i}>
+                      <div>Jam {i + 1}</div>
+                      {slotTimeByJam.get(String(i + 1)) && (
+                        <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, marginTop: 3 }}>
+                          {slotTimeByJam.get(String(i + 1))}
+                        </div>
+                      )}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -135,7 +151,6 @@ export default function JadwalGuru() {
                             <div className="teacher-cell-content">
                               <div className="teacher-cell-kelas">{val.kelas}</div>
                               <div className="teacher-cell-mapel">{val.mapel}</div>
-                              {val.waktu && <div className="teacher-cell-mapel">{val.waktu}</div>}
                             </div>
                           ) : null}
                         </td>

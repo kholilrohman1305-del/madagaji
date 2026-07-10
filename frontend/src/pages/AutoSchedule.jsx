@@ -122,6 +122,7 @@ export default function AutoSchedule() {
   const [slotDuration, setSlotDuration] = useState(45);
   const [startTimeByDay, setStartTimeByDay] = useState({});
   const [slotTimesByTingkat, setSlotTimesByTingkat] = useState({ X: {}, XI: {}, XII: {} });
+  const [copySlotTime, setCopySlotTime] = useState({ start: '07:00', end: '07:45' });
   const [step1Saving, setStep1Saving] = useState(false);
 
   // Step 2
@@ -406,6 +407,34 @@ export default function AutoSchedule() {
         }
       };
     });
+  };
+
+  const applyOneTimeToAllSlots = () => {
+    const startMin = timeToMinutes(copySlotTime.start);
+    const endMin = timeToMinutes(copySlotTime.end);
+    if (startMin == null || endMin == null || endMin <= startMin) {
+      toast.error('Jam selesai harus lebih besar dari jam mulai.');
+      return;
+    }
+    const duration = endMin - startMin;
+    const nextTimes = {};
+    TINGKAT_LIST.forEach(t => {
+      nextTimes[t] = {};
+      days.forEach(day => {
+        nextTimes[t][day] = {};
+        const activeSlots = slotsByTingkat[t]?.[day] || [];
+        activeSlots.forEach(jam => {
+          const start = startMin + (Number(jam) - 1) * duration;
+          nextTimes[t][day][jam] = {
+            start: minutesToTime(start),
+            end: minutesToTime(start + duration)
+          };
+        });
+      });
+    });
+    setSlotDuration(duration);
+    setSlotTimesByTingkat(nextTimes);
+    toast.success('Waktu slot disalin ke semua tingkat.');
   };
 
   const toggleAllSlotsForDay = (tingkat, day) => {
@@ -1101,6 +1130,33 @@ export default function AutoSchedule() {
               <span style={{ fontSize: 12, color: '#94a3b8' }}>jam/hari (maksimal)</span>
             </div>
 
+            <div style={{ marginBottom: 16, padding: '12px 14px', borderRadius: 10, background: '#ecfeff', border: '1.5px solid #67e8f9', display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0e7490', marginBottom: 6 }}>Waktu Slot 1</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="time"
+                    value={copySlotTime.start}
+                    onChange={e => setCopySlotTime(prev => ({ ...prev, start: e.target.value }))}
+                    style={{ width: 112, border: '1.5px solid #22d3ee', borderRadius: 7, padding: '5px 8px', fontSize: 13 }}
+                  />
+                  <span style={{ color: '#0891b2', fontWeight: 700 }}>s/d</span>
+                  <input
+                    type="time"
+                    value={copySlotTime.end}
+                    onChange={e => setCopySlotTime(prev => ({ ...prev, end: e.target.value }))}
+                    style={{ width: 112, border: '1.5px solid #22d3ee', borderRadius: 7, padding: '5px 8px', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+              <button className="btn sm" onClick={applyOneTimeToAllSlots}>
+                Copy ke Semua Slot & Tingkatan
+              </button>
+              <span style={{ color: '#0e7490', fontSize: 12 }}>
+                Slot berikutnya otomatis maju sesuai durasi dari waktu Slot 1.
+              </span>
+            </div>
+
             {/* Checkbox grid */}
             {maxHoursByTingkat[tingkatSlotTab] > 0 && days.length > 0 && (
               <div style={{ overflowX: 'auto' }}>
@@ -1110,7 +1166,7 @@ export default function AutoSchedule() {
                       <th style={{ padding: '7px 14px', textAlign: 'left', background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 600, color: '#475569', minWidth: 80 }}>Hari</th>
                       <th style={{ padding: '7px 10px', background: '#f1f5f9', border: '1px solid #e2e8f0', textAlign: 'center', minWidth: 80, color: '#475569', fontSize: 12 }}>Pilih Semua</th>
                       {Array.from({ length: maxHoursByTingkat[tingkatSlotTab] }, (_, i) => i + 1).map(jam => (
-                        <th key={jam} style={{ padding: '7px 8px', background: '#f1f5f9', border: '1px solid #e2e8f0', textAlign: 'center', minWidth: 118, color: '#475569', fontSize: 12 }}>Jam {jam}</th>
+                        <th key={jam} style={{ padding: '7px 8px', background: '#f1f5f9', border: '1px solid #e2e8f0', textAlign: 'center', minWidth: 96, color: '#475569', fontSize: 12 }}>Jam {jam}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1134,24 +1190,12 @@ export default function AutoSchedule() {
                                     <input type="checkbox" checked={active} onChange={() => toggleSlot(tingkatSlotTab, day, jam)} style={{ cursor: 'pointer', width: 15, height: 15 }} />
                                     Aktif
                                   </label>
-                                  <div style={{ display: 'grid', gap: 4, opacity: active ? 1 : 0.45 }}>
-                                    <input
-                                      type="time"
-                                      value={getSlotTime(slotTimesByTingkat, tingkatSlotTab, day, jam, startTimeByDay, slotDuration).start}
-                                      onChange={e => updateSlotTime(tingkatSlotTab, day, jam, 'start', e.target.value)}
-                                      disabled={!active}
-                                      aria-label={`Jam mulai ${day} slot ${jam}`}
-                                      style={{ width: 92, border: '1px solid #cbd5e1', borderRadius: 6, padding: '3px 5px', fontSize: 11 }}
-                                    />
-                                    <input
-                                      type="time"
-                                      value={getSlotTime(slotTimesByTingkat, tingkatSlotTab, day, jam, startTimeByDay, slotDuration).end}
-                                      onChange={e => updateSlotTime(tingkatSlotTab, day, jam, 'end', e.target.value)}
-                                      disabled={!active}
-                                      aria-label={`Jam selesai ${day} slot ${jam}`}
-                                      style={{ width: 92, border: '1px solid #cbd5e1', borderRadius: 6, padding: '3px 5px', fontSize: 11 }}
-                                    />
-                                  </div>
+                                  <span style={{ fontSize: 11, color: active ? '#0369a1' : '#94a3b8', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                    {(() => {
+                                      const time = getSlotTime(slotTimesByTingkat, tingkatSlotTab, day, jam, startTimeByDay, slotDuration);
+                                      return `${time.start}-${time.end}`;
+                                    })()}
+                                  </span>
                                 </div>
                               </td>
                             );
