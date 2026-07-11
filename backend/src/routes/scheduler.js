@@ -89,6 +89,10 @@ const router = express.Router();
   `).catch(() => {});
   await pool.query(`ALTER TABLE subject_limits ADD COLUMN available_days JSON NULL`).catch(() => {});
 
+  // Migration: detail jam tersedia PER HARI ({ hari: [jam..] }) utk guru & mapel
+  await pool.query(`ALTER TABLE teacher_limits ADD COLUMN available_slots_by_day JSON NULL`).catch(() => {});
+  await pool.query(`ALTER TABLE subject_limits ADD COLUMN available_slots_by_day JSON NULL`).catch(() => {});
+
   // Normalisasi: kunci manual dengan guru+hari+jam sama di beberapa kelas
   // (dibuat satu-per-satu via matriks Step 5) adalah multi-kelas yang sah
   await pool.query(`

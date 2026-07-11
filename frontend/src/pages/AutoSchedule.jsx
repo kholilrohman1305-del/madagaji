@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { showConfirm } from '../utils/confirm';
@@ -145,6 +145,8 @@ export default function AutoSchedule() {
   const [teacherLimitsLocal, setTeacherLimitsLocal] = useState({});
   const [subjectLimitsLocal, setSubjectLimitsLocal] = useState({});
   const [limitSearch, setLimitSearch] = useState('');
+  const [slotDetailTeacher, setSlotDetailTeacher] = useState(null); // id guru yg detail per-harinya dibuka
+  const [slotDetailSubject, setSlotDetailSubject] = useState(null); // id mapel yg detail per-harinya dibuka
   const [bulkMaxWeek, setBulkMaxWeek] = useState('');
   const [bulkMaxDay, setBulkMaxDay] = useState('');
   const [bulkMinLinier, setBulkMinLinier] = useState('');
@@ -261,6 +263,7 @@ export default function AutoSchedule() {
             maxDay: tl.max_hours_per_day ?? '',
             minLinier: tl.min_hours_linier ?? '',
             availableSlots: Array.isArray(tl.available_slots) ? tl.available_slots.map(Number) : [],
+            availableSlotsByDay: (tl.available_slots_by_day && typeof tl.available_slots_by_day === 'object') ? tl.available_slots_by_day : {},
             availableDays: Array.isArray(tl.available_days) ? tl.available_days : [],
             classGenderPref: tl.class_gender_pref || 'both'
           };
@@ -270,7 +273,8 @@ export default function AutoSchedule() {
         (metaRes.data?.subjectLimits || []).forEach(sl => {
           slMap[sl.subject_id] = {
             slots: Array.isArray(sl.available_slots) ? sl.available_slots.map(Number) : [],
-            days: Array.isArray(sl.available_days) ? sl.available_days : []
+            days: Array.isArray(sl.available_days) ? sl.available_days : [],
+            slotsByDay: (sl.available_slots_by_day && typeof sl.available_slots_by_day === 'object') ? sl.available_slots_by_day : {}
           };
         });
         setSubjectLimitsLocal(slMap);
@@ -782,9 +786,63 @@ export default function AutoSchedule() {
     }));
   };
 
+  // Bersihkan objek {hari: [jam..]}: buang hari kosong; null bila semua kosong
+  const cleanByDay = (obj) => {
+    if (!obj || typeof obj !== 'object') return null;
+    const out = {};
+    Object.entries(obj).forEach(([d, arr]) => {
+      if (Array.isArray(arr) && arr.length > 0) out[d] = arr.map(Number).sort((a, b) => a - b);
+    });
+    return Object.keys(out).length > 0 ? out : null;
+  };
+
+  // Detail jam per hari GURU: {hari: [jam..]} — hari terisi menimpa jam umum
+  const toggleTeacherDaySlot = (teacherId, day, jam) => {
+    setTeacherLimitsLocal(prev => {
+      const cur = prev[teacherId] || { maxWeek: '', maxDay: '', minLinier: '', availableSlots: [], availableDays: [] };
+      const byDay = { ...(cur.availableSlotsByDay || {}) };
+      const arr = [...(byDay[day] || [])].map(Number);
+      const idx = arr.indexOf(Number(jam));
+      if (idx >= 0) arr.splice(idx, 1); else arr.push(Number(jam));
+      byDay[day] = arr.sort((a, b) => a - b);
+      return { ...prev, [teacherId]: { ...cur, availableSlotsByDay: byDay } };
+    });
+  };
+
+  const clearTeacherDaySlots = (teacherId, day) => {
+    setTeacherLimitsLocal(prev => {
+      const cur = prev[teacherId] || {};
+      const byDay = { ...(cur.availableSlotsByDay || {}) };
+      delete byDay[day];
+      return { ...prev, [teacherId]: { ...cur, availableSlotsByDay: byDay } };
+    });
+  };
+
   // Jam & hari tersedia per MAPEL (berlaku untuk semua guru pengampu mapel itu)
   const getSubjectLim = (prev, subjectId) =>
     prev[subjectId] || prev[String(subjectId)] || { slots: [], days: [] };
+
+  // Detail jam per hari MAPEL
+  const toggleSubjectDaySlot = (subjectId, day, jam) => {
+    setSubjectLimitsLocal(prev => {
+      const cur = getSubjectLim(prev, subjectId);
+      const byDay = { ...(cur.slotsByDay || {}) };
+      const arr = [...(byDay[day] || [])].map(Number);
+      const idx = arr.indexOf(Number(jam));
+      if (idx >= 0) arr.splice(idx, 1); else arr.push(Number(jam));
+      byDay[day] = arr.sort((a, b) => a - b);
+      return { ...prev, [subjectId]: { ...cur, slotsByDay: byDay } };
+    });
+  };
+
+  const clearSubjectDaySlots = (subjectId, day) => {
+    setSubjectLimitsLocal(prev => {
+      const cur = getSubjectLim(prev, subjectId);
+      const byDay = { ...(cur.slotsByDay || {}) };
+      delete byDay[day];
+      return { ...prev, [subjectId]: { ...cur, slotsByDay: byDay } };
+    });
+  };
 
   const toggleSubjectSlot = (subjectId, jam) => {
     setSubjectLimitsLocal(prev => {
@@ -836,12 +894,14 @@ export default function AutoSchedule() {
       maxDay: l.maxDay !== '' ? Number(l.maxDay) : null,
       minLinier: l.minLinier !== '' ? Number(l.minLinier) : null,
       availableSlots: l.availableSlots?.length > 0 ? l.availableSlots.map(Number) : null,
+      availableSlotsByDay: cleanByDay(l.availableSlotsByDay),
       availableDays: l.availableDays?.length > 0 ? l.availableDays : null
     }));
     await api.put('/scheduler/teacher-limits-bulk', { limits });
     const subjectLimits = Object.entries(subjectLimitsLocal).map(([subjectId, v]) => ({
       subjectId,
       availableSlots: v?.slots?.length > 0 ? v.slots.map(Number) : null,
+      availableSlotsByDay: cleanByDay(v?.slotsByDay),
       availableDays: v?.days?.length > 0 ? v.days : null
     }));
     if (subjectLimits.length > 0) {
@@ -1045,9 +1105,15 @@ export default function AutoSchedule() {
         if (lim.classGenderPref === 'PA' && kelasG === 'PI') continue;
         if (lim.classGenderPref === 'PI' && kelasG === 'PA') continue;
         if (lim.availableDays?.length && !lim.availableDays.includes(hari)) continue;
-        if (lim.availableSlots?.length && !lim.availableSlots.includes(Number(jamKe))) continue;
+        const tByDay = lim.availableSlotsByDay?.[hari];
+        if (tByDay?.length) {
+          if (!tByDay.map(Number).includes(Number(jamKe))) continue;
+        } else if (lim.availableSlots?.length && !lim.availableSlots.map(Number).includes(Number(jamKe))) continue;
         const sLim = subjectLimitsLocal[sid] || subjectLimitsLocal[String(sid)];
-        if (sLim?.slots?.length && !sLim.slots.map(Number).includes(Number(jamKe))) continue;
+        const sByDay = sLim?.slotsByDay?.[hari];
+        if (sByDay?.length) {
+          if (!sByDay.map(Number).includes(Number(jamKe))) continue;
+        } else if (sLim?.slots?.length && !sLim.slots.map(Number).includes(Number(jamKe))) continue;
         if (sLim?.days?.length && !sLim.days.includes(hari)) continue;
         const busy = generated.some(r => String(r.guruId) === String(tid) && r.hari === hari && String(r.jamKe) === String(jamKe));
         if (busy) continue;
@@ -1734,8 +1800,10 @@ export default function AutoSchedule() {
               <tbody>
                 {(meta?.teachers || []).filter(t => !limitSearch || t.name.toLowerCase().includes(limitSearch.toLowerCase())).map(t => {
                   const lim = teacherLimitsLocal[t.id] || { maxWeek: '', maxDay: '', minLinier: '', availableSlots: [], availableDays: [] };
+                  const detailDayCount = Object.values(lim.availableSlotsByDay || {}).filter(a => a?.length > 0).length;
                   return (
-                    <tr key={t.id}>
+                    <Fragment key={t.id}>
+                    <tr>
                       <td style={{ fontWeight: 500, fontSize: 13 }}>{t.name}</td>
                       {['maxWeek', 'maxDay', 'minLinier'].map(field => (
                         <td key={field} style={{ textAlign: 'center' }}>
@@ -1752,6 +1820,10 @@ export default function AutoSchedule() {
                             </label>
                           ))}
                           <button className="btn sm outline" style={{ fontSize: 10, padding: '2px 7px' }} onClick={() => setAllAvailableSlots(t.id)}>Semua</button>
+                          <button className="btn sm outline" style={{ fontSize: 10, padding: '2px 7px', ...(detailDayCount > 0 ? { borderColor: '#f59e0b', color: '#b45309', fontWeight: 700 } : {}) }}
+                            onClick={() => setSlotDetailTeacher(slotDetailTeacher === t.id ? null : t.id)}>
+                            {slotDetailTeacher === t.id ? 'Tutup Detail' : `Detail/Hari${detailDayCount ? ` (${detailDayCount})` : ''}`}
+                          </button>
                         </div>
                       </td>
                       <td>
@@ -1766,6 +1838,41 @@ export default function AutoSchedule() {
                         </div>
                       </td>
                     </tr>
+                    {slotDetailTeacher === t.id && (
+                      <tr>
+                        <td colSpan={6} style={{ background: '#fffbeb', padding: '10px 16px', border: '1px solid #fde68a' }}>
+                          <div style={{ fontSize: 11.5, color: '#92400e', marginBottom: 8 }}>
+                            <b>Detail jam per hari — {t.name}.</b> Hari yang dicentang di sini <b>menimpa</b> "Jam Tersedia" umum khusus hari itu; hari tanpa centang tetap mengikuti setelan umum.
+                          </div>
+                          <table style={{ borderCollapse: 'collapse' }}>
+                            <tbody>
+                              {days.map(day => {
+                                const arr = (lim.availableSlotsByDay?.[day] || []).map(Number);
+                                return (
+                                  <tr key={day}>
+                                    <td style={{ padding: '3px 12px 3px 0', fontSize: 12, fontWeight: 600, color: '#78350f', whiteSpace: 'nowrap' }}>{day}</td>
+                                    <td>
+                                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                        {Array.from({ length: globalMaxHours }, (_, i) => i + 1).map(jam => (
+                                          <label key={jam} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+                                            <input type="checkbox" checked={arr.includes(jam)} onChange={() => toggleTeacherDaySlot(t.id, day, jam)} />
+                                            {jam}
+                                          </label>
+                                        ))}
+                                        {arr.length > 0 && (
+                                          <button className="btn sm outline" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => clearTeacherDaySlots(t.id, day)}>Ikut Umum</button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -1785,8 +1892,10 @@ export default function AutoSchedule() {
                     const sl = subjectLimitsLocal[s.id] || subjectLimitsLocal[String(s.id)] || { slots: [], days: [] };
                     const slotArr = (sl.slots || []).map(Number);
                     const dayArr = sl.days || [];
+                    const sDetailCount = Object.values(sl.slotsByDay || {}).filter(a => a?.length > 0).length;
                     return (
-                      <tr key={s.id}>
+                      <Fragment key={s.id}>
+                      <tr>
                         <td style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'nowrap' }}>
                           {s.name}
                           {slotArr.length > 0 && (
@@ -1813,6 +1922,10 @@ export default function AutoSchedule() {
                                 Semua Jam
                               </button>
                             )}
+                            <button className="btn sm outline" style={{ fontSize: 10, padding: '2px 7px', ...(sDetailCount > 0 ? { borderColor: '#f59e0b', color: '#b45309', fontWeight: 700 } : {}) }}
+                              onClick={() => setSlotDetailSubject(slotDetailSubject === s.id ? null : s.id)}>
+                              {slotDetailSubject === s.id ? 'Tutup Detail' : `Detail/Hari${sDetailCount ? ` (${sDetailCount})` : ''}`}
+                            </button>
                           </div>
                         </td>
                         <td>
@@ -1831,6 +1944,41 @@ export default function AutoSchedule() {
                           </div>
                         </td>
                       </tr>
+                      {slotDetailSubject === s.id && (
+                        <tr>
+                          <td colSpan={3} style={{ background: '#fffbeb', padding: '10px 16px', border: '1px solid #fde68a' }}>
+                            <div style={{ fontSize: 11.5, color: '#92400e', marginBottom: 8 }}>
+                              <b>Detail jam per hari — {s.name}.</b> Hari yang dicentang di sini <b>menimpa</b> "Jam Tersedia" umum mapel khusus hari itu; hari tanpa centang mengikuti setelan umum.
+                            </div>
+                            <table style={{ borderCollapse: 'collapse' }}>
+                              <tbody>
+                                {days.map(day => {
+                                  const arr = (sl.slotsByDay?.[day] || []).map(Number);
+                                  return (
+                                    <tr key={day}>
+                                      <td style={{ padding: '3px 12px 3px 0', fontSize: 12, fontWeight: 600, color: '#78350f', whiteSpace: 'nowrap' }}>{day}</td>
+                                      <td>
+                                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                          {Array.from({ length: globalMaxHours || 8 }, (_, i) => i + 1).map(jam => (
+                                            <label key={jam} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+                                              <input type="checkbox" checked={arr.includes(jam)} onChange={() => toggleSubjectDaySlot(s.id, day, jam)} />
+                                              {jam}
+                                            </label>
+                                          ))}
+                                          {arr.length > 0 && (
+                                            <button className="btn sm outline" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => clearSubjectDaySlots(s.id, day)}>Ikut Umum</button>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -1887,7 +2035,12 @@ export default function AutoSchedule() {
             const tLim = teacherLimitsLocal[plotTeacher] || {};
             const warns = [];
             if (plotEdit && plotTeacher) {
-              if (tLim.availableSlots?.length && !tLim.availableSlots.map(Number).includes(Number(plotEdit.jam))) {
+              const tByDay = tLim.availableSlotsByDay?.[plotEdit.hari];
+              if (tByDay?.length) {
+                if (!tByDay.map(Number).includes(Number(plotEdit.jam))) {
+                  warns.push(`Jam ke-${plotEdit.jam} di luar jam tersedia guru untuk hari ${plotEdit.hari} (jam ${tByDay.join(', ')}).`);
+                }
+              } else if (tLim.availableSlots?.length && !tLim.availableSlots.map(Number).includes(Number(plotEdit.jam))) {
                 warns.push(`Jam ke-${plotEdit.jam} tidak termasuk jam tersedia guru di Step 4.`);
               }
               if (tLim.availableDays?.length && !tLim.availableDays.includes(plotEdit.hari)) {
@@ -1900,9 +2053,16 @@ export default function AutoSchedule() {
             }
             if (plotEdit && plotMapel) {
               const sLim = subjectLimitsLocal[plotMapel] || subjectLimitsLocal[String(plotMapel)] || {};
-              const sSlots = (sLim.slots || []).map(Number);
-              if (sSlots.length && !sSlots.includes(Number(plotEdit.jam))) {
-                warns.push(`Jam ke-${plotEdit.jam} di luar jam tersedia mapel ini (jam ${sSlots.join(', ')}).`);
+              const sByDay = sLim.slotsByDay?.[plotEdit.hari];
+              if (sByDay?.length) {
+                if (!sByDay.map(Number).includes(Number(plotEdit.jam))) {
+                  warns.push(`Jam ke-${plotEdit.jam} di luar jam tersedia mapel untuk hari ${plotEdit.hari} (jam ${sByDay.join(', ')}).`);
+                }
+              } else {
+                const sSlots = (sLim.slots || []).map(Number);
+                if (sSlots.length && !sSlots.includes(Number(plotEdit.jam))) {
+                  warns.push(`Jam ke-${plotEdit.jam} di luar jam tersedia mapel ini (jam ${sSlots.join(', ')}).`);
+                }
               }
               if (sLim.days?.length && !sLim.days.includes(plotEdit.hari)) {
                 warns.push(`Hari ${plotEdit.hari} di luar hari tersedia mapel ini (${sLim.days.join(', ')}).`);

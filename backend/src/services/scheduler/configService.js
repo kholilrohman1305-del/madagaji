@@ -101,16 +101,14 @@ async function getTeacherLimits() {
   const cached = cacheGet('teacherLimits');
   if (cached) return cached;
   const [rows] = await pool.query(
-    'SELECT teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, class_gender_pref, max_slot, available_slots FROM teacher_limits'
+    'SELECT teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, class_gender_pref, max_slot, available_slots, available_slots_by_day FROM teacher_limits'
   );
+  const parseJson = (v) => v ? (typeof v === 'string' ? JSON.parse(v) : v) : null;
   const parsed = rows.map(r => ({
     ...r,
-    available_days: r.available_days
-      ? (typeof r.available_days === 'string' ? JSON.parse(r.available_days) : r.available_days)
-      : null,
-    available_slots: r.available_slots
-      ? (typeof r.available_slots === 'string' ? JSON.parse(r.available_slots) : r.available_slots)
-      : null,
+    available_days: parseJson(r.available_days),
+    available_slots: parseJson(r.available_slots),
+    available_slots_by_day: parseJson(r.available_slots_by_day),
     class_gender_pref: r.class_gender_pref || 'both'
   }));
   cacheSet('teacherLimits', parsed);
@@ -153,19 +151,21 @@ async function upsertTeacherLimitsBulk(limits) {
   }
   const queries = limits.map(l =>
     pool.query(
-      `INSERT INTO teacher_limits (teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, available_slots, max_slot)
-       VALUES (?, ?, ?, ?, ?, ?, NULL)
+      `INSERT INTO teacher_limits (teacher_id, max_hours_per_week, max_hours_per_day, min_hours_linier, available_days, available_slots, available_slots_by_day, max_slot)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
        ON DUPLICATE KEY UPDATE
          max_hours_per_week=VALUES(max_hours_per_week),
          max_hours_per_day=VALUES(max_hours_per_day),
          min_hours_linier=VALUES(min_hours_linier),
          available_days=VALUES(available_days),
          available_slots=VALUES(available_slots),
+         available_slots_by_day=VALUES(available_slots_by_day),
          max_slot=NULL`,
       [l.teacherId || l.teacher_id,
        l.maxWeek ?? null, l.maxDay ?? null, l.minLinier ?? null,
        l.availableDays != null ? JSON.stringify(l.availableDays) : null,
-       l.availableSlots != null ? JSON.stringify(l.availableSlots) : null]
+       l.availableSlots != null ? JSON.stringify(l.availableSlots) : null,
+       l.availableSlotsByDay != null ? JSON.stringify(l.availableSlotsByDay) : null]
     )
   );
   await Promise.all(queries);
@@ -179,12 +179,13 @@ async function getSubjectLimits() {
   const cached = cacheGet('subjectLimits');
   if (cached) return cached;
   try {
-    const [rows] = await pool.query('SELECT subject_id, available_slots, available_days FROM subject_limits');
+    const [rows] = await pool.query('SELECT subject_id, available_slots, available_days, available_slots_by_day FROM subject_limits');
     const parseJson = (v) => v ? (typeof v === 'string' ? JSON.parse(v) : v) : null;
     const parsed = rows.map(r => ({
       subject_id: r.subject_id,
       available_slots: parseJson(r.available_slots),
-      available_days: parseJson(r.available_days)
+      available_days: parseJson(r.available_days),
+      available_slots_by_day: parseJson(r.available_slots_by_day)
     }));
     cacheSet('subjectLimits', parsed);
     return parsed;
@@ -199,13 +200,15 @@ async function upsertSubjectLimitsBulk(limits) {
   }
   const queries = limits.map(l =>
     pool.query(
-      `INSERT INTO subject_limits (subject_id, available_slots, available_days) VALUES (?, ?, ?)
+      `INSERT INTO subject_limits (subject_id, available_slots, available_days, available_slots_by_day) VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          available_slots=VALUES(available_slots),
-         available_days=VALUES(available_days)`,
+         available_days=VALUES(available_days),
+         available_slots_by_day=VALUES(available_slots_by_day)`,
       [l.subjectId || l.subject_id,
        l.availableSlots != null ? JSON.stringify(l.availableSlots) : null,
-       l.availableDays != null ? JSON.stringify(l.availableDays) : null]
+       l.availableDays != null ? JSON.stringify(l.availableDays) : null,
+       l.availableSlotsByDay != null ? JSON.stringify(l.availableSlotsByDay) : null]
     )
   );
   await Promise.all(queries);
