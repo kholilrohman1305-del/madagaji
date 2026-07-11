@@ -179,14 +179,67 @@ router.post('/journal-sync', async (req, res, next) => {
   }
 });
 
+// GET /api/external/schedule-guru?nama={nama}&hari={hari}
+// Dipakai emada: jadwal mengajar guru (mis. hari ini) di dashboard.
+// Lookup guru by nama karena emada tidak menyimpan id master.
+router.get('/schedule-guru', async (req, res, next) => {
+  try {
+    const nama = String(req.query.nama || '').trim();
+    const hari = String(req.query.hari || '').trim();
+    if (!nama) return res.status(400).json({ success: false, message: 'nama wajib diisi.' });
+
+    const masterPool = pool.master;
+    const [teacherRows] = await masterPool.query(
+      'SELECT id FROM teachers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND is_active=1 LIMIT 1',
+      [nama]
+    );
+    let guruId = teacherRows.length > 0 ? String(teacherRows[0].id) : null;
+    if (!guruId) {
+      const [fuzzyRows] = await masterPool.query(
+        'SELECT id FROM teachers WHERE LOWER(TRIM(name)) LIKE ? AND is_active=1 LIMIT 1',
+        [`%${nama.toLowerCase()}%`]
+      );
+      if (fuzzyRows.length > 0) guruId = String(fuzzyRows[0].id);
+    }
+    if (!guruId) return res.json({ success: true, guruId: null, data: [], message: `Guru tidak ditemukan di master: "${nama}"` });
+
+    let rows = await schedule.getSchedule({ guruId });
+    if (hari) rows = rows.filter(r => String(r.hari || '').toLowerCase() === hari.toLowerCase());
+    rows.sort((a, b) => Number(a.jamKe) - Number(b.jamKe));
+    res.json({ success: true, guruId, data: rows });
+  } catch (e) { next(e); }
+});
+
 // GET /api/external/schedule-kelas?kelas={kelas}&hari={hari}
-// Dipakai pdmada untuk menampilkan jadwal siswa berdasarkan nama kelas
+// Dipakai pdmada untuk menampilkan jadwal siswa berdasarkan nama kelas.
+// jadwal.kelas berisi ID kelas master, jadi nama kelas ("XII.10") harus
+// di-resolve dulu ke ID — sebelumnya difilter langsung sehingga selalu kosong.
 router.get('/schedule-kelas', async (req, res, next) => {
   try {
     const kelas = String(req.query.kelas || '').trim();
     const hari  = String(req.query.hari  || '').trim();
     if (!kelas) return res.status(400).json({ success: false, message: 'kelas wajib diisi.' });
-    const rows = await schedule.getSchedule({ kelas, hari: hari || undefined });
+
+    let kelasId = kelas;
+    if (!/^\d+$/.test(kelas)) {
+      const masterPool = pool.master;
+      const [rows] = await masterPool.query(
+        'SELECT id FROM classes WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1',
+        [kelas]
+      );
+      if (rows.length === 0) {
+        const [fuzzy] = await masterPool.query(
+          'SELECT id FROM classes WHERE LOWER(TRIM(name)) LIKE ? LIMIT 1',
+          [`%${kelas.toLowerCase()}%`]
+        );
+        if (fuzzy.length === 0) return res.json({ success: true, data: [], message: `Kelas tidak ditemukan: "${kelas}"` });
+        kelasId = String(fuzzy[0].id);
+      } else {
+        kelasId = String(rows[0].id);
+      }
+    }
+
+    const rows = await schedule.getSchedule({ kelas: kelasId, hari: hari || undefined });
     res.json({ success: true, data: rows });
   } catch (e) { next(e); }
 });
