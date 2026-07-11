@@ -62,11 +62,15 @@ router.get('/payslip/:guruId', async (req, res, next) => {
 
 // POST /api/external/journal-sync
 // Called by emada when a teacher saves a journal entry.
-// Automatically marks the teacher present (Hadir) in the kehadiran table.
-// Matches against jadwal using day+jam+teacher name lookup from master teachers.
+// Strict matching: kehadiran hanya dicatat jika di jadwal ada slot dengan
+// hari (dari tanggal) + guru + kelas + mapel yang sama. Tanpa kecocokan
+// jadwal, tidak ada baris kehadiran yang disimpan (menu kehadiran tidak hijau).
 router.post('/journal-sync', async (req, res, next) => {
+  // Nama mapel/guru bisa beda ejaan antar sistem (mis. "Alquran Hadis" vs
+  // "Alqur'an Hadis") — bandingkan setelah membuang non-alfanumerik.
+  const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   try {
-    const { tanggal, guruNama, kelasNama, jamKe } = req.body;
+    const { tanggal, guruNama, kelasNama, mapelNama, jamKe } = req.body;
     if (!tanggal || !guruNama || !kelasNama || !jamKe) {
       return res.status(400).json({ success: false, message: 'tanggal, guruNama, kelasNama, jamKe wajib diisi.' });
     }
@@ -76,6 +80,13 @@ router.post('/journal-sync', async (req, res, next) => {
     if (jamList.length === 0) {
       return res.status(400).json({ success: false, message: 'jamKe tidak boleh kosong.' });
     }
+
+    // Balasan seragam saat tidak ada kecocokan — 200 karena ini bukan error,
+    // memang by design jurnal tanpa jadwal yang cocok tidak dihitung hadir.
+    const noMatch = (reason) => {
+      console.log(`[journal-sync] SKIP (${reason}) — guru="${guruNama}" kelas="${kelasNama}" mapel="${mapelNama || '-'}" tanggal=${tanggal} jam=${jamList.join(',')}`);
+      return res.json({ success: true, matched: false, synced: 0, message: `Tidak dicatat: ${reason}` });
+    };
 
     // Lookup teacher id dari master berdasarkan nama
     const [teacherRows] = await masterPool.query(
@@ -90,9 +101,7 @@ router.post('/journal-sync', async (req, res, next) => {
       );
       if (fuzzyRows.length > 0) masterGuruId = String(fuzzyRows[0].id);
     }
-    if (!masterGuruId) {
-      return res.status(404).json({ success: false, message: `Guru tidak ditemukan di master: "${guruNama}"` });
-    }
+    if (!masterGuruId) return noMatch(`guru "${guruNama}" tidak ditemukan di master`);
 
     // Lookup kelas id dari master berdasarkan nama
     const [classRows] = await masterPool.query(
@@ -107,40 +116,60 @@ router.post('/journal-sync', async (req, res, next) => {
       );
       if (fuzzyClassRows.length > 0) masterKelasId = String(fuzzyClassRows[0].id);
     }
-    if (!masterKelasId) {
-      return res.status(404).json({ success: false, message: `Kelas tidak ditemukan di master: "${kelasNama}"` });
-    }
+    if (!masterKelasId) return noMatch(`kelas "${kelasNama}" tidak ditemukan di master`);
 
-    // Verifikasi guru_id & kelas dari jadwal (guru_id di jadwal = master teachers.id)
-    // Lookup jadwal untuk mendapat guru_id dan kelas yang valid di gaji DB
+    // Lookup mapel id dari master subjects dengan perbandingan ternormalisasi
+    if (!mapelNama) return noMatch('mapelNama tidak dikirim');
+    const [subjectRows] = await masterPool.query('SELECT id, name FROM subjects WHERE is_active=1');
+    const targetMapel = norm(mapelNama);
+    let subject = subjectRows.find(r => norm(r.name) === targetMapel);
+    if (!subject && targetMapel) {
+      subject = subjectRows.find(r => {
+        const n = norm(r.name);
+        return n && (n.includes(targetMapel) || targetMapel.includes(n));
+      });
+    }
+    if (!subject) return noMatch(`mapel "${mapelNama}" tidak ditemukan di master`);
+    const masterMapelId = String(subject.id);
+
+    // Cocokkan dengan jadwal: hari (dari tanggal) + guru + kelas + mapel.
     const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const hari = DAY_NAMES[new Date(tanggal).getDay()];
     const [jadwalRows] = await pool.query(
-      'SELECT guru_id, kelas FROM jadwal WHERE guru_id = ? AND kelas = ? AND hari = ? AND jam_ke IN (?) LIMIT 1',
-      [masterGuruId, masterKelasId, hari, jamList]
+      'SELECT guru_id, kelas, jam_ke FROM jadwal WHERE guru_id = ? AND kelas = ? AND mapel_id = ? AND hari = ?',
+      [masterGuruId, masterKelasId, masterMapelId, hari]
     );
+    if (jadwalRows.length === 0) {
+      return noMatch(`tidak ada jadwal ${hari} untuk guru+kelas+mapel ini`);
+    }
 
-    // Tentukan guru_id dan kelas yang akan dipakai di kehadiran
-    // Jika ada di jadwal → pakai dari jadwal; jika tidak → tetap pakai master IDs
-    const finalGuruId = jadwalRows.length > 0 ? String(jadwalRows[0].guru_id) : masterGuruId;
-    const finalKelasId = jadwalRows.length > 0 ? String(jadwalRows[0].kelas) : masterKelasId;
+    // Slot yang dihijaukan mengikuti jadwal. Jika jam jurnal beririsan dengan
+    // jam jadwal, hanya slot yang beririsan yang dicatat; jika penomoran jam
+    // antar sistem berbeda (tidak ada irisan), catat seluruh slot jadwal
+    // yang cocok — kecocokan hari+guru+kelas+mapel sudah terpenuhi.
+    const jadwalJams = [...new Set(jadwalRows.map(r => String(r.jam_ke).trim()))];
+    const intersect = jadwalJams.filter(j => jamList.includes(j));
+    const slots = intersect.length > 0 ? intersect : jadwalJams;
 
-    const attendanceData = jamList.map(j => ({
+    const attendanceData = slots.map(j => ({
       tanggal,
       jamKe: j,
-      kelas: finalKelasId,
-      guruId: finalGuruId,
+      kelas: String(jadwalRows[0].kelas),
+      guruId: String(jadwalRows[0].guru_id),
       status: 'Hadir'
     }));
 
     const result = await attendance.saveBulkAttendance(attendanceData);
+    console.log(`[journal-sync] MATCH — guru=${masterGuruId} kelas=${masterKelasId} mapel=${masterMapelId} ${hari} jam=${slots.join(',')}`);
     res.json({
       success: true,
+      matched: true,
       message: result.message,
-      synced: jamList.length,
-      guruId: finalGuruId,
-      kelasId: finalKelasId,
-      matchedJadwal: jadwalRows.length > 0
+      synced: slots.length,
+      guruId: String(jadwalRows[0].guru_id),
+      kelasId: String(jadwalRows[0].kelas),
+      mapelId: masterMapelId,
+      jamKe: slots
     });
   } catch (e) {
     if (String(e.message || '').includes('hari libur')) {
