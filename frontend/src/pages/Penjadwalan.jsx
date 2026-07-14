@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import { toast } from "../utils/toast";
+import { showConfirm } from "../utils/confirm";
 import { CalendarClock, Save, Clock, Trash2 } from "lucide-react";
 
 const DAYS = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"];
@@ -15,6 +16,7 @@ export default function Penjadwalan() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [conflictAlert, setConflictAlert] = useState({ open: false, items: [] });
 
   useEffect(() => {
@@ -211,6 +213,37 @@ export default function Penjadwalan() {
     }
   };
 
+  const deleteAllSchedule = async () => {
+    if (deletingAll) return;
+
+    const ok1 = await showConfirm({
+      title: "Hapus Semua Jadwal",
+      message: "Anda akan menghapus SEMUA slot jadwal untuk seluruh kelas dan seluruh hari (bukan cuma hari yang sedang dilihat). Tindakan ini tidak dapat dibatalkan. Lanjutkan?",
+      confirmLabel: "Lanjutkan",
+      danger: true
+    });
+    if (!ok1) return;
+
+    const ok2 = await showConfirm({
+      title: "Konfirmasi Terakhir",
+      message: "Ini konfirmasi kedua — pastikan Anda benar-benar yakin. Semua jadwal yang sudah dibuat akan hilang permanen dan tidak bisa dikembalikan.",
+      confirmLabel: "Ya, Hapus Semua Jadwal",
+      danger: true
+    });
+    if (!ok2) return;
+
+    setDeletingAll(true);
+    try {
+      const res = await api.delete("/schedule/all");
+      toast.success(res.data?.message || "Semua jadwal berhasil dihapus.");
+      setRows([]);
+    } catch {
+      /* axios interceptor handles error */
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
   return (
     <div>
       <div className="modern-table-card">
@@ -230,6 +263,13 @@ export default function Penjadwalan() {
           </div>
           <button className="secondary" onClick={saveAll} disabled={saving}>
             <Save size={18} /> {saving ? "Menyimpan..." : "Simpan Semua"}
+          </button>
+          <button
+            onClick={deleteAllSchedule}
+            disabled={deletingAll}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "#fee2e2", color: "#dc2626", border: "1.5px solid #fca5a5", borderRadius: 8, padding: "8px 14px", fontWeight: 600, cursor: deletingAll ? "default" : "pointer", opacity: deletingAll ? 0.6 : 1 }}
+          >
+            <Trash2 size={18} /> {deletingAll ? "Menghapus..." : "Hapus Semua Jadwal"}
           </button>
         </div>
       </div>

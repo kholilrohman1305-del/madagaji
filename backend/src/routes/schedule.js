@@ -34,6 +34,10 @@ router.put('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.delete('/all', async (req, res, next) => {
+  try { res.json(await schedule.deleteAllSchedule()); } catch (e) { next(e); }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try { res.json(await schedule.deleteSchedule(req.params.id)); } catch (e) { next(e); }
 });

@@ -231,4 +231,10 @@ async function deleteSchedule(id) {
   return { success: true, message: 'Jadwal berhasil dihapus.' };
 }
 
-module.exports = { getSchedule, addSchedule, updateSchedule, deleteSchedule };
+async function deleteAllSchedule() {
+  const [result] = await pool.query('DELETE FROM jadwal');
+  invalidateScheduleCache();
+  return { success: true, message: `Semua jadwal berhasil dihapus (${result.affectedRows} slot).`, deleted: result.affectedRows };
+}
+
+module.exports = { getSchedule, addSchedule, updateSchedule, deleteSchedule, deleteAllSchedule };
