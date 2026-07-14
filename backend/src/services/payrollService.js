@@ -747,16 +747,40 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
   };
 
   const [teacherTasksRowsRaw] = await masterPool.query(
-    `SELECT id, teacher_id, title
-     FROM teacher_tasks
-     WHERE status = 'aktif'
+    `SELECT tt.id, tt.teacher_id, tt.title, 0 AS is_auto_homeroom
+     FROM teacher_tasks tt
+     WHERE tt.status = 'aktif'
+       AND NOT (
+         LOWER(TRIM(tt.title)) = 'wali kelas'
+         AND EXISTS (
+           SELECT 1 FROM classes c
+           WHERE c.is_active = 1 AND c.homeroom_teacher_id = tt.teacher_id
+         )
+       )
+     UNION ALL
+     SELECT -c.id AS id, c.homeroom_teacher_id AS teacher_id,
+            CONCAT('Wali Kelas ', c.name) AS title, 1 AS is_auto_homeroom
+     FROM classes c
+     WHERE c.is_active = 1 AND c.homeroom_teacher_id IS NOT NULL
      ORDER BY teacher_id, id`
   );
   const [taskRates] = await pool.query('SELECT task_id, nominal FROM teacher_task_rates');
   const taskRateMap = new Map(taskRates.map(r => [String(r.task_id), Number(r.nominal || 0)]));
+  const [manualWaliRows] = await masterPool.query(
+    `SELECT id, teacher_id
+     FROM teacher_tasks
+     WHERE status = 'aktif' AND LOWER(TRIM(title)) = 'wali kelas'`
+  );
+  const manualWaliRateMap = new Map();
+  manualWaliRows.forEach((row) => {
+    const rate = taskRateMap.get(String(row.id));
+    if (typeof rate !== 'undefined' && !manualWaliRateMap.has(String(row.teacher_id))) {
+      manualWaliRateMap.set(String(row.teacher_id), rate);
+    }
+  });
   const teacherTasksRows = teacherTasksRowsRaw.map(r => ({
     ...r,
-    nominal: taskRateMap.get(String(r.id)) || 0
+    nominal: taskRateMap.get(String(r.id)) ?? (Number(r.is_auto_homeroom) === 1 ? manualWaliRateMap.get(String(r.teacher_id)) : undefined) ?? 0
   }));
   const teacherTasksMap = new Map();
   teacherTasksRows.forEach(r => {

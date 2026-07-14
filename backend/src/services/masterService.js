@@ -53,10 +53,25 @@ async function getAllMasterData() {
 async function getAllTeachers() {
   const [rows] = await masterPool.query(
     `SELECT t.id, t.name, t.classification, t.tmt,
-            GROUP_CONCAT(tt.title ORDER BY tt.id SEPARATOR ', ') AS tugas_tambahan
+            GROUP_CONCAT(tt.title ORDER BY tt.sort_order, tt.id SEPARATOR ', ') AS tugas_tambahan
      FROM teachers t
-     LEFT JOIN teacher_tasks tt
-       ON tt.teacher_id = t.id AND tt.status = 'aktif'
+     LEFT JOIN (
+       SELECT tt.id, tt.teacher_id, tt.title, 10 AS sort_order
+       FROM teacher_tasks tt
+       WHERE tt.status = 'aktif'
+         AND NOT (
+           LOWER(TRIM(tt.title)) = 'wali kelas'
+           AND EXISTS (
+             SELECT 1 FROM classes c
+             WHERE c.is_active = 1 AND c.homeroom_teacher_id = tt.teacher_id
+           )
+         )
+       UNION ALL
+       SELECT -c.id AS id, c.homeroom_teacher_id AS teacher_id,
+              CONCAT('Wali Kelas ', c.name) AS title, 1 AS sort_order
+       FROM classes c
+       WHERE c.is_active = 1 AND c.homeroom_teacher_id IS NOT NULL
+     ) tt ON tt.teacher_id = t.id
      WHERE t.is_active=1
      GROUP BY t.id, t.name, t.classification, t.tmt
      ORDER BY t.name`
@@ -243,15 +258,46 @@ async function updateBisyarohSettings(settings) {
 async function getTeacherTasksWithRates() {
   const [tasks] = await masterPool.query(
     `SELECT tt.id, tt.teacher_id, tt.title, tt.description, tt.start_date, tt.end_date, tt.status,
-            t.name AS teacher_name
+            t.name AS teacher_name, 0 AS is_auto_homeroom
      FROM teacher_tasks tt
      LEFT JOIN teachers t ON t.id = tt.teacher_id
      WHERE tt.status = 'aktif'
-     ORDER BY tt.id DESC`
+       AND NOT (
+         LOWER(TRIM(tt.title)) = 'wali kelas'
+         AND EXISTS (
+           SELECT 1 FROM classes c
+           WHERE c.is_active = 1 AND c.homeroom_teacher_id = tt.teacher_id
+         )
+       )
+     UNION ALL
+     SELECT -c.id AS id, c.homeroom_teacher_id AS teacher_id,
+            CONCAT('Wali Kelas ', c.name) AS title,
+            CONCAT('Wali kelas ', c.name) AS description,
+            NULL AS start_date, NULL AS end_date, 'aktif' AS status,
+            COALESCE(t.name, c.homeroom_teacher) AS teacher_name, 1 AS is_auto_homeroom
+     FROM classes c
+     LEFT JOIN teachers t ON t.id = c.homeroom_teacher_id
+     WHERE c.is_active = 1 AND c.homeroom_teacher_id IS NOT NULL
+     ORDER BY is_auto_homeroom ASC, id DESC`
   );
   const [rates] = await pool.query('SELECT task_id, nominal FROM teacher_task_rates');
   const rateMap = new Map(rates.map(r => [String(r.task_id), Number(r.nominal || 0)]));
-  const rows = tasks.map(t => ({ ...t, nominal: rateMap.get(String(t.id)) ?? 0 }));
+  const [manualWaliRates] = await masterPool.query(
+    `SELECT tt.id, tt.teacher_id
+     FROM teacher_tasks tt
+     WHERE tt.status = 'aktif' AND LOWER(TRIM(tt.title)) = 'wali kelas'`
+  );
+  const manualWaliRateMap = new Map();
+  manualWaliRates.forEach((row) => {
+    const rate = rateMap.get(String(row.id));
+    if (typeof rate !== 'undefined' && !manualWaliRateMap.has(String(row.teacher_id))) {
+      manualWaliRateMap.set(String(row.teacher_id), rate);
+    }
+  });
+  const rows = tasks.map(t => ({
+    ...t,
+    nominal: rateMap.get(String(t.id)) ?? (Number(t.is_auto_homeroom) === 1 ? manualWaliRateMap.get(String(t.teacher_id)) : undefined) ?? 0
+  }));
   return rows.map(r => ({
     id: r.id,
     teacherId: r.teacher_id,
@@ -261,6 +307,7 @@ async function getTeacherTasksWithRates() {
     startDate: r.start_date,
     endDate: r.end_date,
     status: r.status,
+    isAutoHomeroom: Number(r.is_auto_homeroom) === 1,
     nominal: r.nominal ?? 0
   }));
 }
