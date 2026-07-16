@@ -44,6 +44,57 @@ router.get('/schedule/:guruId', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /api/external/class-subject-settings
+// Sumber sebaran mapel per kelas untuk MyMada. Data utama diambil dari
+// class_subjects MadaFlow; jika tabel itu kosong, gunakan jadwal sebagai
+// fallback agar mapel yang sudah terjadwal tetap bisa ditarik.
+router.get('/class-subject-settings', async (req, res, next) => {
+  try {
+    const [classSubjectRows] = await pool.query(
+      `SELECT class_id, subject_id, hours_per_week
+       FROM class_subjects
+       ORDER BY class_id, subject_id`
+    ).catch(() => [[]]);
+
+    let sourceRows = classSubjectRows;
+    let source = 'class_subjects';
+    if (!sourceRows.length) {
+      const [scheduleRows] = await pool.query(
+        `SELECT kelas AS class_id, mapel_id AS subject_id, COUNT(*) AS hours_per_week
+         FROM jadwal
+         WHERE kelas IS NOT NULL AND mapel_id IS NOT NULL
+         GROUP BY kelas, mapel_id
+         ORDER BY kelas, mapel_id`
+      ).catch(() => [[]]);
+      sourceRows = scheduleRows;
+      source = 'jadwal';
+    }
+
+    const [[classes], [subjects]] = await Promise.all([
+      pool.master.query('SELECT id, name FROM classes'),
+      pool.master.query('SELECT id, code, name FROM subjects WHERE is_active = 1')
+    ]);
+    const classMap = new Map(classes.map((row) => [String(row.id), row]));
+    const subjectMap = new Map(subjects.map((row) => [String(row.id), row]));
+
+    const data = sourceRows.map((row, idx) => {
+      const cls = classMap.get(String(row.class_id)) || {};
+      const subject = subjectMap.get(String(row.subject_id)) || {};
+      return {
+        class_id: row.class_id,
+        class_name: cls.name || null,
+        subject_id: row.subject_id,
+        subject_code: subject.code || null,
+        subject_name: subject.name || null,
+        hours_per_week: Number(row.hours_per_week || 0),
+        display_order: idx + 1
+      };
+    }).filter((row) => row.class_name && row.subject_name);
+
+    res.json({ success: true, source, data });
+  } catch (e) { next(e); }
+});
+
 // GET /api/external/payslip/:guruId?period=YYYY-MM - one teacher's bisyaroh breakdown
 router.get('/payslip/:guruId', async (req, res, next) => {
   try {
