@@ -24,7 +24,9 @@ export default function RekapBisyaroh() {
   const [teachers, setTeachers] = useState([]);
   const [activities, setActivities] = useState([]);
   const [manualMap, setManualMap] = useState({});
+  const [manualActivityMap, setManualActivityMap] = useState({});
   const [savingTransport, setSavingTransport] = useState({});
+  const [savingActivity, setSavingActivity] = useState({});
   const [activityForm, setActivityForm] = useState({
     tanggal: new Date().toISOString().slice(0, 10),
     nama: '',
@@ -76,6 +78,17 @@ export default function RekapBisyaroh() {
       });
   }, [startDate, endDate]);
 
+  useEffect(() => {
+    api.get('/payroll/manual-activities', { params: { startDate, endDate } })
+      .then(res => {
+        const map = {};
+        (res.data || []).forEach(r => {
+          map[r.guruId] = Number(r.jumlah || 0);
+        });
+        setManualActivityMap(map);
+      });
+  }, [startDate, endDate]);
+
   const getMonthsInRange = (start, end) => {
     const result = [];
     const cur = new Date(start);
@@ -122,6 +135,17 @@ export default function RekapBisyaroh() {
       load();
     } finally {
       setSavingTransport(prev => ({ ...prev, [guruId]: false }));
+    }
+  };
+
+  const saveManualActivity = async (guruId, value) => {
+    const jumlah = Math.max(0, Number(value || 0));
+    setSavingActivity(prev => ({ ...prev, [guruId]: true }));
+    try {
+      await api.post('/payroll/manual-activities', { guruId, startDate, endDate, jumlah });
+      load();
+    } finally {
+      setSavingActivity(prev => ({ ...prev, [guruId]: false }));
     }
   };
 
@@ -209,7 +233,23 @@ export default function RekapBisyaroh() {
                     />
                   </td>
                   <td>{formatRupiah(it.bisyarohTransport)}</td>
-                  <td>{it.jumlahKegiatan ?? 0}</td>
+                  <td>
+                    {it.isExpense ? '-' : (
+                      <input
+                        type="number"
+                        min="0"
+                        style={{ width: 80 }}
+                        value={manualActivityMap[it.guruId] ?? it.jumlahKegiatan ?? 0}
+                        onChange={e => {
+                          const v = e.target.value;
+                          setManualActivityMap(prev => ({ ...prev, [it.guruId]: v }));
+                        }}
+                        onBlur={() => saveManualActivity(it.guruId, manualActivityMap[it.guruId] ?? it.jumlahKegiatan ?? 0)}
+                        disabled={savingActivity[it.guruId]}
+                        title="Jumlah kegiatan manual untuk rentang tanggal ini"
+                      />
+                    )}
+                  </td>
                   <td>{formatRupiah(it.bisyarohTransportKegiatan)}</td>
                   <td>{it.tugasTambahan1 || '-'}</td>
                   <td>{it.tugasTambahan2 || '-'}</td>

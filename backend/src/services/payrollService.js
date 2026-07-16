@@ -5,6 +5,24 @@ const { TTLCache } = require('../utils/cache');
 
 const configCache = new TTLCache(30000);
 let expenseIdModeCache = null; // 'auto' | 'string'
+let manualActivityTableReady = false;
+
+async function ensureManualActivityTable() {
+  if (manualActivityTableReady) return;
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS kegiatan_manual (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      guru_id VARCHAR(10) NOT NULL,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      jumlah INT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_kegiatan_manual_period (guru_id, start_date, end_date),
+      INDEX idx_kegiatan_manual_period (start_date, end_date)
+    )`
+  );
+  manualActivityTableReady = true;
+}
 
 async function getExpenseIdMode() {
   if (expenseIdModeCache) return expenseIdModeCache;
@@ -808,6 +826,14 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     [startDate, endDate]
   );
   const activityMap = new Map(activityRows.map(r => [String(r.guru_id), parseInt(r.total) || 0]));
+  await ensureManualActivityTable();
+  const [manualActivityRows] = await pool.query(
+    `SELECT guru_id, jumlah
+     FROM kegiatan_manual
+     WHERE start_date = ? AND end_date = ?`,
+    [startDate, endDate]
+  );
+  const manualActivityMap = new Map(manualActivityRows.map(r => [String(r.guru_id), parseInt(r.jumlah) || 0]));
 
   const [guruRows] = await masterPool.query('SELECT id, name, tmt, classification FROM teachers WHERE is_active=1');
   const guruMap = new Map();
@@ -902,7 +928,9 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     const bisyarohTidakHadir = totalTidakHadir * TARIFFS.RATE_TIDAK_HADIR;
     const bisyarohMengajar = bisyarohJam + bisyarohIzin + bisyarohTidakHadir;
     const bisyarohTransport = totalTransportHari * rateTransport;
-    const jumlahKegiatan = activityMap.get(String(guruId)) || 0;
+    const jumlahKegiatan = manualActivityMap.has(String(guruId))
+      ? manualActivityMap.get(String(guruId))
+      : (activityMap.get(String(guruId)) || 0);
     const bisyarohTransportKegiatan = jumlahKegiatan * rateTransport;
     const tasks = teacherTasksMap.get(String(guruId)) || [];
     const honorTugas = tasks.reduce((sum, t) => sum + (t.nominal || 0), 0);
@@ -1190,6 +1218,40 @@ async function saveBulkManualTransport(transportData) {
   return { success: true, message: 'Transport manual berhasil disimpan.' };
 }
 
+async function getManualActivityData(startDate, endDate) {
+  await ensureManualActivityTable();
+  const [rows] = await pool.query(
+    `SELECT guru_id, start_date, end_date, jumlah
+     FROM kegiatan_manual
+     WHERE start_date = ? AND end_date = ?`,
+    [startDate, endDate]
+  );
+  return rows.map(r => ({
+    guruId: String(r.guru_id),
+    startDate: String(r.start_date).slice(0, 10),
+    endDate: String(r.end_date).slice(0, 10),
+    jumlah: parseInt(r.jumlah) || 0
+  }));
+}
+
+async function saveManualActivity(data) {
+  await ensureManualActivityTable();
+  const guruId = String(data.guruId || '').trim();
+  const startDate = String(data.startDate || '').slice(0, 10);
+  const endDate = String(data.endDate || '').slice(0, 10);
+  const jumlah = Math.max(0, parseInt(data.jumlah, 10) || 0);
+  if (!guruId || !startDate || !endDate) {
+    throw new Error('guruId, startDate, dan endDate wajib diisi.');
+  }
+  await pool.query(
+    `INSERT INTO kegiatan_manual (guru_id, start_date, end_date, jumlah)
+     VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE jumlah=VALUES(jumlah)`,
+    [guruId, startDate, endDate, jumlah]
+  );
+  return { success: true, message: 'Kegiatan manual berhasil disimpan.' };
+}
+
 async function getPayslipData(startDate, endDate, guruId) {
   const summaryData = await getTeacherAttendanceSummary(startDate, endDate);
   const teacherData = summaryData.find(i => i.guruId === guruId && !i.isExpense);
@@ -1264,6 +1326,8 @@ module.exports = {
   getTotalBisyarohBreakdown,
   getManualTransportData,
   saveBulkManualTransport,
+  getManualActivityData,
+  saveManualActivity,
   getPayslipData,
   getAllPayslipsData,
   getOtherExpenses,

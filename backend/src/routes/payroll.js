@@ -41,6 +41,22 @@ router.post('/manual-transport', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get('/manual-activities', async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) return res.status(400).json({ success: false, message: 'startDate dan endDate wajib.' });
+    res.json(await payroll.getManualActivityData(startDate, endDate));
+  } catch (e) { next(e); }
+});
+
+router.post('/manual-activities', async (req, res, next) => {
+  try {
+    const { guruId, startDate, endDate, jumlah } = req.body || {};
+    if (!guruId || !startDate || !endDate) return res.status(400).json({ success: false, message: 'guruId, startDate, dan endDate wajib.' });
+    res.json(await payroll.saveManualActivity({ guruId, startDate, endDate, jumlah }));
+  } catch (e) { next(e); }
+});
+
 router.get('/payslip', async (req, res, next) => {
   try {
     const { startDate, endDate, guruId } = req.query;

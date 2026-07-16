@@ -172,6 +172,17 @@ CREATE TABLE IF NOT EXISTS kegiatan_guru (
   CONSTRAINT fk_kegiatan_guru FOREIGN KEY (kegiatan_id) REFERENCES kegiatan(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS kegiatan_manual (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  guru_id VARCHAR(10) NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  jumlah INT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_kegiatan_manual_period (guru_id, start_date, end_date),
+  INDEX idx_kegiatan_manual_period (start_date, end_date)
+);
+
 INSERT INTO konfigurasi (config_key, config_value) VALUES
   ('RATE_MENGAJAR', '0'),
   ('RATE_HADIR', '0'),
