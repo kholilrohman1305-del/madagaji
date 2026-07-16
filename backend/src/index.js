@@ -25,7 +25,6 @@ if (!process.env.PDMADA_DB_NAME && pdmadaEnv.DB_NAME) process.env.PDMADA_DB_NAME
 const app = require('./app');
 const pool = require('./db');
 const { ensureAdminUser } = require('./services/authService');
-const { startJournalReconciler } = require('./services/journalReconcileService');
 
 const port = process.env.PORT || 4000;
 
@@ -36,10 +35,6 @@ const server = app.listen(port, () => {
 ensureAdminUser().catch((err) => {
   console.error('Failed to ensure admin user', err);
 });
-
-// Rekonsiliasi kehadiran dari jurnal emada — menambal push realtime yang
-// gagal (fire-and-forget). Insert-only, tidak menimpa input manual.
-startJournalReconciler();
 
 server.keepAliveTimeout = Number(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS || 65000);
 server.headersTimeout = Number(process.env.HTTP_HEADERS_TIMEOUT_MS || 66000);
