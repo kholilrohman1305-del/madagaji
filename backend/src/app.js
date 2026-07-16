@@ -36,6 +36,42 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
+async function ensureKehadiranSlotIndex() {
+  try {
+    const [indexes] = await pool.query('SHOW INDEX FROM kehadiran');
+    const byName = new Map();
+    indexes.forEach((row) => {
+      const name = row.Key_name;
+      if (!byName.has(name)) {
+        byName.set(name, { nonUnique: Number(row.Non_unique), columns: [] });
+      }
+      byName.get(name).columns.push(String(row.Column_name));
+    });
+
+    let hasSlotUnique = false;
+    for (const [name, info] of byName.entries()) {
+      if (info.nonUnique !== 0 || name === 'PRIMARY') continue;
+      const cols = new Set(info.columns);
+      const isAttendanceKey = cols.has('tanggal_only') && cols.has('guru_id') && cols.has('kelas');
+      if (isAttendanceKey && cols.has('jam_ke')) {
+        hasSlotUnique = true;
+      } else if (isAttendanceKey && !cols.has('jam_ke')) {
+        await pool.query(`ALTER TABLE kehadiran DROP INDEX \`${name}\``);
+        console.log(`[startup] dropped legacy kehadiran unique index: ${name}`);
+      }
+    }
+
+    if (!hasSlotUnique) {
+      await pool.query('ALTER TABLE kehadiran ADD UNIQUE KEY uniq_kehadiran_slot (guru_id, kelas, jam_ke, tanggal_only)');
+      console.log('[startup] ensured kehadiran unique index per slot');
+    }
+  } catch (err) {
+    console.warn('[startup] unable to ensure kehadiran slot index:', err.message);
+  }
+}
+
+ensureKehadiranSlotIndex();
+
 function normalizeOrigin(origin) {
   return String(origin || '').trim().replace(/\/+$/, '');
 }
