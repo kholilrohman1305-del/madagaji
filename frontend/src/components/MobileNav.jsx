@@ -83,10 +83,17 @@ export default function MobileNav() {
             <span>Bisyaroh</span>
           </NavLink>
         )}
-        <NavLink to="/jadwal-guru" className={({ isActive }) => `mb-tab${isActive ? ' active' : ''}`}>
-          <CalendarClock size={20} />
-          <span>Jadwal</span>
-        </NavLink>
+        {isAdmin ? (
+          <NavLink to="/total-bisyaroh" className={({ isActive }) => `mb-tab${isActive ? ' active' : ''}`}>
+            <PieChart size={20} />
+            <span>Total</span>
+          </NavLink>
+        ) : (
+          <NavLink to="/jadwal-guru" className={({ isActive }) => `mb-tab${isActive ? ' active' : ''}`}>
+            <CalendarClock size={20} />
+            <span>Jadwal</span>
+          </NavLink>
+        )}
         <button type="button" className={`mb-tab${menuOpen ? ' active' : ''}`} onClick={() => setMenuOpen(true)}>
           <LayoutGrid size={20} />
           <span>Menu</span>

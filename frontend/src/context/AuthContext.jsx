@@ -9,6 +9,15 @@ const isBypassEnabled =
   String(import.meta.env.VITE_AUTH_BYPASS || '').toLowerCase() === 'true';
 const BYPASS_USER = { id: 0, username: 'admin', role: 'admin', display_name: 'Administrator' };
 
+const getMymadaDashboardUrl = () => {
+  const fallback = typeof window !== 'undefined' ? `${window.location.origin}/pdmada` : '/pdmada';
+  const rawValue = String(import.meta.env.VITE_PDMADA_URL || '').trim();
+  if (!rawValue) return fallback;
+  if (typeof window === 'undefined') return rawValue;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(rawValue)) return fallback;
+  return rawValue;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -57,11 +66,14 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    if (!isBypassEnabled) {
-      await api.post('/auth/logout', {}, { skipToast: true });
+    try {
+      if (!isBypassEnabled) {
+        await api.post('/auth/logout', {}, { skipToast: true });
+      }
+    } finally {
+      setUser(null);
+      window.location.assign(getMymadaDashboardUrl());
     }
-    setUser(null);
-    toast.success('Logout berhasil.');
   };
 
   const value = useMemo(() => ({

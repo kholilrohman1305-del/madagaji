@@ -97,6 +97,15 @@ export default function TotalBisyaroh() {
 
         {data && (
           <div className="total-bisyaroh-document">
+            <div className="total-bisyaroh-grand-card">
+              <div>
+                <span>Jumlah Total</span>
+                <strong>{formatRupiah(totalValue)}</strong>
+                <p>Periode {formatDate(startDate)} s/d {formatDate(endDate)}</p>
+              </div>
+              <PieChart size={38} />
+            </div>
+
             <div className="total-bisyaroh-header">
               <div>
                 <div className="cetak-bisyaroh-kicker">Ringkasan Bisyaroh</div>
@@ -116,7 +125,7 @@ export default function TotalBisyaroh() {
                   <div className="stat-value" style={{ color: r.color, fontSize: 28 }}>{formatRupiah(r.value)}</div>
                 </div>
               ))}
-              <div className="stat-card" style={{ background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', color: 'white' }}>
+              <div className="stat-card total-bisyaroh-inline-total" style={{ background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', color: 'white' }}>
                 <div className="stat-label" style={{ color: 'rgba(255,255,255,0.8)' }}>JUMLAH TOTAL</div>
                 <div className="stat-value" style={{ color: 'white', fontSize: 28 }}>{formatRupiah(totalValue)}</div>
               </div>

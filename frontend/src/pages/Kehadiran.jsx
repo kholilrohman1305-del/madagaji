@@ -22,6 +22,8 @@ export default function Kehadiran() {
   const [holidayInput, setHolidayInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [mobileClassFilter, setMobileClassFilter] = useState('all');
+  const [mobileJamFilter, setMobileJamFilter] = useState('all');
   const isMobile = useIsMobile();
   useMasterData();
 
@@ -107,6 +109,14 @@ export default function Kehadiran() {
     return { classes, jamList, cellMap: map };
   }, [items]);
 
+  const visibleClasses = useMemo(() => (
+    mobileClassFilter === 'all' ? classes : classes.filter(kelas => String(kelas) === String(mobileClassFilter))
+  ), [classes, mobileClassFilter]);
+
+  const visibleJamList = useMemo(() => (
+    mobileJamFilter === 'all' ? jamList : jamList.filter(jam => String(jam) === String(mobileJamFilter))
+  ), [jamList, mobileJamFilter]);
+
   return (
     <div>
       {loading && <KehadiranSkeleton />}
@@ -151,42 +161,60 @@ export default function Kehadiran() {
         {isMobile ? (
           /* Versi mobile: kartu per kelas, chip jam diketuk untuk ganti
              status (kosong -> Hadir -> Izin -> Tidak Hadir), tanpa scroll samping. */
-          <div className="mm-kelas-list">
-            {classes.map(kelas => (
-              <div className="mm-kelas-card" key={`kelas-${kelas}`}>
-                <div className="mm-kelas-name">{kelas}</div>
-                <div className="mm-jam-grid">
-                  {jamList.map(jam => {
-                    const cell = cellMap.get(`${kelas}__${jam}`);
-                    if (!cell) return null;
-                    const statusClass = cell.status === 'Hadir'
-                      ? 'status-hadir'
-                      : cell.status === 'Izin'
-                        ? 'status-izin'
-                        : cell.status === 'Tidak Hadir'
-                          ? 'status-absen'
-                          : '';
-                    return (
-                      <button
-                        type="button"
-                        key={`${kelas}-${jam}`}
-                        className={`mm-jam-chip ${statusClass}`}
-                        onClick={() => onCellClick(cell.idx)}
-                        disabled={locked}
-                      >
-                        <span className="mm-jam-head">
-                          <span className="mm-jam-no">Jam {jam}</span>
-                          <span className="mm-jam-status">{cell.status || '-'}</span>
-                        </span>
-                        <span className="mm-jam-mapel">{cell.namaMapel}</span>
-                        <span className="mm-jam-guru">{cell.namaGuru}</span>
-                      </button>
-                    );
-                  })}
+          <>
+            <div className="mm-filter-card">
+              <label>
+                <span>Kelas</span>
+                <select value={mobileClassFilter} onChange={e => setMobileClassFilter(e.target.value)}>
+                  <option value="all">Semua kelas</option>
+                  {classes.map(kelas => <option key={kelas} value={kelas}>{kelas}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Jam</span>
+                <select value={mobileJamFilter} onChange={e => setMobileJamFilter(e.target.value)}>
+                  <option value="all">Semua jam</option>
+                  {jamList.map(jam => <option key={jam} value={jam}>Jam {jam}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="mm-kelas-list">
+              {visibleClasses.map(kelas => (
+                <div className="mm-kelas-card" key={`kelas-${kelas}`}>
+                  <div className="mm-kelas-name">{kelas}</div>
+                  <div className="mm-jam-grid">
+                    {visibleJamList.map(jam => {
+                      const cell = cellMap.get(`${kelas}__${jam}`);
+                      if (!cell) return null;
+                      const statusClass = cell.status === 'Hadir'
+                        ? 'status-hadir'
+                        : cell.status === 'Izin'
+                          ? 'status-izin'
+                          : cell.status === 'Tidak Hadir'
+                            ? 'status-absen'
+                            : '';
+                      return (
+                        <button
+                          type="button"
+                          key={`${kelas}-${jam}`}
+                          className={`mm-jam-chip ${statusClass}`}
+                          onClick={() => onCellClick(cell.idx)}
+                          disabled={locked}
+                        >
+                          <span className="mm-jam-head">
+                            <span className="mm-jam-no">Jam {jam}</span>
+                            <span className="mm-jam-status">{cell.status || '-'}</span>
+                          </span>
+                          <span className="mm-jam-mapel">{cell.namaMapel}</span>
+                          <span className="mm-jam-guru">{cell.namaGuru}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         ) : (
         <table className="table attendance-table">
           <thead>
