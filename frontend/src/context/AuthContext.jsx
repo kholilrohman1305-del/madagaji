@@ -8,15 +8,7 @@ const isBypassEnabled =
   !import.meta.env.PROD &&
   String(import.meta.env.VITE_AUTH_BYPASS || '').toLowerCase() === 'true';
 const BYPASS_USER = { id: 0, username: 'admin', role: 'admin', display_name: 'Administrator' };
-
-const getMymadaDashboardUrl = () => {
-  const fallback = typeof window !== 'undefined' ? `${window.location.origin}/pdmada` : '/pdmada';
-  const rawValue = String(import.meta.env.VITE_PDMADA_URL || '').trim();
-  if (!rawValue) return fallback;
-  if (typeof window === 'undefined') return rawValue;
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(rawValue)) return fallback;
-  return rawValue;
-};
+const LOGOUT_REDIRECT_URL = 'https://abudarrin.cloud/';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -72,7 +64,7 @@ export const AuthProvider = ({ children }) => {
       }
     } finally {
       setUser(null);
-      window.location.assign(getMymadaDashboardUrl());
+      window.location.assign(LOGOUT_REDIRECT_URL);
     }
   };
 
