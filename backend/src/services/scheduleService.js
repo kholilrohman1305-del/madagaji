@@ -11,7 +11,8 @@ function cacheKey(filters) {
   const hari = filters?.hari || '';
   const kelas = filters?.kelas || '';
   const guruId = filters?.guruId || '';
-  return `schedule:${hari}:${kelas}:${guruId}`;
+  const mapelId = filters?.mapelId || '';
+  return `schedule:${hari}:${kelas}:${guruId}:${mapelId}`;
 }
 
 function invalidateScheduleCache() {
@@ -99,6 +100,10 @@ async function getSchedule(filters = {}) {
     where.push('j.guru_id = ?');
     params.push(filters.guruId);
   }
+  if (filters.mapelId) {
+    where.push('j.mapel_id = ?');
+    params.push(filters.mapelId);
+  }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
   const [rows, teachers, subjects, classes] = await Promise.all([
@@ -146,6 +151,80 @@ async function getSchedule(filters = {}) {
   });
   scheduleCache.set(key, result, scheduleCacheTtl);
   return result;
+}
+
+async function getSubjectDetail() {
+  const scheduleRows = await getSchedule({});
+  const [subjects] = await masterPool.query('SELECT id, name FROM subjects WHERE is_active=1 ORDER BY name');
+  const subjectMap = new Map();
+
+  subjects.forEach((subject) => {
+    subjectMap.set(String(subject.id), {
+      subjectId: String(subject.id),
+      subjectName: subject.name,
+      totalSlots: 0,
+      totalClasses: 0,
+      totalTeachers: 0,
+      classes: [],
+      teachers: [],
+      schedules: []
+    });
+  });
+
+  scheduleRows.forEach((row) => {
+    const key = String(row.mapelId || '');
+    if (!subjectMap.has(key)) {
+      subjectMap.set(key, {
+        subjectId: key,
+        subjectName: row.namaMapel || key,
+        totalSlots: 0,
+        totalClasses: 0,
+        totalTeachers: 0,
+        classes: [],
+        teachers: [],
+        schedules: []
+      });
+    }
+    const subject = subjectMap.get(key);
+    subject.schedules.push(row);
+  });
+
+  return Array.from(subjectMap.values()).map((subject) => {
+    const classMap = new Map();
+    const teacherMap = new Map();
+
+    subject.schedules.forEach((row) => {
+      classMap.set(String(row.kelas), row.namaKelas || String(row.kelas));
+      teacherMap.set(String(row.guruId), row.namaGuru || String(row.guruId));
+    });
+
+    return {
+      ...subject,
+      totalSlots: subject.schedules.length,
+      totalClasses: classMap.size,
+      totalTeachers: teacherMap.size,
+      classes: Array.from(classMap.entries())
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'id', { numeric: true })),
+      teachers: Array.from(teacherMap.entries())
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'id')),
+      schedules: subject.schedules
+        .map((row) => ({
+          id: row.id,
+          hari: row.hari,
+          jamKe: row.jamKe,
+          kelasId: String(row.kelas),
+          kelas: row.namaKelas || String(row.kelas),
+          guruId: String(row.guruId),
+          guru: row.namaGuru || String(row.guruId),
+          startTime: row.startTime,
+          endTime: row.endTime,
+          durationMinutes: row.durationMinutes
+        }))
+        .sort((a, b) => a.hari.localeCompare(b.hari, 'id') || Number(a.jamKe) - Number(b.jamKe) || a.kelas.localeCompare(b.kelas, 'id', { numeric: true }))
+    };
+  }).sort((a, b) => a.subjectName.localeCompare(b.subjectName, 'id'));
 }
 
 async function addSchedule(data) {
@@ -237,4 +316,4 @@ async function deleteAllSchedule() {
   return { success: true, message: `Semua jadwal berhasil dihapus (${result.affectedRows} slot).`, deleted: result.affectedRows };
 }
 
-module.exports = { getSchedule, addSchedule, updateSchedule, deleteSchedule, deleteAllSchedule };
+module.exports = { getSchedule, getSubjectDetail, addSchedule, updateSchedule, deleteSchedule, deleteAllSchedule };

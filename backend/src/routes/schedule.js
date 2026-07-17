@@ -14,6 +14,12 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get('/subjects/detail', async (req, res, next) => {
+  try {
+    res.json(await schedule.getSubjectDetail());
+  } catch (e) { next(e); }
+});
+
 router.post('/', async (req, res, next) => {
   try {
     const { hari, jamKe, kelas, mapelId, guruId } = req.body || {};

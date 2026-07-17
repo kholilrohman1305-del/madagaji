@@ -83,6 +83,7 @@ export default function Sidebar({ hidden, onToggle }) {
         {user?.role === 'admin' && <LinkItem to="/statistik-guru" label="Statistik Guru" icon={BarChart3} />}
         {user?.role === 'admin' && <LinkItem to="/sebaran-mapel" label="Sebaran Mapel" icon={LayoutGrid} />}
         {user?.role === 'admin' && <LinkItem to="/detail-guru" label="Detail Jadwal Guru" icon={UserCog} />}
+        {user?.role === 'admin' && <LinkItem to="/detail-mapel" label="Detail Mapel" icon={BookOpen} />}
       </div>
 
       <div className="nav-section">

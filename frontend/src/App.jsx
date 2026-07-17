@@ -34,6 +34,7 @@ import Profile from './pages/Profile.jsx';
 import Users from './pages/Users.jsx';
 import SebaranMapel from './pages/SebaranMapel.jsx';
 import DetailGuru from './pages/DetailGuru.jsx';
+import DetailMapel from './pages/DetailMapel.jsx';
 import LandingHub from './pages/LandingHub.jsx';
 
 export default function App() {
@@ -90,6 +91,7 @@ export default function App() {
                     <Route path="/auto-schedule" element={<RoleRoute roles={['admin']}><AutoSchedule /></RoleRoute>} />
                     <Route path="/sebaran-mapel" element={<RoleRoute roles={['admin']}><SebaranMapel /></RoleRoute>} />
                     <Route path="/detail-guru" element={<RoleRoute roles={['admin']}><DetailGuru /></RoleRoute>} />
+                    <Route path="/detail-mapel" element={<RoleRoute roles={['admin']}><DetailMapel /></RoleRoute>} />
                     <Route path="/jadwal-guru" element={<JadwalGuru />} />
                     <Route path="/jadwal-kelas" element={<JadwalKelas />} />
                     <Route path="/setting-bisyaroh" element={<RoleRoute roles={['admin']}><SettingBisyaroh /></RoleRoute>} />
