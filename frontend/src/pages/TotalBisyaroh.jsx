@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../api';
-import { PieChart, Calendar, TrendingUp, Printer, Clock } from 'lucide-react';
+import { PieChart, Calendar, TrendingUp, Printer } from 'lucide-react';
 
 const formatRupiah = (value) => {
   const num = Number(value || 0);
@@ -110,10 +110,6 @@ export default function TotalBisyaroh() {
             </div>
 
             <div className="stat-grid total-bisyaroh-stat-grid">
-              <div className="stat-card total-bisyaroh-hours-card">
-                <div className="stat-label"><Clock size={16} /> Jumlah Jam Hadir Mengajar</div>
-                <div className="stat-value">{Number(data.totalHadirMengajar || 0).toLocaleString('id-ID')} Jam</div>
-              </div>
               {rows.map(r => (
                 <div key={r.no} className="stat-card" style={{ background: `linear-gradient(135deg, ${r.color}15 0%, ${r.color}25 100%)` }}>
                   <div className="stat-label" style={{ color: r.color }}>{r.label}</div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../api';
-import { Printer, Calendar, Wallet, FileText } from 'lucide-react';
+import { Printer, Calendar, Wallet, FileText, TrendingUp } from 'lucide-react';
 
 const formatRupiah = (value) => {
   const num = Number(value || 0);
@@ -44,18 +44,21 @@ export default function CetakBisyaroh() {
   const [endDate, setEndDate] = useState(defaultEnd);
   const [items, setItems] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [totalData, setTotalData] = useState(null);
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [summaryRes, expenseRes] = await Promise.all([
+      const [summaryRes, expenseRes, totalRes] = await Promise.all([
         api.get('/payroll/summary', { params: { startDate, endDate } }),
-        api.get('/payroll/expenses', { params: { startDate, endDate } })
+        api.get('/payroll/expenses', { params: { startDate, endDate } }),
+        api.get('/payroll/total-bisyaroh', { params: { startDate, endDate } })
       ]);
       setItems(summaryRes.data || []);
       setExpenses(expenseRes.data || []);
+      setTotalData(totalRes.data || null);
     } finally {
       setLoading(false);
     }
@@ -95,6 +98,19 @@ export default function CetakBisyaroh() {
     const total = exp.totalNominal || (Number(exp.jumlah || 0) * Number(exp.nominal || 0));
     return sum + Number(total || 0);
   }, 0);
+  const totalJamMengajar = teacherItems.reduce((sum, it) => sum + Number(it.totalHadir || 0), 0);
+  const totalRows = totalData ? [
+    { no: 1, label: 'Wiyatabhakti', value: totalData.wiyathabakti || 0, color: 'var(--primary-500)' },
+    { no: 2, label: 'Bisyaroh Mengajar', value: totalData.bisyarohMengajar || 0, color: 'var(--success-500)' },
+    { no: 3, label: 'Transport Kehadiran', value: totalData.transportKehadiran || 0, color: 'var(--purple-500)' },
+    { no: 4, label: 'Transport Kegiatan', value: totalData.transportKegiatan || 0, color: 'var(--cyan-500)' },
+    { no: 5, label: 'Tugas Tambahan', value: totalData.bisyarohTugasTambahan || 0, color: 'var(--orange-500)' },
+    { no: 6, label: 'Pengeluaran Lain', value: totalData.pengeluaranLain || 0, color: 'var(--danger-500)' },
+    { no: 7, label: 'Ekstrakurikuler', value: totalData.pengeluaranEkstrakurikuler || 0, color: '#be123c' },
+    { no: 8, label: 'Kedisiplinan', value: totalData.pengeluaranKedisiplinan || 0, color: '#b45309' }
+  ] : [];
+  const totalBisyarohValue = totalData?.total ?? totalRows.reduce((sum, row) => sum + Number(row.value || 0), 0);
+  const maxTotalValue = totalRows.reduce((max, row) => Math.max(max, Number(row.value || 0)), 1);
 
   return (
     <div>
@@ -131,6 +147,10 @@ export default function CetakBisyaroh() {
               <strong>{teacherItems.length}</strong>
             </div>
             <div>
+              <span>Jam Hadir Mengajar</span>
+              <strong>{totalJamMengajar.toLocaleString('id-ID')} Jam</strong>
+            </div>
+            <div>
               <span>Bisyaroh Mengajar</span>
               <strong>{formatRupiah(totalMengajar)}</strong>
             </div>
@@ -141,10 +161,6 @@ export default function CetakBisyaroh() {
             <div>
               <span>Tugas Tambahan</span>
               <strong>{formatRupiah(totalTugas)}</strong>
-            </div>
-            <div>
-              <span>Grand Total</span>
-              <strong>{formatRupiah(totalDiterima + totalExpense)}</strong>
             </div>
           </div>
 
@@ -275,6 +291,66 @@ export default function CetakBisyaroh() {
           </div>
         </div>
       </div>
+
+      {totalData && (
+        <div className="modern-table-card cetak-total-bisyaroh-page" style={{ marginTop: 24 }}>
+          <div className="total-bisyaroh-document">
+            <div className="total-bisyaroh-header">
+              <div>
+                <div className="cetak-bisyaroh-kicker">Ringkasan Akhir Cetak Bisyaroh</div>
+                <h1>Total Bisyaroh</h1>
+                <p>Periode {formatDate(startDate)} s/d {formatDate(endDate)}</p>
+              </div>
+              <div className="cetak-bisyaroh-meta">
+                <span>Jumlah Total</span>
+                <strong>{formatRupiah(totalBisyarohValue)}</strong>
+              </div>
+            </div>
+
+            <div className="stat-grid total-bisyaroh-stat-grid">
+              <div className="stat-card total-bisyaroh-hours-card">
+                <div className="stat-label">Jumlah Jam Hadir Mengajar</div>
+                <div className="stat-value">{totalJamMengajar.toLocaleString('id-ID')} Jam</div>
+              </div>
+              {totalRows.map(row => (
+                <div key={row.no} className="stat-card" style={{ background: `linear-gradient(135deg, ${row.color}15 0%, ${row.color}25 100%)` }}>
+                  <div className="stat-label" style={{ color: row.color }}>{row.label}</div>
+                  <div className="stat-value" style={{ color: row.color, fontSize: 28 }}>{formatRupiah(row.value)}</div>
+                </div>
+              ))}
+              <div className="stat-card" style={{ background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', color: 'white' }}>
+                <div className="stat-label" style={{ color: 'rgba(255,255,255,0.8)' }}>JUMLAH TOTAL</div>
+                <div className="stat-value" style={{ color: 'white', fontSize: 28 }}>{formatRupiah(totalBisyarohValue)}</div>
+              </div>
+            </div>
+
+            <div className="modern-table-title total-bisyaroh-chart-title" style={{ marginTop: 18 }}>
+              <TrendingUp size={24} /> Grafik Total Bisyaroh
+            </div>
+            <div className="chart chart-wide cetak-total-bisyaroh-chart" style={{ height: 340 }}>
+              {totalRows.map(row => {
+                const ratio = maxTotalValue > 0 ? (Number(row.value) || 0) / maxTotalValue : 0;
+                const heightPct = row.value > 0 ? Math.max(8, Math.round(ratio * 100)) : 3;
+                return (
+                  <div key={row.no} className="chart-item">
+                    <div className="chart-top-value">{formatRupiah(row.value)}</div>
+                    <div
+                      className="chart-bar chart-bar-3d"
+                      style={{
+                        height: `${heightPct}%`,
+                        '--bar-color': row.color
+                      }}
+                    >
+                      <span className="chart-value" style={{ fontSize: 12 }}>{formatRupiah(row.value)}</span>
+                    </div>
+                    <div className="chart-label">{row.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

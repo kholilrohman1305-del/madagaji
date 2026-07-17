@@ -2586,6 +2586,13 @@ input[type="checkbox"] {
     break-inside: avoid;
   }
 
+  .cetak-total-bisyaroh-page {
+    page-break-before: always;
+    break-before: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
   .total-bisyaroh-document {
     margin-top: 0;
     font-size: 9px;
@@ -2638,12 +2645,23 @@ input[type="checkbox"] {
     break-inside: avoid;
   }
 
+  .cetak-total-bisyaroh-page .chart {
+    height: 250px !important;
+    border: 1px solid #ccc;
+    padding: 12px 8px 8px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
   .total-bisyaroh-print .chart-top-value,
-  .total-bisyaroh-print .chart-value {
+  .total-bisyaroh-print .chart-value,
+  .cetak-total-bisyaroh-page .chart-top-value,
+  .cetak-total-bisyaroh-page .chart-value {
     font-size: 7px !important;
   }
 
-  .total-bisyaroh-print .chart-label {
+  .total-bisyaroh-print .chart-label,
+  .cetak-total-bisyaroh-page .chart-label {
     font-size: 7px !important;
     line-height: 1.15;
   }
