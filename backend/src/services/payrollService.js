@@ -1077,6 +1077,7 @@ async function getTotalBisyarohBreakdown(startDate, endDate) {
   const expenses = summaryData.filter(i => i.isExpense);
 
   const wiyathabakti = teachers.reduce((t, i) => t + (Number(i.wiyathabakti) || 0), 0);
+  const totalHadirMengajar = teachers.reduce((t, i) => t + (Number(i.totalHadir) || 0), 0);
   const bisyarohMengajar = teachers.reduce((t, i) => t + (Number(i.bisyarohMengajar) || 0), 0);
   const transportKehadiran = teachers.reduce((t, i) => t + (Number(i.bisyarohTransport) || 0), 0);
   const transportKegiatan = teachers.reduce((t, i) => t + (Number(i.bisyarohTransportKegiatan) || 0), 0);
@@ -1092,10 +1093,13 @@ async function getTotalBisyarohBreakdown(startDate, endDate) {
     .filter((i) => i.expenseType === 'discipline')
     .reduce((t, i) => t + Math.abs(Number(i.totalNominal || i.totalBisyaroh || 0)), 0);
 
-  const total = wiyathabakti + bisyarohMengajar + bisyarohKehadiran + bisyarohTugasTambahan;
+  const totalHonorarium = wiyathabakti + bisyarohMengajar + bisyarohKehadiran + bisyarohTugasTambahan;
+  const totalPengeluaran = pengeluaranLain + pengeluaranEkstrakurikuler + pengeluaranKedisiplinan;
+  const total = totalHonorarium + totalPengeluaran;
 
   return {
     wiyathabakti,
+    totalHadirMengajar,
     bisyarohMengajar,
     bisyarohKehadiran,
     bisyarohTugasTambahan,
@@ -1104,6 +1108,8 @@ async function getTotalBisyarohBreakdown(startDate, endDate) {
     pengeluaranLain,
     pengeluaranEkstrakurikuler,
     pengeluaranKedisiplinan,
+    totalHonorarium,
+    totalPengeluaran,
     total
   };
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../api';
-import { PieChart, Calendar, TrendingUp } from 'lucide-react';
+import { PieChart, Calendar, TrendingUp, Printer, Clock } from 'lucide-react';
 
 const formatRupiah = (value) => {
   const num = Number(value || 0);
@@ -9,6 +9,15 @@ const formatRupiah = (value) => {
     currency: 'IDR',
     maximumFractionDigits: 0
   }).format(Number.isNaN(num) ? 0 : num);
+};
+
+const formatDate = (value) => {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('id-ID', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  }).format(new Date(value));
 };
 
 export default function TotalBisyaroh() {
@@ -52,24 +61,59 @@ export default function TotalBisyaroh() {
     { no: 8, label: 'Kedisiplinan', value: data.pengeluaranKedisiplinan || 0, color: '#b45309' }
   ] : [];
 
+  const totalRows = rows.reduce((sum, r) => sum + Number(r.value || 0), 0);
+  const totalValue = data?.total ?? totalRows;
   const maxValue = rows.reduce((m, r) => Math.max(m, r.value), 1);
 
+  const print = () => {
+    const styleId = 'print-size-style';
+    const css = '@page { size: 33cm 21.5cm; margin: 10mm; }';
+    const existing = document.getElementById(styleId);
+    if (existing) existing.textContent = css;
+    else {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = css;
+      document.head.appendChild(style);
+    }
+    setTimeout(() => window.print(), 50);
+  };
+
   return (
-    <div>
+    <div className="total-bisyaroh-print">
       <div className="modern-table-card">
-        <div className="modern-table-title"><PieChart size={24} /> Total Bisyaroh</div>
-        <div className="toolbar">
+        <div className="modern-table-title no-print"><PieChart size={24} /> Total Bisyaroh</div>
+        <div className="toolbar no-print">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Calendar size={18} style={{ color: 'var(--muted)' }} />
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
           </div>
           <span style={{ color: 'var(--muted)' }}>s/d</span>
           <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <button onClick={print}>
+            <Printer size={18} /> Cetak PDF
+          </button>
         </div>
 
         {data && (
-          <div style={{ marginTop: 24 }}>
-            <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+          <div className="total-bisyaroh-document">
+            <div className="total-bisyaroh-header">
+              <div>
+                <div className="cetak-bisyaroh-kicker">Ringkasan Bisyaroh</div>
+                <h1>Total Bisyaroh</h1>
+                <p>Periode {formatDate(startDate)} s/d {formatDate(endDate)}</p>
+              </div>
+              <div className="cetak-bisyaroh-meta">
+                <span>Tanggal Cetak</span>
+                <strong>{formatDate(new Date().toISOString().slice(0, 10))}</strong>
+              </div>
+            </div>
+
+            <div className="stat-grid total-bisyaroh-stat-grid">
+              <div className="stat-card total-bisyaroh-hours-card">
+                <div className="stat-label"><Clock size={16} /> Jumlah Jam Hadir Mengajar</div>
+                <div className="stat-value">{Number(data.totalHadirMengajar || 0).toLocaleString('id-ID')} Jam</div>
+              </div>
               {rows.map(r => (
                 <div key={r.no} className="stat-card" style={{ background: `linear-gradient(135deg, ${r.color}15 0%, ${r.color}25 100%)` }}>
                   <div className="stat-label" style={{ color: r.color }}>{r.label}</div>
@@ -78,7 +122,7 @@ export default function TotalBisyaroh() {
               ))}
               <div className="stat-card" style={{ background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', color: 'white' }}>
                 <div className="stat-label" style={{ color: 'rgba(255,255,255,0.8)' }}>JUMLAH TOTAL</div>
-                <div className="stat-value" style={{ color: 'white', fontSize: 28 }}>{formatRupiah(data.total || 0)}</div>
+                <div className="stat-value" style={{ color: 'white', fontSize: 28 }}>{formatRupiah(totalValue)}</div>
               </div>
             </div>
           </div>
@@ -87,7 +131,7 @@ export default function TotalBisyaroh() {
 
       {data && (
         <div className="modern-table-card" style={{ marginTop: 24 }}>
-          <div className="modern-table-title"><TrendingUp size={24} /> Grafik Bisyaroh</div>
+          <div className="modern-table-title total-bisyaroh-chart-title"><TrendingUp size={24} /> Grafik Bisyaroh</div>
           <div className="chart chart-wide" style={{ height: 380 }}>
             {rows.map(r => {
               const ratio = maxValue > 0 ? (Number(r.value) || 0) / maxValue : 0;
