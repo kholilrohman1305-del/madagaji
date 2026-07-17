@@ -1,18 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api';
 import { GraduationCap, Printer } from 'lucide-react';
+import { scheduleCellColor } from '../utils/scheduleColors';
 
 const DAYS = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
-const subjectColor = (subjectId) => {
-  if (!subjectId) return 'transparent';
-  const str = String(subjectId);
-  let hash = 0;
-  for (let i = 0; i < str.length; i += 1) hash = (hash * 33 + str.charCodeAt(i)) >>> 0;
-  const hue = hash % 360;
-  const sat = 60 + (hash % 30);
-  const light = 90 - ((hash >> 4) % 18);
-  return `hsl(${hue} ${sat}% ${light}%)`;
-};
 
 export default function JadwalKelas() {
   const [meta, setMeta] = useState(null);
@@ -111,7 +102,8 @@ export default function JadwalKelas() {
           grid.set(`${i.hari}-${i.jamKe}`, {
             mapel: subjectNameById.get(String(i.mapelId)) || i.mapelId,
             guru: guruNameById.get(String(i.guruId)) || i.guruId,
-            mapelId: i.mapelId
+            mapelId: i.mapelId,
+            guruId: i.guruId
           });
         });
         const usedDays = effectiveDays.length > 0 ? effectiveDays : DAYS;
@@ -145,7 +137,7 @@ export default function JadwalKelas() {
                       const jamKe = i + 1;
                       const val = grid.get(`${d}-${jamKe}`);
                       return (
-                        <td key={`${d}-${jamKe}`} className="teacher-cell" style={{ background: subjectColor(val?.mapelId) }}>
+                        <td key={`${d}-${jamKe}`} className="teacher-cell" style={{ background: scheduleCellColor(val?.mapelId, val?.guruId) }}>
                           {val ? (
                             <div className="teacher-cell-content">
                               <div className="teacher-cell-kelas">{val.mapel}</div>
