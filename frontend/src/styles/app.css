@@ -2222,6 +2222,152 @@ input[type="checkbox"] {
   text-align: center;
 }
 
+.cetak-bisyaroh-document {
+  color: var(--text);
+}
+
+.cetak-bisyaroh-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  border-bottom: 2px solid var(--text);
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+}
+
+.cetak-bisyaroh-header h1 {
+  margin: 4px 0 6px;
+  font-size: 22px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.cetak-bisyaroh-header p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.cetak-bisyaroh-kicker {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.cetak-bisyaroh-meta {
+  min-width: 190px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: right;
+}
+
+.cetak-bisyaroh-meta span,
+.cetak-bisyaroh-summary span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cetak-bisyaroh-meta strong,
+.cetak-bisyaroh-summary strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+}
+
+.cetak-bisyaroh-summary {
+  display: grid;
+  grid-template-columns: .75fr repeat(4, 1fr);
+  gap: 10px;
+  margin: 14px 0 18px;
+}
+
+.cetak-bisyaroh-summary > div {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary-500);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.cetak-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 10px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.cetak-task-cell {
+  min-width: 210px;
+}
+
+.cetak-task-line,
+.cetak-task-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 2px 0;
+}
+
+.cetak-task-line span {
+  font-weight: 600;
+}
+
+.cetak-task-line strong,
+.cetak-task-total strong {
+  white-space: nowrap;
+}
+
+.cetak-task-total {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 5px;
+  font-weight: 800;
+}
+
+.cetak-total-cell {
+  font-weight: 800;
+  color: var(--success-600);
+  background: var(--success-50);
+}
+
+.cetak-grand-row td {
+  font-weight: 800;
+  background: var(--gray-100);
+}
+
+.cetak-signature {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 80px;
+  margin-top: 28px;
+  padding: 0 42px;
+}
+
+.cetak-signature div {
+  text-align: center;
+}
+
+.cetak-signature span,
+.cetak-signature strong {
+  display: block;
+}
+
+.cetak-signature em {
+  display: block;
+  height: 64px;
+  border-bottom: 1px solid var(--text);
+  margin-top: 14px;
+}
+
 .cetak-bisyaroh-table tbody td {
   text-align: center;
 }
@@ -2300,6 +2446,95 @@ input[type="checkbox"] {
 
   .print-ttd {
     height: 32px;
+  }
+
+  .cetak-bisyaroh-document {
+    font-size: 9px;
+  }
+
+  .cetak-bisyaroh-header {
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+  }
+
+  .cetak-bisyaroh-header h1 {
+    font-size: 17px;
+  }
+
+  .cetak-bisyaroh-meta {
+    border-color: #999;
+    padding: 7px 9px;
+  }
+
+  .cetak-bisyaroh-summary {
+    grid-template-columns: .65fr repeat(4, 1fr);
+    gap: 6px;
+    margin: 8px 0 10px;
+  }
+
+  .cetak-bisyaroh-summary > div {
+    border-color: #aaa;
+    border-left-color: #444;
+    padding: 6px 8px;
+  }
+
+  .cetak-bisyaroh-summary span {
+    font-size: 8px;
+  }
+
+  .cetak-bisyaroh-summary strong,
+  .cetak-bisyaroh-meta strong {
+    font-size: 10px;
+  }
+
+  .cetak-section-title {
+    margin: 10px 0 6px;
+  }
+
+  .cetak-bisyaroh-table,
+  .cetak-bisyaroh-expense {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8px;
+  }
+
+  .cetak-bisyaroh-table th,
+  .cetak-bisyaroh-table td,
+  .cetak-bisyaroh-expense th,
+  .cetak-bisyaroh-expense td {
+    border: 1px solid #777 !important;
+    padding: 4px 5px !important;
+    vertical-align: top;
+  }
+
+  .cetak-bisyaroh-table thead th,
+  .cetak-bisyaroh-expense thead th {
+    background: #e8edf3 !important;
+    color: #111 !important;
+    font-weight: 800;
+  }
+
+  .cetak-task-cell {
+    min-width: 150px;
+  }
+
+  .cetak-total-cell {
+    color: #111 !important;
+    background: #eaf7ec !important;
+  }
+
+  .cetak-grand-row td {
+    background: #f1f1f1 !important;
+  }
+
+  .cetak-signature {
+    gap: 60px;
+    margin-top: 20px;
+    padding: 0 38px;
+  }
+
+  .cetak-signature em {
+    height: 48px;
   }
 }
 

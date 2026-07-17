@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../api';
-import { Printer, Calendar, Wallet } from 'lucide-react';
+import { Printer, Calendar, Wallet, FileText } from 'lucide-react';
 
 const formatRupiah = (value) => {
   const num = Number(value || 0);
@@ -10,6 +10,31 @@ const formatRupiah = (value) => {
     maximumFractionDigits: 0
   }).format(Number.isNaN(num) ? 0 : num);
 };
+
+const formatDate = (value) => {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('id-ID', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  }).format(new Date(value));
+};
+
+const parseTask = (value) => {
+  if (!value || value === '-') return null;
+  const match = String(value).match(/^(.*)\s+\(([-\d.]+)\)$/);
+  if (!match) return { title: value, nominal: null };
+  return {
+    title: match[1],
+    nominal: Number(match[2]) || 0
+  };
+};
+
+const getTaskDetails = (item) => [
+  parseTask(item.tugasTambahan1),
+  parseTask(item.tugasTambahan2),
+  parseTask(item.tugasTambahan3)
+].filter(Boolean);
 
 export default function CetakBisyaroh() {
   const today = new Date();
@@ -60,6 +85,17 @@ export default function CetakBisyaroh() {
     setTimeout(() => window.print(), 50);
   };
 
+  const teacherItems = items.filter(it => !it.isExpense);
+  const totalMengajar = teacherItems.reduce((sum, it) => sum + Number(it.bisyarohMengajar || 0), 0);
+  const totalTransport = teacherItems.reduce((sum, it) => sum + Number(it.bisyarohTransport || 0) + Number(it.bisyarohTransportKegiatan || 0), 0);
+  const totalTugas = teacherItems.reduce((sum, it) => sum + Number(it.honorTugas || 0), 0);
+  const totalWiyathabakti = teacherItems.reduce((sum, it) => sum + Number(it.wiyathabakti || 0), 0);
+  const totalDiterima = teacherItems.reduce((sum, it) => sum + Number(it.totalBisyaroh || 0), 0);
+  const totalExpense = expenses.reduce((sum, exp) => {
+    const total = exp.totalNominal || (Number(exp.jumlah || 0) * Number(exp.nominal || 0));
+    return sum + Number(total || 0);
+  }, 0);
+
   return (
     <div>
       <div className="modern-table-card">
@@ -76,79 +112,168 @@ export default function CetakBisyaroh() {
           </button>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table print-show cetak-bisyaroh-table">
+        <div className="cetak-bisyaroh-document">
+          <div className="cetak-bisyaroh-header">
+            <div>
+              <div className="cetak-bisyaroh-kicker">Dokumen Rekap Honorarium</div>
+              <h1>Rekap Bisyaroh Guru dan Tenaga Kependidikan</h1>
+              <p>Periode {formatDate(startDate)} s/d {formatDate(endDate)}</p>
+            </div>
+            <div className="cetak-bisyaroh-meta">
+              <span>Tanggal Cetak</span>
+              <strong>{formatDate(new Date().toISOString().slice(0, 10))}</strong>
+            </div>
+          </div>
+
+          <div className="cetak-bisyaroh-summary">
+            <div>
+              <span>Penerima</span>
+              <strong>{teacherItems.length}</strong>
+            </div>
+            <div>
+              <span>Bisyaroh Mengajar</span>
+              <strong>{formatRupiah(totalMengajar)}</strong>
+            </div>
+            <div>
+              <span>Transport</span>
+              <strong>{formatRupiah(totalTransport)}</strong>
+            </div>
+            <div>
+              <span>Tugas Tambahan</span>
+              <strong>{formatRupiah(totalTugas)}</strong>
+            </div>
+            <div>
+              <span>Grand Total</span>
+              <strong>{formatRupiah(totalDiterima + totalExpense)}</strong>
+            </div>
+          </div>
+
+          <div className="cetak-section-title"><FileText size={18} /> Daftar Penerima Bisyaroh</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table print-show cetak-bisyaroh-table">
             <thead>
               <tr>
-                <th className="print-only center">No.</th>
+                <th className="center">No.</th>
                 <th>Nama</th>
                 <th>TMT</th>
-                <th>Wiyathabakti</th>
-                <th>Jam Hadir</th>
-                <th>Bisyaroh Mengajar</th>
-                <th>Hadir (Transport)</th>
-                <th>Bisyaroh Transport</th>
+                <th>Jam</th>
+                <th>Mengajar</th>
+                <th>Transport</th>
                 <th>Kegiatan</th>
-                <th>Transport Kegiatan</th>
-                <th>Tugas 1</th>
-                <th>Tugas 2</th>
-                <th>Tugas 3</th>
+                <th>Rincian Tugas Tambahan</th>
+                <th>Wiyathabakti</th>
                 <th style={{ background: 'var(--success-100)' }}>Jumlah Diterima</th>
-                <th className="print-only">TTD</th>
+                <th>TTD</th>
               </tr>
             </thead>
             <tbody>
-              {items.filter(it => !it.isExpense).map((it, idx) => (
+              {teacherItems.map((it, idx) => {
+                const taskDetails = getTaskDetails(it);
+                return (
                 <tr key={idx}>
-                  <td className="print-only center">{idx + 1}</td>
+                  <td className="center">{idx + 1}</td>
                   <td style={{ fontWeight: 600 }}>{it.nama}</td>
                   <td>{it.tmt || '-'}</td>
-                  <td>{formatRupiah(it.wiyathabakti)}</td>
                   <td>{it.totalHadir ?? 0}</td>
                   <td>{formatRupiah(it.bisyarohMengajar)}</td>
-                  <td>{it.totalTransportHari ?? 0}</td>
-                  <td>{formatRupiah(it.bisyarohTransport)}</td>
-                  <td>{it.jumlahKegiatan ?? 0}</td>
-                  <td>{formatRupiah(it.bisyarohTransportKegiatan)}</td>
-                  <td>{it.tugasTambahan1 || '-'}</td>
-                  <td>{it.tugasTambahan2 || '-'}</td>
-                  <td>{it.tugasTambahan3 || '-'}</td>
-                  <td style={{ fontWeight: 700, color: 'var(--success-600)' }}>{formatRupiah(it.totalBisyaroh)}</td>
-                  <td className="print-only print-ttd">{idx + 1}</td>
+                  <td>
+                    <div>{it.totalTransportHari ?? 0} hari</div>
+                    <strong>{formatRupiah(it.bisyarohTransport)}</strong>
+                  </td>
+                  <td>
+                    <div>{it.jumlahKegiatan ?? 0} kegiatan</div>
+                    <strong>{formatRupiah(it.bisyarohTransportKegiatan)}</strong>
+                  </td>
+                  <td className="cetak-task-cell">
+                    {taskDetails.length === 0 ? '-' : taskDetails.map((task, taskIdx) => (
+                      <div className="cetak-task-line" key={`${idx}-${taskIdx}`}>
+                        <span>{task.title}</span>
+                        <strong>{task.nominal === null ? '-' : formatRupiah(task.nominal)}</strong>
+                      </div>
+                    ))}
+                    {taskDetails.length > 0 && (
+                      <div className="cetak-task-total">
+                        <span>Total</span>
+                        <strong>{formatRupiah(it.honorTugas)}</strong>
+                      </div>
+                    )}
+                  </td>
+                  <td>{formatRupiah(it.wiyathabakti)}</td>
+                  <td className="cetak-total-cell">{formatRupiah(it.totalBisyaroh)}</td>
+                  <td className="print-ttd">{idx + 1}</td>
                 </tr>
-              ))}
+                );
+              })}
+              {teacherItems.length > 0 && (
+                <tr className="cetak-grand-row">
+                  <td colSpan="4">TOTAL</td>
+                  <td>{formatRupiah(totalMengajar)}</td>
+                  <td>{formatRupiah(teacherItems.reduce((sum, it) => sum + Number(it.bisyarohTransport || 0), 0))}</td>
+                  <td>{formatRupiah(teacherItems.reduce((sum, it) => sum + Number(it.bisyarohTransportKegiatan || 0), 0))}</td>
+                  <td>{formatRupiah(totalTugas)}</td>
+                  <td>{formatRupiah(totalWiyathabakti)}</td>
+                  <td>{formatRupiah(totalDiterima)}</td>
+                  <td></td>
+                </tr>
+              )}
             </tbody>
           </table>
+          </div>
         </div>
-        {items.length === 0 && !loading && <div className="empty">Belum ada data.</div>}
+        {teacherItems.length === 0 && !loading && <div className="empty">Belum ada data.</div>}
         {loading && <div className="empty">Memuat...</div>}
       </div>
 
       <div className="modern-table-card" style={{ marginTop: 24 }}>
         <div className="modern-table-title no-print"><Wallet size={24} /> Pengeluaran Lain</div>
-        <table className="table print-show cetak-bisyaroh-expense">
-          <thead>
-            <tr>
-              <th>Kategori</th>
-              <th>Jumlah</th>
-              <th>Nominal</th>
-              <th>Total</th>
-              <th className="print-only">TTD</th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses.map((exp, idx) => (
-              <tr key={exp.id}>
-                <td>{exp.kategori}</td>
-                <td>{exp.jumlah ?? 1}</td>
-                <td style={{ fontWeight: 600 }}>{formatRupiah(exp.nominal)}</td>
-                <td style={{ fontWeight: 700 }}>{formatRupiah(exp.totalNominal || (Number(exp.jumlah || 0) * Number(exp.nominal || 0)))}</td>
-                <td className="print-only print-ttd">{idx + 1}</td>
+        <div className="cetak-bisyaroh-document">
+          <div className="cetak-section-title"><Wallet size={18} /> Pengeluaran Lain</div>
+          <table className="table print-show cetak-bisyaroh-expense">
+            <thead>
+              <tr>
+                <th>No.</th>
+                <th>Kategori</th>
+                <th>Jumlah</th>
+                <th>Nominal</th>
+                <th>Total</th>
+                <th>TTD</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {expenses.length === 0 && !loading && <div className="empty">Belum ada pengeluaran.</div>}
+            </thead>
+            <tbody>
+              {expenses.map((exp, idx) => (
+                <tr key={exp.id}>
+                  <td className="center">{idx + 1}</td>
+                  <td>{exp.kategori}</td>
+                  <td>{exp.jumlah ?? 1}</td>
+                  <td style={{ fontWeight: 600 }}>{formatRupiah(exp.nominal)}</td>
+                  <td style={{ fontWeight: 700 }}>{formatRupiah(exp.totalNominal || (Number(exp.jumlah || 0) * Number(exp.nominal || 0)))}</td>
+                  <td className="print-ttd">{idx + 1}</td>
+                </tr>
+              ))}
+              {expenses.length > 0 && (
+                <tr className="cetak-grand-row">
+                  <td colSpan="4">TOTAL PENGELUARAN LAIN</td>
+                  <td>{formatRupiah(totalExpense)}</td>
+                  <td></td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+          {expenses.length === 0 && !loading && <div className="empty">Belum ada pengeluaran.</div>}
+
+          <div className="cetak-signature">
+            <div>
+              <span>Mengetahui,</span>
+              <strong>Kepala Madrasah</strong>
+              <em></em>
+            </div>
+            <div>
+              <span>Dibuat oleh,</span>
+              <strong>Bendahara</strong>
+              <em></em>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
