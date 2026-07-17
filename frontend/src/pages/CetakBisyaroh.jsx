@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../api';
-import { Printer, Calendar, Wallet, FileText, TrendingUp } from 'lucide-react';
+import { Printer, Calendar, Wallet, FileText } from 'lucide-react';
 
 const formatRupiah = (value) => {
   const num = Number(value || 0);
@@ -122,7 +122,6 @@ export default function CetakBisyaroh() {
     { no: 8, label: 'Kedisiplinan', value: totalData.pengeluaranKedisiplinan || 0, color: '#b45309' }
   ] : [];
   const totalBisyarohValue = totalData?.total ?? totalRows.reduce((sum, row) => sum + Number(row.value || 0), 0);
-  const maxTotalValue = totalRows.reduce((max, row) => Math.max(max, Number(row.value || 0)), 1);
 
   return (
     <div>
@@ -380,43 +379,31 @@ export default function CetakBisyaroh() {
               </div>
             </div>
 
-            <div className="stat-grid total-bisyaroh-stat-grid">
-              {totalRows.map(row => (
-                <div key={row.no} className="stat-card" style={{ background: `linear-gradient(135deg, ${row.color}15 0%, ${row.color}25 100%)` }}>
-                  <div className="stat-label" style={{ color: row.color }}>{row.label}</div>
-                  <div className="stat-value" style={{ color: row.color, fontSize: 28 }}>{formatRupiah(row.value)}</div>
-                </div>
-              ))}
-              <div className="stat-card" style={{ background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', color: 'white' }}>
-                <div className="stat-label" style={{ color: 'rgba(255,255,255,0.8)' }}>JUMLAH TOTAL</div>
-                <div className="stat-value" style={{ color: 'white', fontSize: 28 }}>{formatRupiah(totalBisyarohValue)}</div>
-              </div>
-            </div>
-
-            <div className="modern-table-title total-bisyaroh-chart-title" style={{ marginTop: 18 }}>
-              <TrendingUp size={24} /> Grafik Total Bisyaroh
-            </div>
-            <div className="chart chart-wide cetak-total-bisyaroh-chart" style={{ height: 340 }}>
-              {totalRows.map(row => {
-                const ratio = maxTotalValue > 0 ? (Number(row.value) || 0) / maxTotalValue : 0;
-                const heightPct = row.value > 0 ? Math.max(8, Math.round(ratio * 100)) : 3;
-                return (
-                  <div key={row.no} className="chart-item">
-                    <div className="chart-top-value">{formatRupiah(row.value)}</div>
-                    <div
-                      className="chart-bar chart-bar-3d"
-                      style={{
-                        height: `${heightPct}%`,
-                        '--bar-color': row.color
-                      }}
-                    >
-                      <span className="chart-value" style={{ fontSize: 12 }}>{formatRupiah(row.value)}</span>
-                    </div>
-                    <div className="chart-label">{row.label}</div>
-                  </div>
-                );
-              })}
-            </div>
+            <table className="table print-show cetak-total-bisyaroh-table">
+              <thead>
+                <tr>
+                  <th>No.</th>
+                  <th>Komponen</th>
+                  <th>Nominal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {totalRows.map(row => (
+                  <tr key={row.no}>
+                    <td className="center">{row.no}</td>
+                    <td>
+                      <span className="cetak-total-dot" style={{ background: row.color }}></span>
+                      {row.label}
+                    </td>
+                    <td>{formatRupiah(row.value)}</td>
+                  </tr>
+                ))}
+                <tr className="cetak-total-bisyaroh-grand-row">
+                  <td colSpan="2">JUMLAH TOTAL</td>
+                  <td>{formatRupiah(totalBisyarohValue)}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       )}

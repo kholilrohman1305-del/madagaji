@@ -2422,6 +2422,59 @@ input[type="checkbox"] {
   color: var(--cyan-600);
 }
 
+.cetak-total-bisyaroh-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  margin-top: 18px;
+}
+
+.cetak-total-bisyaroh-table th,
+.cetak-total-bisyaroh-table td {
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+}
+
+.cetak-total-bisyaroh-table thead th {
+  background: #dbeafe;
+  color: #0f172a;
+  text-align: left;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.cetak-total-bisyaroh-table tbody td:nth-child(1) {
+  width: 56px;
+  font-weight: 800;
+}
+
+.cetak-total-bisyaroh-table tbody td:nth-child(2) {
+  font-weight: 850;
+  color: #0f172a;
+}
+
+.cetak-total-bisyaroh-table tbody td:nth-child(3) {
+  text-align: right;
+  font-weight: 900;
+  color: #075985;
+}
+
+.cetak-total-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.cetak-total-bisyaroh-grand-row td {
+  background: #0f172a !important;
+  color: #fff !important;
+  font-size: 18px;
+  font-weight: 950 !important;
+}
+
 .cetak-bisyaroh-table tbody td {
   text-align: center;
 }
@@ -2546,7 +2599,8 @@ input[type="checkbox"] {
   }
 
   .cetak-bisyaroh-table,
-  .cetak-bisyaroh-expense {
+  .cetak-bisyaroh-expense,
+  .cetak-total-bisyaroh-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 8px;
@@ -2555,17 +2609,38 @@ input[type="checkbox"] {
   .cetak-bisyaroh-table th,
   .cetak-bisyaroh-table td,
   .cetak-bisyaroh-expense th,
-  .cetak-bisyaroh-expense td {
+  .cetak-bisyaroh-expense td,
+  .cetak-total-bisyaroh-table th,
+  .cetak-total-bisyaroh-table td {
     border: 1px solid #777 !important;
     padding: 4px 5px !important;
     vertical-align: top;
   }
 
   .cetak-bisyaroh-table thead th,
-  .cetak-bisyaroh-expense thead th {
+  .cetak-bisyaroh-expense thead th,
+  .cetak-total-bisyaroh-table thead th {
     background: #e8edf3 !important;
     color: #111 !important;
     font-weight: 800;
+  }
+
+  .cetak-total-bisyaroh-table {
+    font-size: 11px !important;
+    margin-top: 12px;
+  }
+
+  .cetak-total-bisyaroh-table th,
+  .cetak-total-bisyaroh-table td {
+    padding: 8px 10px !important;
+  }
+
+  .cetak-total-bisyaroh-table tbody td:nth-child(3) {
+    font-size: 12px;
+  }
+
+  .cetak-total-bisyaroh-grand-row td {
+    font-size: 15px !important;
   }
 
   .cetak-task-cell {
