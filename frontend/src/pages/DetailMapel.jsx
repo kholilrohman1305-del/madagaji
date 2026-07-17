@@ -130,38 +130,10 @@ export default function DetailMapel() {
               </div>
             </div>
 
-            <div style={{ overflowX: 'auto', marginBottom: 18 }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>No</th>
-                    <th>Hari</th>
-                    <th>Jam</th>
-                    <th>Waktu</th>
-                    <th>Kelas</th>
-                    <th>Pengampu</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(selected.schedules || []).map((row, idx) => (
-                    <tr key={row.id || `${row.hari}-${row.jamKe}-${row.kelasId}-${idx}`}>
-                      <td>{idx + 1}</td>
-                      <td style={{ fontWeight: 700 }}>{row.hari}</td>
-                      <td>Jam {row.jamKe}</td>
-                      <td>{row.startTime && row.endTime ? `${row.startTime} - ${row.endTime}` : '-'}</td>
-                      <td>{row.kelas}</td>
-                      <td>{row.guru}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {selected.schedules.length === 0 && <div className="empty">Mapel ini belum masuk jadwal kelas mana pun.</div>}
-            </div>
-
             <div className="modern-table-title" style={{ fontSize: 16, marginBottom: 10 }}>
               <CalendarDays size={19} /> Matriks Jadwal Mapel
             </div>
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', marginBottom: 18 }}>
               <table className="teacher-grid">
                 <thead>
                   <tr>
@@ -200,6 +172,37 @@ export default function DetailMapel() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div className="modern-table-title" style={{ fontSize: 16, marginBottom: 10 }}>
+              <Clock3 size={19} /> Rincian Jadwal
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Hari</th>
+                    <th>Jam</th>
+                    <th>Waktu</th>
+                    <th>Kelas</th>
+                    <th>Pengampu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(selected.schedules || []).map((row, idx) => (
+                    <tr key={row.id || `${row.hari}-${row.jamKe}-${row.kelasId}-${idx}`}>
+                      <td>{idx + 1}</td>
+                      <td style={{ fontWeight: 700 }}>{row.hari}</td>
+                      <td>Jam {row.jamKe}</td>
+                      <td>{row.startTime && row.endTime ? `${row.startTime} - ${row.endTime}` : '-'}</td>
+                      <td>{row.kelas}</td>
+                      <td>{row.guru}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {selected.schedules.length === 0 && <div className="empty">Mapel ini belum masuk jadwal kelas mana pun.</div>}
             </div>
           </>
         )}
