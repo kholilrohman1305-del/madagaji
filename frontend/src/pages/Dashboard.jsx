@@ -1,6 +1,106 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
 import { Users, School, CheckCircle, AlertCircle, CreditCard, BarChart3, XCircle, CalendarCheck } from 'lucide-react';
+import useIsMobile from '../hooks/useIsMobile';
+import { useAuth } from '../context/AuthContext';
+
+// Beranda versi mobile: tema portal MyMada (hero navy + tile pastel).
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 10) return 'Selamat pagi';
+  if (h < 15) return 'Selamat siang';
+  if (h < 18) return 'Selamat sore';
+  return 'Selamat malam';
+}
+
+function MobileTile({ icon: Icon, fg, bg, value, label, wide }) {
+  return (
+    <div className={`mm-tile${wide ? ' wide' : ''}`}>
+      <span className="mm-tile-icon" style={{ background: bg, color: fg }}><Icon size={21} /></span>
+      <span style={{ minWidth: 0 }}>
+        <span className="mm-tile-value">{value}</span>
+        <span className="mm-tile-label">{label}</span>
+      </span>
+    </div>
+  );
+}
+
+function DashboardMobile({ data, formatRupiah, todayLabel, showAllTeachers, setShowAllTeachers }) {
+  const { user } = useAuth();
+  const scheduled = data.scheduledTeachersList || [];
+  return (
+    <div className="mm-page">
+      <div className="mm-hero">
+        <div className="mm-hero-eyebrow">{greeting()},</div>
+        <div className="mm-hero-title">{(user?.display_name || user?.username || 'Admin')}</div>
+        <div className="mm-hero-pills">
+          <span className="mm-hero-pill">{todayLabel}</span>
+          <span className="mm-hero-pill">{scheduled.length} guru terjadwal</span>
+        </div>
+      </div>
+
+      <div className="mm-tiles">
+        <MobileTile icon={Users} fg="#b91c1c" bg="#ffe6e3" value={data.totalGuru} label="Total Guru" />
+        <MobileTile icon={School} fg="#047857" bg="#dcf5ea" value={data.totalKelas} label="Total Kelas" />
+        <MobileTile icon={CheckCircle} fg="#1d4ed8" bg="#e3ecff" value={data.presentCount} label="Hadir Hari Ini" />
+        <MobileTile icon={AlertCircle} fg="#b45309" bg="#fdeed3" value={data.absentCount} label="Absen / Izin" />
+        <MobileTile icon={CreditCard} fg="#7c3aed" bg="#ede7ff" value={formatRupiah(data.totalBisyarohMonth)} label="Bisyaroh Bulan Ini" wide />
+      </div>
+
+      <div className="mm-card">
+        <div className="mm-card-title"><CalendarCheck size={18} /> Guru Terjadwal Hari Ini</div>
+        {!scheduled.length ? (
+          <div className="mm-empty">Tidak ada guru yang terjadwal hari ini.</div>
+        ) : (
+          <>
+            <div className="mm-chip-wrap">
+              {(showAllTeachers ? scheduled : scheduled.slice(0, 15)).map((t, idx) => (
+                <span key={t.guruId} className="mm-chip">
+                  <b>{idx + 1}.</b> {t.namaGuru}
+                </span>
+              ))}
+            </div>
+            {scheduled.length > 15 && (
+              <button type="button" className="mm-link-btn" onClick={() => setShowAllTeachers(v => !v)}>
+                {showAllTeachers ? 'Tampilkan lebih sedikit' : `Lihat semua (${scheduled.length} guru)`}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="mm-card">
+        <div className="mm-card-title" style={{ color: '#b91c1c' }}><XCircle size={18} /> Guru Tidak Hadir / Izin</div>
+        {!data.absentTeachersList.length ? (
+          <div className="mm-empty">Tidak ada data. Semua hadir.</div>
+        ) : data.absentTeachersList.map((i, idx) => (
+          <div className="mm-row" key={idx}>
+            <span className="mm-row-main">
+              <b>{i.namaGuru}</b>
+              <small>Jam {i.jamKe} - {i.namaKelas || i.kelas}</small>
+            </span>
+            <span className="mm-badge danger">{i.status}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mm-card">
+        <div className="mm-card-title" style={{ color: '#047857' }}><CheckCircle size={18} /> Guru Hadir Terkini</div>
+        {!data.presentTeachersList.length ? (
+          <div className="mm-empty">Belum ada data kehadiran masuk.</div>
+        ) : data.presentTeachersList.map((i, idx) => (
+          <div className="mm-row" key={idx}>
+            <span className="mm-row-main">
+              <b>{i.namaGuru}</b>
+              <small>Jam {i.jamKe} - {i.namaKelas || i.kelas}</small>
+            </span>
+            <span className="mm-badge good">Hadir</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const DashboardSkeleton = () => (
   <div>
@@ -24,6 +124,7 @@ const DashboardSkeleton = () => (
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [showAllTeachers, setShowAllTeachers] = useState(false);
+  const isMobile = useIsMobile();
   const formatRupiah = (value) => new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
@@ -35,6 +136,18 @@ export default function Dashboard() {
   }, []);
 
   const todayLabel = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  if (data && isMobile) {
+    return (
+      <DashboardMobile
+        data={data}
+        formatRupiah={formatRupiah}
+        todayLabel={todayLabel}
+        showAllTeachers={showAllTeachers}
+        setShowAllTeachers={setShowAllTeachers}
+      />
+    );
+  }
 
   return (
     <div>

@@ -72,10 +72,17 @@ export default function MobileNav() {
           <CalendarCheck size={20} />
           <span>Kehadiran</span>
         </NavLink>
-        <NavLink to="/slip-gaji" className={({ isActive }) => `mb-tab${isActive ? ' active' : ''}`}>
-          <FileText size={20} />
-          <span>Bisyaroh</span>
-        </NavLink>
+        {isAdmin ? (
+          <NavLink to="/rekap-bisyaroh" className={({ isActive }) => `mb-tab${isActive ? ' active' : ''}`}>
+            <Receipt size={20} />
+            <span>Rekap</span>
+          </NavLink>
+        ) : (
+          <NavLink to="/slip-gaji" className={({ isActive }) => `mb-tab${isActive ? ' active' : ''}`}>
+            <FileText size={20} />
+            <span>Bisyaroh</span>
+          </NavLink>
+        )}
         <NavLink to="/jadwal-guru" className={({ isActive }) => `mb-tab${isActive ? ' active' : ''}`}>
           <CalendarClock size={20} />
           <span>Jadwal</span>

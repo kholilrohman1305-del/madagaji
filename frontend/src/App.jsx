@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar.jsx';
 import MobileNav from './components/MobileNav';
+import MobileTableCards from './components/MobileTableCards.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import ConfirmHost from './components/ConfirmHost.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -64,6 +65,7 @@ export default function App() {
               <div className={`app-shell ${sidebarHidden ? 'sidebar-hidden' : ''}`}>
                 <Sidebar hidden={sidebarHidden} onToggle={toggleSidebar} />
                 <MobileNav />
+                <MobileTableCards />
                 <main className="app-content">
                   {sidebarHidden && (
                     <button className="sidebar-fab no-print" type="button" onClick={toggleSidebar}>

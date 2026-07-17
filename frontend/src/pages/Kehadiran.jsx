@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api';
 import useMasterData from '../hooks/useMasterData';
+import useIsMobile from '../hooks/useIsMobile';
 import { CalendarCheck, Lock, Unlock, Sun, Save, X } from 'lucide-react';
 
 const STATUS_ORDER = ['', 'Hadir', 'Izin', 'Tidak Hadir'];
@@ -21,6 +22,7 @@ export default function Kehadiran() {
   const [holidayInput, setHolidayInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const isMobile = useIsMobile();
   useMasterData();
 
   const load = async (targetDate = date) => {
@@ -146,6 +148,46 @@ export default function Kehadiran() {
             <div className="value">{holidayReason || 'Tanpa keterangan'}</div>
           </div>
         )}
+        {isMobile ? (
+          /* Versi mobile: kartu per kelas, chip jam diketuk untuk ganti
+             status (kosong -> Hadir -> Izin -> Tidak Hadir), tanpa scroll samping. */
+          <div className="mm-kelas-list">
+            {classes.map(kelas => (
+              <div className="mm-kelas-card" key={`kelas-${kelas}`}>
+                <div className="mm-kelas-name">{kelas}</div>
+                <div className="mm-jam-grid">
+                  {jamList.map(jam => {
+                    const cell = cellMap.get(`${kelas}__${jam}`);
+                    if (!cell) return null;
+                    const statusClass = cell.status === 'Hadir'
+                      ? 'status-hadir'
+                      : cell.status === 'Izin'
+                        ? 'status-izin'
+                        : cell.status === 'Tidak Hadir'
+                          ? 'status-absen'
+                          : '';
+                    return (
+                      <button
+                        type="button"
+                        key={`${kelas}-${jam}`}
+                        className={`mm-jam-chip ${statusClass}`}
+                        onClick={() => onCellClick(cell.idx)}
+                        disabled={locked}
+                      >
+                        <span className="mm-jam-head">
+                          <span className="mm-jam-no">Jam {jam}</span>
+                          <span className="mm-jam-status">{cell.status || '-'}</span>
+                        </span>
+                        <span className="mm-jam-mapel">{cell.namaMapel}</span>
+                        <span className="mm-jam-guru">{cell.namaGuru}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
         <table className="table attendance-table">
           <thead>
             <tr>
@@ -188,6 +230,7 @@ export default function Kehadiran() {
             ))}
           </tbody>
         </table>
+        )}
         {items.length === 0 && <div className="empty">Belum ada data.</div>}
       </div>
       )}
