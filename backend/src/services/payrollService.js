@@ -758,9 +758,9 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
 
   const normalizeClassification = (value) => {
     const v = String(value || '').trim().toLowerCase();
-    if (v === 'pns') return 'PNS';
-    if (v === 'inpassing') return 'INPASSING';
-    if (v === 'sertifikasi') return 'SERTIFIKASI';
+    if (v === 'pns' || v.includes('pns') || /^1(\b|[^0-9])/.test(v)) return 'PNS';
+    if (v === 'inpassing' || v.includes('inpassing')) return 'INPASSING';
+    if (v === 'sertifikasi' || v.includes('sertifikasi')) return 'SERTIFIKASI';
     return 'NON SERTIFIKASI';
   };
 
@@ -921,22 +921,32 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     else if (pengabdian >= 6) wiyathabakti = TARIFFS.WIYATHA_6_10;
     else if (pengabdian >= 1) wiyathabakti = TARIFFS.WIYATHA_1_5;
 
-    const rateHadir = TARIFFS.RATE_HADIR || TARIFFS.RATE_MENGAJAR;
-    const rateTransport = transportRates[classification] || TARIFFS.RATE_TRANSPORT;
-    const bisyarohJam = totalHadir * rateHadir;
-    const bisyarohIzin = totalIzin * TARIFFS.RATE_IZIN;
-    const bisyarohTidakHadir = totalTidakHadir * TARIFFS.RATE_TIDAK_HADIR;
+    const isPns = classification === 'PNS';
+    const payableTotalHadir = isPns ? 0 : totalHadir;
+    const payableTotalIzin = isPns ? 0 : totalIzin;
+    const payableTotalTidakHadir = isPns ? 0 : totalTidakHadir;
+    const payableTransportHari = isPns ? 0 : totalTransportHari;
+    const payableTransportAcara = isPns ? 0 : totalTransportAcara;
+    if (isPns) wiyathabakti = 0;
+
+    const rateHadir = isPns ? 0 : (TARIFFS.RATE_HADIR || TARIFFS.RATE_MENGAJAR);
+    const rateTransport = isPns ? 0 : (transportRates[classification] || TARIFFS.RATE_TRANSPORT);
+    const bisyarohJam = payableTotalHadir * rateHadir;
+    const bisyarohIzin = payableTotalIzin * TARIFFS.RATE_IZIN;
+    const bisyarohTidakHadir = payableTotalTidakHadir * TARIFFS.RATE_TIDAK_HADIR;
     const bisyarohMengajar = bisyarohJam + bisyarohIzin + bisyarohTidakHadir;
-    const bisyarohTransport = totalTransportHari * rateTransport;
-    const jumlahKegiatan = manualActivityMap.has(String(guruId))
+    const bisyarohTransport = payableTransportHari * rateTransport;
+    const rawJumlahKegiatan = manualActivityMap.has(String(guruId))
       ? manualActivityMap.get(String(guruId))
       : (activityMap.get(String(guruId)) || 0);
+    const jumlahKegiatan = isPns ? 0 : rawJumlahKegiatan;
     const bisyarohTransportKegiatan = jumlahKegiatan * rateTransport;
     const tasks = teacherTasksMap.get(String(guruId)) || [];
-    const honorTugas = tasks.reduce((sum, t) => sum + (t.nominal || 0), 0);
-    const t1 = tasks[0] || null;
-    const t2 = tasks[1] || null;
-    const t3 = tasks[2] || null;
+    const payableTasks = isPns ? tasks.map(t => ({ ...t, nominal: 0 })) : tasks;
+    const honorTugas = payableTasks.reduce((sum, t) => sum + (t.nominal || 0), 0);
+    const t1 = payableTasks[0] || null;
+    const t2 = payableTasks[1] || null;
+    const t3 = payableTasks[2] || null;
     const totalBisyaroh =
       bisyarohMengajar +
       bisyarohTransport +
@@ -951,11 +961,11 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
       classification,
       transportRate: rateTransport,
       bisyarohMengajar,
-      totalHadir,
-      totalIzin,
-      totalTidakHadir,
-      totalTransportHari,
-      totalTransportAcara,
+      totalHadir: payableTotalHadir,
+      totalIzin: payableTotalIzin,
+      totalTidakHadir: payableTotalTidakHadir,
+      totalTransportHari: payableTransportHari,
+      totalTransportAcara: payableTransportAcara,
       jumlahKegiatan,
       wiyathabakti,
       bisyarohTransport,
