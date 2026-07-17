@@ -3093,3 +3093,73 @@ input[type="checkbox"] {
   box-shadow: 0 12px 26px rgba(245, 179, 1, .4) !important;
 }
 .mf-footnote { color: #94a3b8 !important; }
+
+/* ═══════════════════════════════════════
+   Responsive menyeluruh semua halaman (≤768px)
+   Konten tidak pernah menjebol lebar layar: tabel & grid jadwal digeser
+   horizontal di dalam kartunya, modal jadi bottom-sheet, form & tombol
+   nyaman disentuh. Melengkapi chrome mobile ala myBCA di atas.
+═══════════════════════════════════════ */
+@media (max-width: 768px) {
+  html, body { overflow-x: hidden; }
+  .app-content { overflow-x: hidden; }
+
+  .page-title { font-size: 20px; }
+
+  /* Kartu berisi tabel/grid lebar → area geser horizontal */
+  .card, .modern-table-card {
+    padding: 16px 14px;
+    border-radius: 18px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modern-table-title { font-size: 15.5px; margin-bottom: 14px; gap: 9px; }
+  .table { min-width: 560px; }
+  .table th, .table td { padding: 9px 10px; font-size: 12.5px; }
+
+  /* Jadwal matriks guru/kelas ikut digeser, tidak diperas */
+  .teacher-sheet {
+    padding: 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .teacher-grid { min-width: 660px; }
+
+  /* Toolbar & filter menumpuk penuh */
+  .toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .toolbar input, .toolbar select, .toolbar button { width: 100%; min-height: 44px; }
+
+  /* Form nyaman disentuh; font 16px mencegah auto-zoom saat fokus di iOS */
+  .form-group input, .form-group select, .form-group textarea,
+  .toolbar input, .toolbar select,
+  .modal input, .modal select, .modal textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .btn { min-height: 42px; }
+
+  /* Modal jadi bottom-sheet ala aplikasi mobile */
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: 22px 22px 0 0;
+    padding: 22px 18px calc(24px + env(safe-area-inset-bottom));
+  }
+  .modal-title { font-size: 18px; }
+  .modal-header { margin-bottom: 16px; padding-bottom: 14px; }
+
+  /* Dashboard & statistik */
+  .dashboard-welcome { padding: 22px 18px; border-radius: 20px; }
+  .dashboard-welcome h1 { font-size: 22px; }
+  .stat-value { font-size: 26px; }
+
+  /* Dokumen slip gaji & cetak bisyaroh: digeser, layout dokumen tetap utuh */
+  .slip-card, .cetak-bisyaroh-document {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .slip-header { flex-wrap: wrap; }
+}
