@@ -2357,8 +2357,15 @@ input[type="checkbox"] {
 }
 
 .cetak-signature span,
-.cetak-signature strong {
+.cetak-signature strong,
+.cetak-signature b {
   display: block;
+}
+
+.cetak-signature b {
+  margin-top: 8px;
+  font-size: 13px;
+  text-transform: uppercase;
 }
 
 .cetak-signature em {

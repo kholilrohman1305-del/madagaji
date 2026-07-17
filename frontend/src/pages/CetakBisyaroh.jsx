@@ -36,6 +36,12 @@ const getTaskDetails = (item) => [
   parseTask(item.tugasTambahan3)
 ].filter(Boolean);
 
+const findTeacherByTask = (items, keyword) => {
+  const needle = String(keyword || '').toLowerCase();
+  const found = items.find((item) => getTaskDetails(item).some((task) => String(task.title || '').toLowerCase().includes(needle)));
+  return found?.nama || '-';
+};
+
 export default function CetakBisyaroh() {
   const today = new Date();
   const defaultStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -99,6 +105,12 @@ export default function CetakBisyaroh() {
     return sum + Number(total || 0);
   }, 0);
   const totalJamMengajar = teacherItems.reduce((sum, it) => sum + Number(it.totalHadir || 0), 0);
+  const extracurricularItems = items.filter(it => it.isExpense && it.expenseType === 'extracurricular');
+  const disciplineItems = items.filter(it => it.isExpense && it.expenseType === 'discipline');
+  const totalExtracurricular = extracurricularItems.reduce((sum, it) => sum + Math.abs(Number(it.totalNominal || it.totalBisyaroh || 0)), 0);
+  const totalDiscipline = disciplineItems.reduce((sum, it) => sum + Math.abs(Number(it.totalNominal || it.totalBisyaroh || 0)), 0);
+  const kepalaMadrasahName = findTeacherByTask(teacherItems, 'kepala madrasah');
+  const bendaharaName = findTeacherByTask(teacherItems, 'bendahara');
   const totalRows = totalData ? [
     { no: 1, label: 'Wiyatabhakti', value: totalData.wiyathabakti || 0, color: 'var(--primary-500)' },
     { no: 2, label: 'Bisyaroh Mengajar', value: totalData.bisyarohMengajar || 0, color: 'var(--success-500)' },
@@ -138,29 +150,6 @@ export default function CetakBisyaroh() {
             <div className="cetak-bisyaroh-meta">
               <span>Tanggal Cetak</span>
               <strong>{formatDate(new Date().toISOString().slice(0, 10))}</strong>
-            </div>
-          </div>
-
-          <div className="cetak-bisyaroh-summary">
-            <div>
-              <span>Penerima</span>
-              <strong>{teacherItems.length}</strong>
-            </div>
-            <div>
-              <span>Jam Hadir Mengajar</span>
-              <strong>{totalJamMengajar.toLocaleString('id-ID')} Jam</strong>
-            </div>
-            <div>
-              <span>Bisyaroh Mengajar</span>
-              <strong>{formatRupiah(totalMengajar)}</strong>
-            </div>
-            <div>
-              <span>Transport</span>
-              <strong>{formatRupiah(totalTransport)}</strong>
-            </div>
-            <div>
-              <span>Tugas Tambahan</span>
-              <strong>{formatRupiah(totalTugas)}</strong>
             </div>
           </div>
 
@@ -222,7 +211,8 @@ export default function CetakBisyaroh() {
               })}
               {teacherItems.length > 0 && (
                 <tr className="cetak-grand-row">
-                  <td colSpan="4">TOTAL</td>
+                  <td colSpan="3">TOTAL</td>
+                  <td>{totalJamMengajar.toLocaleString('id-ID')}</td>
                   <td>{formatRupiah(totalMengajar)}</td>
                   <td>{formatRupiah(teacherItems.reduce((sum, it) => sum + Number(it.bisyarohTransport || 0), 0))}</td>
                   <td>{formatRupiah(teacherItems.reduce((sum, it) => sum + Number(it.bisyarohTransportKegiatan || 0), 0))}</td>
@@ -277,15 +267,98 @@ export default function CetakBisyaroh() {
           </table>
           {expenses.length === 0 && !loading && <div className="empty">Belum ada pengeluaran.</div>}
 
+        </div>
+      </div>
+
+      {(extracurricularItems.length > 0 || disciplineItems.length > 0) && (
+        <div className="modern-table-card" style={{ marginTop: 24 }}>
+          <div className="cetak-bisyaroh-document">
+            {extracurricularItems.length > 0 && (
+              <>
+                <div className="cetak-section-title"><Wallet size={18} /> Ekstrakurikuler</div>
+                <table className="table print-show cetak-bisyaroh-expense">
+                  <thead>
+                    <tr>
+                      <th>No.</th>
+                      <th>Nama</th>
+                      <th>Jumlah</th>
+                      <th>Nominal</th>
+                      <th>Total</th>
+                      <th>TTD</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {extracurricularItems.map((item, idx) => (
+                      <tr key={`extra-${idx}`}>
+                        <td className="center">{idx + 1}</td>
+                        <td>{item.nama}</td>
+                        <td>{item.jumlah ?? 0}</td>
+                        <td>{formatRupiah(item.nominal)}</td>
+                        <td style={{ fontWeight: 700 }}>{formatRupiah(Math.abs(Number(item.totalNominal || item.totalBisyaroh || 0)))}</td>
+                        <td className="print-ttd">{idx + 1}</td>
+                      </tr>
+                    ))}
+                    <tr className="cetak-grand-row">
+                      <td colSpan="4">TOTAL EKSTRAKURIKULER</td>
+                      <td>{formatRupiah(totalExtracurricular)}</td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {disciplineItems.length > 0 && (
+              <>
+                <div className="cetak-section-title"><Wallet size={18} /> Kedisiplinan</div>
+                <table className="table print-show cetak-bisyaroh-expense">
+                  <thead>
+                    <tr>
+                      <th>No.</th>
+                      <th>Nama</th>
+                      <th>Jumlah</th>
+                      <th>Nominal</th>
+                      <th>Total</th>
+                      <th>TTD</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {disciplineItems.map((item, idx) => (
+                      <tr key={`discipline-${idx}`}>
+                        <td className="center">{idx + 1}</td>
+                        <td>{item.nama}</td>
+                        <td>{item.jumlah ?? 0}</td>
+                        <td>{formatRupiah(item.nominal)}</td>
+                        <td style={{ fontWeight: 700 }}>{formatRupiah(Math.abs(Number(item.totalNominal || item.totalBisyaroh || 0)))}</td>
+                        <td className="print-ttd">{idx + 1}</td>
+                      </tr>
+                    ))}
+                    <tr className="cetak-grand-row">
+                      <td colSpan="4">TOTAL KEDISIPLINAN</td>
+                      <td>{formatRupiah(totalDiscipline)}</td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="modern-table-card cetak-signature-card" style={{ marginTop: 24 }}>
+        <div className="cetak-bisyaroh-document">
           <div className="cetak-signature">
             <div>
               <span>Mengetahui,</span>
               <strong>Kepala Madrasah</strong>
+              <b>{kepalaMadrasahName}</b>
               <em></em>
             </div>
             <div>
               <span>Dibuat oleh,</span>
               <strong>Bendahara</strong>
+              <b>{bendaharaName}</b>
               <em></em>
             </div>
           </div>
@@ -308,10 +381,6 @@ export default function CetakBisyaroh() {
             </div>
 
             <div className="stat-grid total-bisyaroh-stat-grid">
-              <div className="stat-card total-bisyaroh-hours-card">
-                <div className="stat-label">Jumlah Jam Hadir Mengajar</div>
-                <div className="stat-value">{totalJamMengajar.toLocaleString('id-ID')} Jam</div>
-              </div>
               {totalRows.map(row => (
                 <div key={row.no} className="stat-card" style={{ background: `linear-gradient(135deg, ${row.color}15 0%, ${row.color}25 100%)` }}>
                   <div className="stat-label" style={{ color: row.color }}>{row.label}</div>
