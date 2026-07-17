@@ -2363,7 +2363,11 @@ input[type="checkbox"] {
 }
 
 .cetak-signature b {
-  margin-top: 8px;
+  width: 100%;
+  max-width: 280px;
+  margin: 10px auto 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--text);
   font-size: 13px;
   text-transform: uppercase;
 }
@@ -2371,8 +2375,7 @@ input[type="checkbox"] {
 .cetak-signature em {
   display: block;
   height: 64px;
-  border-bottom: 1px solid var(--text);
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .total-bisyaroh-document {
@@ -2588,6 +2591,12 @@ input[type="checkbox"] {
     height: 48px;
   }
 
+  .cetak-signature b {
+    max-width: 220px;
+    font-size: 9px;
+    margin-top: 6px;
+  }
+
   .total-bisyaroh-print .modern-table-card {
     page-break-inside: avoid;
     break-inside: avoid;
@@ -2615,15 +2624,23 @@ input[type="checkbox"] {
   }
 
   .total-bisyaroh-stat-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 7px;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+  }
+
+  .cetak-total-bisyaroh-page .total-bisyaroh-stat-grid {
+    grid-template-columns: repeat(9, minmax(0, 1fr)) !important;
+    gap: 5px !important;
   }
 
   .total-bisyaroh-stat-grid .stat-card {
     box-shadow: none !important;
     border: 1px solid #aaa !important;
-    padding: 8px !important;
-    min-height: 68px;
+    padding: 6px !important;
+    min-height: 58px;
+    width: auto !important;
+    min-width: 0 !important;
     page-break-inside: avoid;
     break-inside: avoid;
   }
@@ -2634,10 +2651,18 @@ input[type="checkbox"] {
   }
 
   .total-bisyaroh-stat-grid .stat-value {
-    font-size: 11px !important;
+    font-size: 10px !important;
     line-height: 1.25;
     white-space: normal;
     overflow-wrap: anywhere;
+  }
+
+  .cetak-total-bisyaroh-page .total-bisyaroh-stat-grid .stat-label {
+    font-size: 6.5px !important;
+  }
+
+  .cetak-total-bisyaroh-page .total-bisyaroh-stat-grid .stat-value {
+    font-size: 8px !important;
   }
 
   .total-bisyaroh-chart-title {

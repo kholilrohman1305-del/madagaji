@@ -352,14 +352,14 @@ export default function CetakBisyaroh() {
             <div>
               <span>Mengetahui,</span>
               <strong>Kepala Madrasah</strong>
-              <b>{kepalaMadrasahName}</b>
               <em></em>
+              <b>{kepalaMadrasahName}</b>
             </div>
             <div>
               <span>Dibuat oleh,</span>
               <strong>Bendahara</strong>
-              <b>{bendaharaName}</b>
               <em></em>
+              <b>{bendaharaName}</b>
             </div>
           </div>
         </div>
