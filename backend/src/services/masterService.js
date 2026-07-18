@@ -249,7 +249,12 @@ async function getBisyarohSettings() {
 async function updateBisyarohSettings(settings) {
   const keys = Object.keys(settings || {});
   for (const key of keys) {
-    await pool.query('UPDATE konfigurasi SET config_value=? WHERE config_key=?', [settings[key], key]);
+    await pool.query(
+      `INSERT INTO konfigurasi (config_key, config_value)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
+      [key, settings[key]]
+    );
   }
   invalidateSettingsCache();
   return { success: true, message: 'Pengaturan berhasil disimpan.' };

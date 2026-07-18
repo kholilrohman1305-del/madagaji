@@ -14,6 +14,7 @@ const formatRupiah = (value) => {
 export default function SettingBisyaroh() {
   const [form, setForm] = useState({
     RATE_HADIR: 0,
+    RATE_HADIR_KETERAMPILAN: 0,
     RATE_IZIN: 0,
     RATE_TIDAK_HADIR: 0,
     RATE_TRANSPORT: 0,
@@ -21,6 +22,7 @@ export default function SettingBisyaroh() {
     RATE_TRANSPORT_INPASSING: 0,
     RATE_TRANSPORT_SERTIFIKASI: 0,
     RATE_TRANSPORT_NON_SERTIFIKASI: 0,
+    RATE_TRANSPORT_KETERAMPILAN: 0,
     WIYATHA_1_5: 0,
     WIYATHA_6_10: 0,
     WIYATHA_11_15: 0,
@@ -37,6 +39,7 @@ export default function SettingBisyaroh() {
     const data = res.data || {};
     setForm({
       RATE_HADIR: Number(data.RATE_HADIR || data.RATE_MENGAJAR || 0),
+      RATE_HADIR_KETERAMPILAN: Number(data.RATE_HADIR_KETERAMPILAN || 0),
       RATE_IZIN: Number(data.RATE_IZIN || 0),
       RATE_TIDAK_HADIR: Number(data.RATE_TIDAK_HADIR || 0),
       RATE_TRANSPORT: Number(data.RATE_TRANSPORT || 0),
@@ -44,6 +47,7 @@ export default function SettingBisyaroh() {
       RATE_TRANSPORT_INPASSING: Number(data.RATE_TRANSPORT_INPASSING || 0),
       RATE_TRANSPORT_SERTIFIKASI: Number(data.RATE_TRANSPORT_SERTIFIKASI || 0),
       RATE_TRANSPORT_NON_SERTIFIKASI: Number(data.RATE_TRANSPORT_NON_SERTIFIKASI || 0),
+      RATE_TRANSPORT_KETERAMPILAN: Number(data.RATE_TRANSPORT_KETERAMPILAN || 0),
       WIYATHA_1_5: Number(data.WIYATHA_1_5 || 0),
       WIYATHA_6_10: Number(data.WIYATHA_6_10 || 0),
       WIYATHA_11_15: Number(data.WIYATHA_11_15 || 0),
@@ -93,6 +97,16 @@ export default function SettingBisyaroh() {
                     style={{ width: '100%' }}
                   />
                   <div style={{ fontSize: 13, color: 'var(--success-600)', marginTop: 4 }}>{formatRupiah(form.RATE_HADIR)}</div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Rate Hadir Keterampilan (per jam)</label>
+                  <input
+                    type="number"
+                    value={form.RATE_HADIR_KETERAMPILAN}
+                    onChange={e => updateField('RATE_HADIR_KETERAMPILAN', e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                  <div style={{ fontSize: 13, color: 'var(--success-600)', marginTop: 4 }}>{formatRupiah(form.RATE_HADIR_KETERAMPILAN)}</div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Rate Izin (per jam)</label>
@@ -172,6 +186,16 @@ export default function SettingBisyaroh() {
                     style={{ width: '100%' }}
                   />
                   <div style={{ fontSize: 13, color: 'var(--primary-600)', marginTop: 4 }}>{formatRupiah(form.RATE_TRANSPORT_NON_SERTIFIKASI)}</div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Keterampilan</label>
+                  <input
+                    type="number"
+                    value={form.RATE_TRANSPORT_KETERAMPILAN}
+                    onChange={e => updateField('RATE_TRANSPORT_KETERAMPILAN', e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                  <div style={{ fontSize: 13, color: 'var(--primary-600)', marginTop: 4 }}>{formatRupiah(form.RATE_TRANSPORT_KETERAMPILAN)}</div>
                 </div>
               </div>
             </div>

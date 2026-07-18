@@ -734,6 +734,7 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
   const TARIFFS = {
     RATE_MENGAJAR: parseFloat(configMap.get('RATE_MENGAJAR')) || 0,
     RATE_HADIR: parseFloat(configMap.get('RATE_HADIR')) || 0,
+    RATE_HADIR_KETERAMPILAN: parseFloat(configMap.get('RATE_HADIR_KETERAMPILAN')) || 0,
     RATE_IZIN: parseFloat(configMap.get('RATE_IZIN')) || 0,
     RATE_TIDAK_HADIR: parseFloat(configMap.get('RATE_TIDAK_HADIR')) || 0,
     RATE_TRANSPORT: parseFloat(configMap.get('RATE_TRANSPORT')) || 0,
@@ -741,6 +742,7 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     RATE_TRANSPORT_INPASSING: parseFloat(configMap.get('RATE_TRANSPORT_INPASSING')) || 0,
     RATE_TRANSPORT_SERTIFIKASI: parseFloat(configMap.get('RATE_TRANSPORT_SERTIFIKASI')) || 0,
     RATE_TRANSPORT_NON_SERTIFIKASI: parseFloat(configMap.get('RATE_TRANSPORT_NON_SERTIFIKASI')) || 0,
+    RATE_TRANSPORT_KETERAMPILAN: parseFloat(configMap.get('RATE_TRANSPORT_KETERAMPILAN')) || 0,
     WIYATHA_1_5: parseFloat(configMap.get('WIYATHA_1_5')) || 0,
     WIYATHA_6_10: parseFloat(configMap.get('WIYATHA_6_10')) || 0,
     WIYATHA_11_15: parseFloat(configMap.get('WIYATHA_11_15')) || 0,
@@ -753,13 +755,19 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     PNS: TARIFFS.RATE_TRANSPORT_PNS || TARIFFS.RATE_TRANSPORT,
     INPASSING: TARIFFS.RATE_TRANSPORT_INPASSING || TARIFFS.RATE_TRANSPORT,
     SERTIFIKASI: TARIFFS.RATE_TRANSPORT_SERTIFIKASI || TARIFFS.RATE_TRANSPORT,
-    'NON SERTIFIKASI': TARIFFS.RATE_TRANSPORT_NON_SERTIFIKASI || TARIFFS.RATE_TRANSPORT
+    'NON SERTIFIKASI': TARIFFS.RATE_TRANSPORT_NON_SERTIFIKASI || TARIFFS.RATE_TRANSPORT,
+    KETERAMPILAN: TARIFFS.RATE_TRANSPORT_KETERAMPILAN || TARIFFS.RATE_TRANSPORT
+  };
+
+  const attendanceRates = {
+    KETERAMPILAN: TARIFFS.RATE_HADIR_KETERAMPILAN || TARIFFS.RATE_HADIR || TARIFFS.RATE_MENGAJAR
   };
 
   const normalizeClassification = (value) => {
     const v = String(value || '').trim().toLowerCase();
     if (v === 'pns' || v.includes('pns') || /^1(\b|[^0-9])/.test(v)) return 'PNS';
     if (v === 'inpassing' || v.includes('inpassing')) return 'INPASSING';
+    if (v === 'keterampilan' || v.includes('keterampilan')) return 'KETERAMPILAN';
     if (v === 'sertifikasi' || v.includes('sertifikasi')) return 'SERTIFIKASI';
     return 'NON SERTIFIKASI';
   };
@@ -929,7 +937,7 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     const payableTransportAcara = isPns ? 0 : totalTransportAcara;
     if (isPns) wiyathabakti = 0;
 
-    const rateHadir = isPns ? 0 : (TARIFFS.RATE_HADIR || TARIFFS.RATE_MENGAJAR);
+    const rateHadir = isPns ? 0 : (attendanceRates[classification] || TARIFFS.RATE_HADIR || TARIFFS.RATE_MENGAJAR);
     const rateTransport = isPns ? 0 : (transportRates[classification] || TARIFFS.RATE_TRANSPORT);
     const bisyarohJam = payableTotalHadir * rateHadir;
     const bisyarohIzin = payableTotalIzin * TARIFFS.RATE_IZIN;
@@ -959,6 +967,7 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
       nama,
       tmt,
       classification,
+      rateHadir,
       transportRate: rateTransport,
       bisyarohMengajar,
       totalHadir: payableTotalHadir,
@@ -1276,7 +1285,7 @@ async function getPayslipData(startDate, endDate, guruId) {
   const configMap = await getConfigMap();
 
   const rateMengajar = parseFloat(configMap.get('RATE_MENGAJAR')) || 0;
-  const rateHadir = parseFloat(configMap.get('RATE_HADIR')) || rateMengajar;
+  const rateHadir = teacherData.rateHadir || parseFloat(configMap.get('RATE_HADIR')) || rateMengajar;
   const rateIzin = parseFloat(configMap.get('RATE_IZIN')) || 0;
   const rateTidakHadir = parseFloat(configMap.get('RATE_TIDAK_HADIR')) || 0;
   const rateTransport = teacherData.transportRate || parseFloat(configMap.get('RATE_TRANSPORT')) || 0;
@@ -1324,7 +1333,7 @@ async function getAllPayslipsData(startDate, endDate) {
     tugasTambahan2: t.tugasTambahan2 || '',
     tugasTambahan3: t.tugasTambahan3 || '',
     pendapatan: [
-      { nama: 'Honor Hadir', qty: t.totalHadir, rate: rateHadir, total: t.totalHadir * rateHadir },
+      { nama: 'Honor Hadir', qty: t.totalHadir, rate: t.rateHadir || rateHadir, total: t.totalHadir * (t.rateHadir || rateHadir) },
       { nama: 'Honor Izin', qty: t.totalIzin || 0, rate: rateIzin, total: (t.totalIzin || 0) * rateIzin },
       { nama: 'Honor Tidak Hadir', qty: t.totalTidakHadir || 0, rate: rateTidakHadir, total: (t.totalTidakHadir || 0) * rateTidakHadir },
       { nama: 'Transport Harian', qty: t.totalTransportHari, rate: t.transportRate || 0, total: t.totalTransportHari * (t.transportRate || 0) },

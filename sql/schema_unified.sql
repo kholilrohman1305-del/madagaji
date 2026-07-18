@@ -533,6 +533,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 INSERT INTO settings (config_key, config_value, category) VALUES
   ('RATE_MENGAJAR', '0', 'payroll'),
   ('RATE_HADIR', '0', 'payroll'),
+  ('RATE_HADIR_KETERAMPILAN', '0', 'payroll'),
   ('RATE_IZIN', '0', 'payroll'),
   ('RATE_TIDAK_HADIR', '0', 'payroll'),
   ('RATE_TRANSPORT', '0', 'payroll'),
@@ -540,6 +541,7 @@ INSERT INTO settings (config_key, config_value, category) VALUES
   ('RATE_TRANSPORT_INPASSING', '0', 'payroll'),
   ('RATE_TRANSPORT_SERTIFIKASI', '0', 'payroll'),
   ('RATE_TRANSPORT_NON_SERTIFIKASI', '0', 'payroll'),
+  ('RATE_TRANSPORT_KETERAMPILAN', '0', 'payroll'),
   ('WIYATHA_1_5', '0', 'payroll'),
   ('WIYATHA_6_10', '0', 'payroll'),
   ('WIYATHA_11_15', '0', 'payroll'),

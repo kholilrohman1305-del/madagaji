@@ -186,6 +186,7 @@ CREATE TABLE IF NOT EXISTS kegiatan_manual (
 INSERT INTO konfigurasi (config_key, config_value) VALUES
   ('RATE_MENGAJAR', '0'),
   ('RATE_HADIR', '0'),
+  ('RATE_HADIR_KETERAMPILAN', '0'),
   ('RATE_IZIN', '0'),
   ('RATE_TIDAK_HADIR', '0'),
   ('RATE_TRANSPORT', '0'),
@@ -193,6 +194,7 @@ INSERT INTO konfigurasi (config_key, config_value) VALUES
   ('RATE_TRANSPORT_INPASSING', '0'),
   ('RATE_TRANSPORT_SERTIFIKASI', '0'),
   ('RATE_TRANSPORT_NON_SERTIFIKASI', '0'),
+  ('RATE_TRANSPORT_KETERAMPILAN', '0'),
   ('WIYATHA_1_5', '0'),
   ('WIYATHA_6_10', '0'),
   ('WIYATHA_11_15', '0'),
