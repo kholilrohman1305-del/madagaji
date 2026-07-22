@@ -64,18 +64,6 @@ export default function SlipGaji() {
     const items = (slip.pendapatan || []).filter(item => item && item.nama);
     const totalIncome = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
 
-    const parseTask = (raw) => {
-      if (!raw) return { name: '-', nominal: null };
-      const match = String(raw).match(/^(.*)\(([-\d.,]+)\)\s*$/);
-      if (!match) return { name: String(raw), nominal: null };
-      const name = match[1].trim();
-      const num = Number(String(match[2]).replace(/[^0-9-]/g, ''));
-      return { name: name || String(raw), nominal: Number.isNaN(num) ? null : num };
-    };
-    const task1 = parseTask(slip.tugasTambahan1);
-    const task2 = parseTask(slip.tugasTambahan2);
-    const task3 = parseTask(slip.tugasTambahan3);
-
     return (
       <div className="slip-card slip-page">
         <div className="slip-header">
@@ -94,35 +82,18 @@ export default function SlipGaji() {
           <thead>
             <tr>
               <th>Jenis Bisyaroh</th>
-              <th>Nominal</th>
               <th>Qty</th>
+              <th>Nominal</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
               <tr key={item.nama}>
                 <td>{item.nama}</td>
-                <td>{formatRupiah(item.total || 0)}</td>
                 <td>{item.qty ? String(item.qty) : '-'}</td>
+                <td>{formatRupiah(item.total || 0)}</td>
               </tr>
             ))}
-          </tbody>
-        </table>
-        <div className="slip-section">Tugas Tambahan</div>
-        <table className="slip-table">
-          <tbody>
-            <tr>
-              <td>1. {task1.name}</td>
-              <td style={{ textAlign: 'right' }}>{task1.nominal !== null ? formatRupiah(task1.nominal) : '-'}</td>
-            </tr>
-            <tr>
-              <td>2. {task2.name}</td>
-              <td style={{ textAlign: 'right' }}>{task2.nominal !== null ? formatRupiah(task2.nominal) : '-'}</td>
-            </tr>
-            <tr>
-              <td>3. {task3.name}</td>
-              <td style={{ textAlign: 'right' }}>{task3.nominal !== null ? formatRupiah(task3.nominal) : '-'}</td>
-            </tr>
           </tbody>
         </table>
         <div className="slip-total">

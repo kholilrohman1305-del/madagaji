@@ -155,56 +155,66 @@ export default function PengeluaranLain() {
       total: ((Number(it.jumlah) || 0) * (Number(it.nominal) || 0))
     }));
 
-    const style = document.createElement('style');
-    style.setAttribute('id', 'expense-print-style');
+    const currency = new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      maximumFractionDigits: 0
+    });
+
+    const styleId = 'expense-print-style';
+    const existingStyle = document.getElementById(styleId);
+    const style = existingStyle || document.createElement('style');
+    style.id = styleId;
     style.textContent = `
       @media print {
-        body * { visibility: hidden; }
-        .expense-print-root, .expense-print-root * { visibility: visible; }
-        .expense-print-root { position: absolute; left: 0; top: 0; width: 100%; }
-        .no-print { display: none !important; }
+        body > * { display: none !important; }
+        body > .expense-print-root { display: block !important; }
+        body { background: white !important; }
       }
     `;
-    document.head.appendChild(style);
+    if (!existingStyle) document.head.appendChild(style);
 
-    const container = document.getElementById('expense-print-root');
-    if (container) {
-      container.innerHTML = `
-        <div style="font-family: Arial, sans-serif; padding: 24px; color: #111827;">
-          <h2 style="margin: 0 0 8px 0;">Bukti Pengeluaran Lain</h2>
-          <p style="margin: 0 0 16px 0; color: #6b7280;">${mode === 'selected' ? 'Data terpilih' : 'Data keseluruhan'}</p>
-          <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-            <thead>
+    const container = document.createElement('div');
+    container.className = 'expense-print-root';
+    container.innerHTML = `
+      <div style="font-family: Arial, sans-serif; padding: 24px; color: #111827; background: white; width: 100%; box-sizing: border-box;">
+        <h2 style="margin: 0 0 8px 0;">Bukti Pengeluaran Lain</h2>
+        <p style="margin: 0 0 16px 0; color: #6b7280;">${mode === 'selected' ? 'Data terpilih' : 'Data keseluruhan'}</p>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          <thead>
+            <tr>
+              <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">Tanggal</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">Kategori</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Jumlah</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Nominal</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${printData.map(item => `
               <tr>
-                <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">Tanggal</th>
-                <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">Kategori</th>
-                <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Jumlah</th>
-                <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Nominal</th>
-                <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Total</th>
+                <td style="border: 1px solid #d1d5db; padding: 8px;">${item.tanggal}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px;">${item.kategori}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">${item.jumlah}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">${currency.format(item.nominal)}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right; font-weight: 700;">${currency.format(item.total)}</td>
               </tr>
-            </thead>
-            <tbody>
-              ${printData.map(item => `
-                <tr>
-                  <td style="border: 1px solid #d1d5db; padding: 8px;">${item.tanggal}</td>
-                  <td style="border: 1px solid #d1d5db; padding: 8px;">${item.kategori}</td>
-                  <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">${item.jumlah}</td>
-                  <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.nominal)}</td>
-                  <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right; font-weight: 700;">${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.total)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <div style="margin-top: 16px; text-align: right; font-weight: 700;">Total: ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(printData.reduce((sum, item) => sum + item.total, 0))}</div>
-        </div>
-      `;
-    }
+            `).join('')}
+          </tbody>
+        </table>
+        <div style="margin-top: 16px; text-align: right; font-weight: 700;">Total: ${currency.format(printData.reduce((sum, item) => sum + item.total, 0))}</div>
+      </div>
+    `;
+
+    const existingRoot = document.querySelector('.expense-print-root');
+    if (existingRoot) existingRoot.remove();
+    document.body.appendChild(container);
 
     window.setTimeout(() => window.print(), 80);
     window.setTimeout(() => {
-      document.getElementById('expense-print-style')?.remove();
-      if (container) container.innerHTML = '';
-    }, 1200);
+      style.remove();
+      if (container.parentNode) container.parentNode.removeChild(container);
+    }, 1400);
   };
 
   return (

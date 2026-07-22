@@ -279,21 +279,65 @@ async function getActiveTeachers() {
 
 async function getExtracurricularMasterOptions() {
   try {
-    const [rows] = await masterPool.query(
-      `SELECT e.id, e.name, e.pembina_teacher_id, t.name AS pembina_name
-       FROM extracurriculars e
-       LEFT JOIN teachers t ON t.id = e.pembina_teacher_id
-       WHERE e.is_active = 1
-       ORDER BY e.name ASC`
+    const [extraColumns] = await masterPool.query(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'extracurriculars'`
     );
-    return rows.map((r) => ({
-      id: String(r.id),
-      name: r.name,
-      pembinaTeacherId: r.pembina_teacher_id ? String(r.pembina_teacher_id) : '',
-      pembinaName: r.pembina_name || ''
-    }));
+    const [teacherColumns] = await masterPool.query(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teachers'`
+    );
+    const extraColumnSet = new Set((extraColumns || []).map((r) => String(r.COLUMN_NAME)));
+    const teacherColumnSet = new Set((teacherColumns || []).map((r) => String(r.COLUMN_NAME)));
+
+    const selectParts = ['e.id', 'e.name'];
+    let joinClause = '';
+    let whereClause = '';
+    let orderByClause = 'ORDER BY e.name ASC';
+
+    if (extraColumnSet.has('pembina_teacher_id')) {
+      selectParts.push('e.pembina_teacher_id');
+      joinClause = 'LEFT JOIN teachers t ON t.id = e.pembina_teacher_id';
+      if (teacherColumnSet.has('name')) {
+        selectParts.push('t.name AS pembina_name');
+      } else if (teacherColumnSet.has('nama')) {
+        selectParts.push('t.nama AS pembina_name');
+      }
+    } else if (extraColumnSet.has('pembina_name')) {
+      selectParts.push('e.pembina_name');
+    } else if (extraColumnSet.has('pembina_teacher')) {
+      selectParts.push('e.pembina_teacher');
+    }
+
+    if (extraColumnSet.has('is_active')) {
+      whereClause = 'WHERE e.is_active = 1';
+    } else if (extraColumnSet.has('status')) {
+      whereClause = "WHERE e.status = 'active' OR e.status = 'aktif'";
+    }
+
+    const [rows] = await masterPool.query(
+      `SELECT ${selectParts.join(', ')}
+       FROM extracurriculars e
+       ${joinClause}
+       ${whereClause}
+       ${orderByClause}`
+    );
+
+    return rows.map((r) => {
+      const pembinaTeacherId = r.pembina_teacher_id ?? r.pembina_teacher ?? '';
+      const pembinaName = r.pembina_name || r.pembinaName || r.pembina || '';
+      return {
+        id: String(r.id),
+        name: r.name,
+        pembinaTeacherId: pembinaTeacherId ? String(pembinaTeacherId) : '',
+        pembinaName: pembinaName || ''
+      };
+    });
   } catch (error) {
-    if (String(error.message).includes('doesn\'t exist') || String(error.message).includes('Unknown column')) {
+    const message = String(error.message || '');
+    if (message.includes('doesn\'t exist') || message.includes('Unknown column') || message.includes('Unknown table')) {
       return [];
     }
     throw error;

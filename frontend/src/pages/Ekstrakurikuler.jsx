@@ -136,7 +136,7 @@ export default function Ekstrakurikuler() {
       selectedExtraId: String(selected.id),
       namaEkstra: selected.name,
       teacherId: selected.pembinaTeacherId ? String(selected.pembinaTeacherId) : '0',
-      teacherNameManual: ''
+      teacherNameManual: selected.pembinaTeacherId ? '' : (selected.pembinaName || '')
     }));
   };
 
