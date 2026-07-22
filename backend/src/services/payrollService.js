@@ -764,11 +764,17 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
   };
 
   const normalizeClassification = (value) => {
-    const v = String(value || '').trim().toLowerCase();
-    if (v === 'pns' || v.includes('pns') || /^1(\b|[^0-9])/.test(v)) return 'PNS';
-    if (v === 'inpassing' || v.includes('inpassing')) return 'INPASSING';
-    if (v === 'keterampilan' || v.includes('keterampilan')) return 'KETERAMPILAN';
-    if (v === 'sertifikasi' || v.includes('sertifikasi')) return 'SERTIFIKASI';
+    const normalized = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
+    if (normalized === 'pns' || normalized.includes('pns') || /^1(\b|[^0-9])/.test(normalized)) return 'PNS';
+    if (normalized === 'inpassing' || normalized.includes('inpassing')) return 'INPASSING';
+    if (normalized === 'keterampilan' || normalized.includes('keterampilan')) return 'KETERAMPILAN';
+    if (normalized === 'non sertifikasi' || normalized.includes('non sertifikasi')) return 'NON SERTIFIKASI';
+    if (normalized === 'sertifikasi' || normalized.includes('sertifikasi')) return 'SERTIFIKASI';
     return 'NON SERTIFIKASI';
   };
 
