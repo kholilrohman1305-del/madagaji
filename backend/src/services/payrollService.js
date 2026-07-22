@@ -277,6 +277,29 @@ async function getActiveTeachers() {
   return rows.map((r) => ({ id: String(r.id), name: r.name }));
 }
 
+async function getExtracurricularMasterOptions() {
+  try {
+    const [rows] = await masterPool.query(
+      `SELECT e.id, e.name, e.pembina_teacher_id, t.name AS pembina_name
+       FROM extracurriculars e
+       LEFT JOIN teachers t ON t.id = e.pembina_teacher_id
+       WHERE e.is_active = 1
+       ORDER BY e.name ASC`
+    );
+    return rows.map((r) => ({
+      id: String(r.id),
+      name: r.name,
+      pembinaTeacherId: r.pembina_teacher_id ? String(r.pembina_teacher_id) : '',
+      pembinaName: r.pembina_name || ''
+    }));
+  } catch (error) {
+    if (String(error.message).includes('doesn\'t exist') || String(error.message).includes('Unknown column')) {
+      return [];
+    }
+    throw error;
+  }
+}
+
 async function resolveExtracurricularTeacher(input) {
   const rawTeacherId = input?.teacherId;
   const manualName = String(input?.teacherNameManual || '').trim();
@@ -1363,6 +1386,7 @@ module.exports = {
   getAllPayslipsData,
   getOtherExpenses,
   getActiveTeachers,
+  getExtracurricularMasterOptions,
   getExtracurricularExpenses,
   getExtracurricularMonthSheet,
   getDisciplineMonthSheet,

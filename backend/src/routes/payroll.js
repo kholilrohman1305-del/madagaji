@@ -87,6 +87,12 @@ router.get('/extracurricular/teachers', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get('/extracurricular/options', async (req, res, next) => {
+  try {
+    res.json(await payroll.getExtracurricularMasterOptions());
+  } catch (e) { next(e); }
+});
+
 router.get('/extracurricular', async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;

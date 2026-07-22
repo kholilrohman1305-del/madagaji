@@ -2,22 +2,26 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../api';
 import { Wallet, Plus, Save, Trash2, X } from 'lucide-react';
 
+const buildEmptyForm = (teacherId = '') => ({
+  teacherId,
+  teacherNameManual: '',
+  selectedExtraId: '',
+  namaEkstra: '',
+  nominal: 0,
+  keterangan: ''
+});
+
 export default function Ekstrakurikuler() {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const [periode, setPeriode] = useState(currentMonth);
   const [teachers, setTeachers] = useState([]);
+  const [extracurriculars, setExtracurriculars] = useState([]);
   const [items, setItems] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [changedIds, setChangedIds] = useState(new Set());
   const [showModal, setShowModal] = useState(false);
   const [bulkValues, setBulkValues] = useState({ jumlahHadir: '', nominal: '' });
-  const [form, setForm] = useState({
-    teacherId: '',
-    teacherNameManual: '',
-    namaEkstra: '',
-    nominal: 0,
-    keterangan: ''
-  });
+  const [form, setForm] = useState(() => buildEmptyForm());
 
   const rupiah = useMemo(() => new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -25,11 +29,24 @@ export default function Ekstrakurikuler() {
     maximumFractionDigits: 0
   }), []);
 
-  const loadTeachers = async () => {
-    const res = await api.get('/payroll/extracurricular/teachers');
-    const rows = res.data || [];
-    setTeachers(rows);
-    setForm((prev) => ({ ...prev, teacherId: prev.teacherId || rows[0]?.id || '' }));
+  const loadOptions = async () => {
+    const [teachersRes, extracurricularRes] = await Promise.all([
+      api.get('/payroll/extracurricular/teachers'),
+      api.get('/payroll/extracurricular/options')
+    ]);
+    const teacherRows = teachersRes.data || [];
+    const extraRows = extracurricularRes.data || [];
+    setTeachers(teacherRows);
+    setExtracurriculars(extraRows);
+    setForm((prev) => ({
+      ...buildEmptyForm(prev.teacherId || teacherRows[0]?.id || ''),
+      teacherId: prev.teacherId || teacherRows[0]?.id || '',
+      teacherNameManual: prev.teacherNameManual || '',
+      selectedExtraId: prev.selectedExtraId || '',
+      namaEkstra: prev.namaEkstra || '',
+      nominal: prev.nominal ?? 0,
+      keterangan: prev.keterangan || ''
+    }));
   };
 
   const loadSheet = async (targetPeriode) => {
@@ -49,7 +66,7 @@ export default function Ekstrakurikuler() {
   };
 
   useEffect(() => {
-    loadTeachers();
+    loadOptions();
   }, []);
 
   useEffect(() => {
@@ -105,6 +122,24 @@ export default function Ekstrakurikuler() {
     setChangedIds(nextChanged);
   };
 
+  const selectExtracurricular = (nextId) => {
+    if (!nextId || nextId === 'manual') {
+      setForm((prev) => ({ ...prev, selectedExtraId: nextId, namaEkstra: '', teacherId: '0', teacherNameManual: '' }));
+      return;
+    }
+
+    const selected = extracurriculars.find((item) => String(item.id) === String(nextId));
+    if (!selected) return;
+
+    setForm((prev) => ({
+      ...prev,
+      selectedExtraId: String(selected.id),
+      namaEkstra: selected.name,
+      teacherId: selected.pembinaTeacherId ? String(selected.pembinaTeacherId) : '0',
+      teacherNameManual: ''
+    }));
+  };
+
   const add = async () => {
     await api.post('/payroll/extracurricular', {
       tanggal: `${periode}-01`,
@@ -116,7 +151,7 @@ export default function Ekstrakurikuler() {
       keterangan: form.keterangan
     });
     setShowModal(false);
-    setForm((prev) => ({ ...prev, teacherNameManual: '', namaEkstra: '', nominal: 0, keterangan: '' }));
+    setForm((prev) => ({ ...buildEmptyForm(prev.teacherId || teachers[0]?.id || ''), teacherId: prev.teacherId || teachers[0]?.id || '' }));
     loadSheet(periode);
   };
 
@@ -240,7 +275,26 @@ export default function Ekstrakurikuler() {
               )}
               <div className="form-group">
                 <label className="form-label">Nama Ekstra</label>
-                <input value={form.namaEkstra} onChange={(e) => setForm({ ...form, namaEkstra: e.target.value })} style={{ width: '100%' }} />
+                <select value={form.selectedExtraId} onChange={(e) => selectExtracurricular(e.target.value)} style={{ width: '100%' }}>
+                  <option value="">-- Pilih dari MyMada --</option>
+                  {extracurriculars.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                  <option value="manual">Input manual</option>
+                </select>
+                {String(form.selectedExtraId) === 'manual' && (
+                  <input
+                    value={form.namaEkstra}
+                    onChange={(e) => setForm({ ...form, namaEkstra: e.target.value })}
+                    placeholder="Ketik nama ekstra manual"
+                    style={{ width: '100%', marginTop: 8 }}
+                  />
+                )}
+                {String(form.selectedExtraId) !== 'manual' && String(form.selectedExtraId) !== '' && (
+                  <div style={{ marginTop: 8, color: 'var(--muted)' }}>
+                    {form.namaEkstra} {form.teacherId && form.teacherId !== '0' ? `• Pembina: ${teachers.find((t) => String(t.id) === String(form.teacherId))?.name || ''}` : ''}
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">Nominal Awal</label>
