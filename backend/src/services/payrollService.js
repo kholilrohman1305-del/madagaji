@@ -916,6 +916,49 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
   const currentYear = new Date().getFullYear();
   const teacherResults = [];
 
+  const extraCompensationMap = new Map();
+  const [extraRows] = await pool.query(
+    `SELECT teacher_id, nama_ekstra, jumlah_hadir, nominal, tanggal
+     FROM pengeluaran_ekstrakurikuler
+     WHERE tanggal BETWEEN ? AND ?`,
+    [startDate, endDate]
+  );
+  extraRows.forEach((row) => {
+    const teacherKey = String(row.teacher_id || '').trim();
+    if (!teacherKey) return;
+    const list = extraCompensationMap.get(teacherKey) || [];
+    list.push({
+      type: 'extracurricular',
+      label: `Ekstrakurikuler - ${row.nama_ekstra || 'Ekstra'}`,
+      qty: parseInt(row.jumlah_hadir, 10) || 0,
+      rate: Number(row.nominal) || 0,
+      total: ((parseInt(row.jumlah_hadir, 10) || 0) * (Number(row.nominal) || 0)),
+      tanggal: row.tanggal
+    });
+    extraCompensationMap.set(teacherKey, list);
+  });
+
+  const [disciplineRows] = await pool.query(
+    `SELECT teacher_id, jumlah_hadir, nominal, tanggal
+     FROM pengeluaran_kedisiplinan
+     WHERE tanggal BETWEEN ? AND ?`,
+    [startDate, endDate]
+  );
+  disciplineRows.forEach((row) => {
+    const teacherKey = String(row.teacher_id || '').trim();
+    if (!teacherKey) return;
+    const list = extraCompensationMap.get(teacherKey) || [];
+    list.push({
+      type: 'discipline',
+      label: 'Kedisiplinan',
+      qty: parseInt(row.jumlah_hadir, 10) || 0,
+      rate: Number(row.nominal) || 0,
+      total: ((parseInt(row.jumlah_hadir, 10) || 0) * (Number(row.nominal) || 0)),
+      tanggal: row.tanggal
+    });
+    extraCompensationMap.set(teacherKey, list);
+  });
+
   const monthsInRange = new Set();
   let iter = new Date(startDate);
   const end = new Date(endDate);
@@ -984,12 +1027,15 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     const t1 = payableTasks[0] || null;
     const t2 = payableTasks[1] || null;
     const t3 = payableTasks[2] || null;
+    const extraCompensationItems = (extraCompensationMap.get(String(guruId)) || []).map((item) => ({ ...item }));
+    const extraCompensationTotal = extraCompensationItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
     const totalBisyaroh =
       bisyarohMengajar +
       bisyarohTransport +
       bisyarohTransportKegiatan +
       honorTugas +
-      wiyathabakti;
+      wiyathabakti +
+      extraCompensationTotal;
 
     teacherResults.push({
       guruId,
@@ -1012,6 +1058,8 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
       tugasTambahan2: t2 ? `${t2.title} (${t2.nominal})` : '',
       tugasTambahan3: t3 ? `${t3.title} (${t3.nominal})` : '',
       honorTugas,
+      extraCompensationItems,
+      extraCompensationTotal,
       totalBisyaroh,
       isExpense: false
     });
@@ -1131,6 +1179,7 @@ async function getTotalBisyarohBreakdown(startDate, endDate) {
   const transportKegiatan = teachers.reduce((t, i) => t + (Number(i.bisyarohTransportKegiatan) || 0), 0);
   const bisyarohKehadiran = transportKehadiran + transportKegiatan;
   const bisyarohTugasTambahan = teachers.reduce((t, i) => t + (Number(i.honorTugas) || 0), 0);
+  const extraCompensation = teachers.reduce((t, i) => t + (Number(i.extraCompensationTotal) || 0), 0);
   const pengeluaranLain = expenses
     .filter((i) => i.expenseType !== 'extracurricular' && i.expenseType !== 'discipline')
     .reduce((t, i) => t + Math.abs(Number(i.totalNominal || i.totalBisyaroh || 0)), 0);
@@ -1141,7 +1190,7 @@ async function getTotalBisyarohBreakdown(startDate, endDate) {
     .filter((i) => i.expenseType === 'discipline')
     .reduce((t, i) => t + Math.abs(Number(i.totalNominal || i.totalBisyaroh || 0)), 0);
 
-  const totalHonorarium = wiyathabakti + bisyarohMengajar + bisyarohKehadiran + bisyarohTugasTambahan;
+  const totalHonorarium = wiyathabakti + bisyarohMengajar + bisyarohKehadiran + bisyarohTugasTambahan + extraCompensation;
   const totalPengeluaran = pengeluaranLain + pengeluaranEkstrakurikuler + pengeluaranKedisiplinan;
   const total = totalHonorarium + totalPengeluaran;
 
@@ -1156,6 +1205,7 @@ async function getTotalBisyarohBreakdown(startDate, endDate) {
     pengeluaranLain,
     pengeluaranEkstrakurikuler,
     pengeluaranKedisiplinan,
+    extraCompensation,
     totalHonorarium,
     totalPengeluaran,
     total
@@ -1320,6 +1370,12 @@ async function getPayslipData(startDate, endDate, guruId) {
   const rateTransport = teacherData.transportRate || parseFloat(configMap.get('RATE_TRANSPORT')) || 0;
   const currentYear = new Date().getFullYear();
   const pengabdianYears = teacherData.tmt ? Math.max(0, currentYear - Number(teacherData.tmt)) : 0;
+  const extraCompensationItems = (teacherData.extraCompensationItems || []).map((item) => ({
+    nama: item.label,
+    qty: item.qty,
+    rate: item.rate,
+    total: item.total
+  }));
 
   return {
     nama: teacherData.nama,
@@ -1335,6 +1391,7 @@ async function getPayslipData(startDate, endDate, guruId) {
       { nama: 'Transport Harian', qty: teacherData.totalTransportHari, rate: rateTransport, total: teacherData.totalTransportHari * rateTransport },
       { nama: 'Transport Acara', qty: teacherData.totalTransportAcara, rate: rateTransport, total: teacherData.totalTransportAcara * rateTransport },
       { nama: 'Wiyathabakti', qty: 1, rate: teacherData.wiyathabakti, total: teacherData.wiyathabakti },
+      ...extraCompensationItems,
       { nama: 'Tugas Tambahan', qty: 1, rate: teacherData.honorTugas, total: teacherData.honorTugas }
     ],
     totalPendapatan: teacherData.totalBisyaroh,
@@ -1368,6 +1425,12 @@ async function getAllPayslipsData(startDate, endDate) {
       { nama: 'Transport Harian', qty: t.totalTransportHari, rate: t.transportRate || 0, total: t.totalTransportHari * (t.transportRate || 0) },
       { nama: 'Transport Acara', qty: t.totalTransportAcara, rate: t.transportRate || 0, total: t.totalTransportAcara * (t.transportRate || 0) },
       { nama: 'Wiyathabakti', qty: 1, rate: t.wiyathabakti, total: t.wiyathabakti },
+      ...(t.extraCompensationItems || []).map((item) => ({
+        nama: item.label,
+        qty: item.qty,
+        rate: item.rate,
+        total: item.total
+      })),
       { nama: 'Tugas Tambahan', qty: 1, rate: t.honorTugas, total: t.honorTugas }
     ],
     gajiBersih: t.totalBisyaroh

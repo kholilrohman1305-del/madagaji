@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
-import { Wallet, Calendar, Plus, Save, Trash2, X, Edit3 } from 'lucide-react';
+import { Wallet, Calendar, Plus, Save, Trash2, X, Edit3, Printer } from 'lucide-react';
 import { showConfirm } from '../utils/confirm';
 import { toast } from '../utils/toast';
 
@@ -142,6 +142,71 @@ export default function PengeluaranLain() {
     load();
   };
 
+  const printExpenses = (mode = 'all') => {
+    const printItems = mode === 'selected'
+      ? items.filter(it => selectedIds.has(it.id))
+      : items;
+    const printData = printItems.map((it) => ({
+      id: it.id,
+      tanggal: String(it.tanggal || '').slice(0, 10),
+      kategori: it.kategori || '-',
+      jumlah: it.jumlah ?? 1,
+      nominal: Number(it.nominal) || 0,
+      total: ((Number(it.jumlah) || 0) * (Number(it.nominal) || 0))
+    }));
+
+    const style = document.createElement('style');
+    style.setAttribute('id', 'expense-print-style');
+    style.textContent = `
+      @media print {
+        body * { visibility: hidden; }
+        .expense-print-root, .expense-print-root * { visibility: visible; }
+        .expense-print-root { position: absolute; left: 0; top: 0; width: 100%; }
+        .no-print { display: none !important; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    const container = document.getElementById('expense-print-root');
+    if (container) {
+      container.innerHTML = `
+        <div style="font-family: Arial, sans-serif; padding: 24px; color: #111827;">
+          <h2 style="margin: 0 0 8px 0;">Bukti Pengeluaran Lain</h2>
+          <p style="margin: 0 0 16px 0; color: #6b7280;">${mode === 'selected' ? 'Data terpilih' : 'Data keseluruhan'}</p>
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead>
+              <tr>
+                <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">Tanggal</th>
+                <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">Kategori</th>
+                <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Jumlah</th>
+                <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Nominal</th>
+                <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${printData.map(item => `
+                <tr>
+                  <td style="border: 1px solid #d1d5db; padding: 8px;">${item.tanggal}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 8px;">${item.kategori}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">${item.jumlah}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.nominal)}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right; font-weight: 700;">${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.total)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div style="margin-top: 16px; text-align: right; font-weight: 700;">Total: ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(printData.reduce((sum, item) => sum + item.total, 0))}</div>
+        </div>
+      `;
+    }
+
+    window.setTimeout(() => window.print(), 80);
+    window.setTimeout(() => {
+      document.getElementById('expense-print-style')?.remove();
+      if (container) container.innerHTML = '';
+    }, 1200);
+  };
+
   return (
     <div>
       <div className="modern-table-card">
@@ -161,6 +226,12 @@ export default function PengeluaranLain() {
           </button>
           <button className="secondary" onClick={() => setShowModal(true)}>
             <Plus size={18} /> Tambah Pengeluaran
+          </button>
+          <button className="outline" onClick={() => printExpenses('selected')} disabled={selectedIds.size === 0}>
+            <Printer size={18} /> Cetak Terpilih
+          </button>
+          <button className="outline" onClick={() => printExpenses('all')}>
+            <Printer size={18} /> Cetak Semua
           </button>
         </div>
 
@@ -219,6 +290,8 @@ export default function PengeluaranLain() {
         </table>
         {items.length === 0 && <div className="empty">Belum ada data.</div>}
       </div>
+
+      <div id="expense-print-root" className="expense-print-root" style={{ display: 'none' }} />
 
       {showModal && (
         <div className="modal-backdrop">

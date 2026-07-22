@@ -205,6 +205,7 @@ export default function RekapBisyaroh() {
                 <th>Tugas 1</th>
                 <th>Tugas 2</th>
                 <th>Tugas 3</th>
+                <th>Kompensasi Tambahan</th>
                 <th style={{ background: 'var(--success-100)' }}>Jumlah Diterima</th>
               </tr>
             </thead>
@@ -254,6 +255,7 @@ export default function RekapBisyaroh() {
                   <td>{it.tugasTambahan1 || '-'}</td>
                   <td>{it.tugasTambahan2 || '-'}</td>
                   <td>{it.tugasTambahan3 || '-'}</td>
+                  <td>{formatRupiah(it.extraCompensationTotal || 0)}</td>
                   <td style={{ fontWeight: 700, color: 'var(--success-600)' }}>{formatRupiah(it.totalBisyaroh)}</td>
                 </tr>
               ))}

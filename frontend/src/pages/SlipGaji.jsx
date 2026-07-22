@@ -60,18 +60,9 @@ export default function SlipGaji() {
     }).format(Number.isNaN(num) ? 0 : num);
   };
 
-  const getItem = (items, name) => items.find(i => i.nama === name);
-
   const SlipCard = ({ slip }) => {
-    const items = slip.pendapatan || [];
-    const honorHadir = getItem(items, 'Honor Hadir')?.total || 0;
-    const honorIzin = getItem(items, 'Honor Izin')?.total || 0;
-    const honorTidakHadir = getItem(items, 'Honor Tidak Hadir')?.total || 0;
-    const bisyarohMengajar = honorHadir + honorIzin + honorTidakHadir;
-    const transportHarian = getItem(items, 'Transport Harian')?.total || 0;
-    const transportAcara = getItem(items, 'Transport Acara')?.total || 0;
-    const wiyathabakti = getItem(items, 'Wiyathabakti')?.total || 0;
-    const tugasTambahan = getItem(items, 'Tugas Tambahan')?.total || 0;
+    const items = (slip.pendapatan || []).filter(item => item && item.nama);
+    const totalIncome = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
 
     const parseTask = (raw) => {
       if (!raw) return { name: '-', nominal: null };
@@ -103,26 +94,18 @@ export default function SlipGaji() {
           <thead>
             <tr>
               <th>Jenis Bisyaroh</th>
-              <th>Bisyaroh</th>
-              <th>Jumlah</th>
+              <th>Nominal</th>
+              <th>Qty</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>Bisyaroh Mengajar</td>
-              <td>{formatRupiah(bisyarohMengajar)}</td>
-              <td>{formatRupiah(bisyarohMengajar)}</td>
-            </tr>
-            <tr>
-              <td>Transport</td>
-              <td>{formatRupiah(transportHarian)}</td>
-              <td>{formatRupiah(transportHarian)}</td>
-            </tr>
-            <tr>
-              <td>Transport Kegiatan</td>
-              <td>{formatRupiah(transportAcara)}</td>
-              <td>{formatRupiah(transportAcara)}</td>
-            </tr>
+            {items.map((item) => (
+              <tr key={item.nama}>
+                <td>{item.nama}</td>
+                <td>{formatRupiah(item.total || 0)}</td>
+                <td>{item.qty ? String(item.qty) : '-'}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
         <div className="slip-section">Tugas Tambahan</div>
@@ -140,15 +123,11 @@ export default function SlipGaji() {
               <td>3. {task3.name}</td>
               <td style={{ textAlign: 'right' }}>{task3.nominal !== null ? formatRupiah(task3.nominal) : '-'}</td>
             </tr>
-            <tr>
-              <td>Wiyathabakti</td>
-              <td style={{ textAlign: 'right' }}>{formatRupiah(wiyathabakti)}</td>
-            </tr>
           </tbody>
         </table>
         <div className="slip-total">
           <span>Jumlah</span>
-          <span>{formatRupiah(slip.gajiBersih)}</span>
+          <span>{formatRupiah(totalIncome || slip.gajiBersih)}</span>
         </div>
         <div className="slip-footer">Manfaati, Bersinergi, Barokahi</div>
       </div>
