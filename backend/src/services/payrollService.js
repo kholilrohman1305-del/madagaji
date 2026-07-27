@@ -417,6 +417,12 @@ async function ensureExtracurricularMonthRows(periode) {
   const sourceKeys = new Set(currentRows
     .filter((row) => Number(row.source_synced) === 1)
     .map((row) => `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`));
+  const sourceRowsByKey = new Map(currentRows
+    .filter((row) => Number(row.source_synced) === 1)
+    .map((row) => [
+      `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`,
+      row
+    ]));
   const visibleSourceKeys = new Set(currentRows
     .filter((row) => Number(row.source_synced) === 1)
     .map((row) => `${row.source_extra_id}|${row.teacher_type}|${String(row.teacher_name || '').trim().toLowerCase()}`));
@@ -452,7 +458,23 @@ async function ensureExtracurricularMonthRows(periode) {
   for (const assignment of assignments) {
     const sourceKey = `${assignment.extraId}|${assignment.sourceTeacherId}|${assignment.teacherType}`;
     const visibleKey = `${assignment.extraId}|${assignment.teacherType}|${String(assignment.teacherName || '').trim().toLowerCase()}`;
-    if (sourceKeys.has(sourceKey) || visibleSourceKeys.has(visibleKey)) continue;
+    const existingSourceRow = sourceRowsByKey.get(sourceKey);
+    if (existingSourceRow) {
+      if (
+        String(existingSourceRow.teacher_name || '').trim() !== String(assignment.teacherName || '').trim()
+        || String(existingSourceRow.nama_ekstra || '').trim() !== String(assignment.extraName || '').trim()
+        || Number(existingSourceRow.teacher_id) !== Number(assignment.teacherId)
+      ) {
+        await pool.query(
+          `UPDATE pengeluaran_ekstrakurikuler
+           SET teacher_id = ?, teacher_name = ?, nama_ekstra = ?
+           WHERE id = ?`,
+          [assignment.teacherId, assignment.teacherName, assignment.extraName, existingSourceRow.id]
+        );
+      }
+      continue;
+    }
+    if (visibleSourceKeys.has(visibleKey)) continue;
     await pool.query(`
       INSERT INTO pengeluaran_ekstrakurikuler
         (tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal,
@@ -465,6 +487,14 @@ async function ensureExtracurricularMonthRows(periode) {
       assignment.extraId, assignment.sourceTeacherId, assignment.teacherType
     ]);
     sourceKeys.add(sourceKey);
+    sourceRowsByKey.set(sourceKey, {
+      source_extra_id: assignment.extraId,
+      source_extra_teacher_id: assignment.sourceTeacherId,
+      teacher_type: assignment.teacherType,
+      teacher_id: assignment.teacherId,
+      teacher_name: assignment.teacherName,
+      nama_ekstra: assignment.extraName
+    });
     visibleSourceKeys.add(visibleKey);
   }
   await consolidateExtracurricularRows(monthStart, monthStart);

@@ -115,6 +115,21 @@ async function getRates(conn = pool) {
   };
 }
 
+async function resolveCanonicalTeacherName(teacherType, sourceTeacherId, incomingName) {
+  const id = Number(sourceTeacherId);
+  if (!id) return incomingName;
+  const table = teacherType === TYPE_PENDAMPING ? 'teachers' : 'extra_teachers';
+  try {
+    const [rows] = await masterPool.query(
+      `SELECT name FROM ${table} WHERE id = ? LIMIT 1`,
+      [id]
+    );
+    return String(rows[0]?.name || '').trim() || incomingName;
+  } catch {
+    return incomingName;
+  }
+}
+
 async function recalculateMonth(conn, event) {
   if (!event?.event_date || !event?.extracurricular_id || !event?.teacher_type) return;
   const start = monthStart(event.event_date);
@@ -233,7 +248,12 @@ async function syncJournal(payload) {
     const incomingTypes = [];
     for (const rawTeacher of rawTeachers) {
       const teacherType = normalizeType(rawTeacher.teacher_type);
-      const teacherName = String(rawTeacher.teacher_name || '').trim();
+      const incomingTeacherName = String(rawTeacher.teacher_name || '').trim();
+      const teacherName = await resolveCanonicalTeacherName(
+        teacherType,
+        rawTeacher.source_teacher_id,
+        incomingTeacherName
+      );
       if (!teacherName) throw new Error('Nama pengajar ekstrakurikuler tidak lengkap.');
       incomingTypes.push(teacherType);
       const before = beforeRows.find((row) => row.teacher_type === teacherType);
