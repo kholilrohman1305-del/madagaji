@@ -109,6 +109,14 @@ router.get('/extracurricular/sheet', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get('/extracurricular/rates', async (req, res, next) => {
+  try { res.json(await payroll.getExtracurricularRates()); } catch (e) { next(e); }
+});
+
+router.put('/extracurricular/rates', async (req, res, next) => {
+  try { res.json(await payroll.saveExtracurricularRates(req.body || {})); } catch (e) { next(e); }
+});
+
 router.post('/extracurricular', async (req, res, next) => {
   try { res.json(await payroll.addExtracurricularExpense(req.body)); } catch (e) { next(e); }
 });

@@ -2,6 +2,7 @@ const pool = require('../db');
 const masterPool = pool.master;
 const { monthKey } = require('../utils/date');
 const { TTLCache } = require('../utils/cache');
+const extracurricularJournals = require('./extracurricularJournalService');
 
 const configCache = new TTLCache(30000);
 let expenseIdModeCache = null; // 'auto' | 'string'
@@ -248,6 +249,7 @@ async function deleteOtherExpense(id) {
 let extracurricularTableEnsured = false;
 async function ensureExtracurricularTable() {
   if (extracurricularTableEnsured) return;
+  await extracurricularJournals.ensureTables();
   await pool.query(
     `CREATE TABLE IF NOT EXISTS pengeluaran_ekstrakurikuler (
       id BIGINT NOT NULL AUTO_INCREMENT,
@@ -270,6 +272,7 @@ async function ensureExtracurricularTable() {
   for (const definition of [
     'ADD COLUMN source_extra_id BIGINT NULL',
     'ADD COLUMN source_extra_teacher_id BIGINT NULL',
+    'ADD COLUMN teacher_type VARCHAR(30) NULL',
     'ADD COLUMN source_synced TINYINT(1) NOT NULL DEFAULT 0'
   ]) {
     try {
@@ -398,7 +401,8 @@ async function ensureExtracurricularMonthRows(periode) {
   await ensureExtracurricularTable();
   const monthStart = `${periode}-01`;
   const [currentRows] = await pool.query(
-    `SELECT id, teacher_id, teacher_name, nama_ekstra
+    `SELECT id, teacher_id, teacher_name, nama_ekstra, source_extra_id,
+            source_extra_teacher_id, teacher_type, source_synced
      FROM pengeluaran_ekstrakurikuler
      WHERE tanggal BETWEEN ? AND LAST_DAY(?)`,
     [monthStart, monthStart]
@@ -408,6 +412,55 @@ async function ensureExtracurricularMonthRows(periode) {
       `${r.teacher_id}|${String(r.teacher_name || '').trim().toLowerCase()}|${String(r.nama_ekstra || '').trim().toLowerCase()}`
     )
   );
+
+  const sourceKeys = new Set(currentRows
+    .filter((row) => Number(row.source_synced) === 1)
+    .map((row) => `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`));
+  const [masterAssignments] = await masterPool.query(`
+    SELECT e.id AS extracurricular_id, e.name AS extracurricular_name,
+           e.pembina_teacher_id, t.name AS pendamping_name,
+           e.pembina_extra_teacher_id, et.name AS extra_teacher_name
+    FROM extracurriculars e
+    LEFT JOIN teachers t ON t.id = e.pembina_teacher_id AND t.is_active = 1
+    LEFT JOIN extra_teachers et ON et.id = e.pembina_extra_teacher_id AND et.is_active = 1
+    WHERE e.is_active = 1
+    ORDER BY e.name
+  `).catch(() => [[]]);
+  const rates = await extracurricularJournals.getRates();
+  const assignments = masterAssignments.flatMap((row) => [
+    row.pembina_teacher_id && row.pendamping_name ? {
+      extraId: Number(row.extracurricular_id),
+      extraName: row.extracurricular_name,
+      sourceTeacherId: Number(row.pembina_teacher_id),
+      teacherId: Number(row.pembina_teacher_id),
+      teacherName: row.pendamping_name,
+      teacherType: extracurricularJournals.TYPE_PENDAMPING
+    } : null,
+    row.pembina_extra_teacher_id && row.extra_teacher_name ? {
+      extraId: Number(row.extracurricular_id),
+      extraName: row.extracurricular_name,
+      sourceTeacherId: Number(row.pembina_extra_teacher_id),
+      teacherId: -(1000000000 + Number(row.pembina_extra_teacher_id)),
+      teacherName: row.extra_teacher_name,
+      teacherType: extracurricularJournals.TYPE_GURU_EKSTRA
+    } : null
+  ].filter(Boolean));
+  for (const assignment of assignments) {
+    const sourceKey = `${assignment.extraId}|${assignment.sourceTeacherId}|${assignment.teacherType}`;
+    if (sourceKeys.has(sourceKey)) continue;
+    await pool.query(`
+      INSERT INTO pengeluaran_ekstrakurikuler
+        (tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal,
+         keterangan, source_extra_id, source_extra_teacher_id, teacher_type, source_synced)
+      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 1)
+    `, [
+      monthStart, assignment.teacherId, assignment.teacherName, assignment.extraName,
+      Number(rates[assignment.teacherType] || 0),
+      'Penugasan otomatis dari MyMada; kehadiran dihitung dari jurnal eMada',
+      assignment.extraId, assignment.sourceTeacherId, assignment.teacherType
+    ]);
+    sourceKeys.add(sourceKey);
+  }
 
   const [latestMonthRows] = await pool.query(
     `SELECT DATE_FORMAT(MAX(tanggal), '%Y-%m') AS ym
@@ -474,7 +527,8 @@ async function ensureExtracurricularMonthRows(periode) {
 async function getExtracurricularExpenses(startDate, endDate) {
   await ensureExtracurricularTable();
   const [rows] = await pool.query(
-    `SELECT id, tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan, expense_id, source_synced
+    `SELECT id, tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan,
+            expense_id, source_synced, teacher_type
      FROM pengeluaran_ekstrakurikuler
      WHERE tanggal BETWEEN ? AND ?
      ORDER BY tanggal DESC, id DESC`,
@@ -491,7 +545,8 @@ async function getExtracurricularExpenses(startDate, endDate) {
     jumlahDiterima: (parseInt(r.jumlah_hadir, 10) || 0) * (Number(r.nominal) || 0),
     keterangan: r.keterangan || '',
     expenseId: r.expense_id || null,
-    sourceSynced: Number(r.source_synced) === 1
+    sourceSynced: Number(r.source_synced) === 1,
+    teacherType: r.teacher_type || null
   }));
 }
 
@@ -500,7 +555,8 @@ async function getExtracurricularMonthSheet(periode) {
   await ensureExtracurricularMonthRows(periode);
   const startDate = `${periode}-01`;
   const [rows] = await pool.query(
-    `SELECT id, tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan, expense_id, source_synced
+    `SELECT id, tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan,
+            expense_id, source_synced, teacher_type
      FROM pengeluaran_ekstrakurikuler
      WHERE tanggal BETWEEN ? AND LAST_DAY(?)
      ORDER BY teacher_name ASC, nama_ekstra ASC, id ASC`,
@@ -517,7 +573,8 @@ async function getExtracurricularMonthSheet(periode) {
     jumlahDiterima: (parseInt(r.jumlah_hadir, 10) || 0) * (Number(r.nominal) || 0),
     keterangan: r.keterangan || '',
     expenseId: r.expense_id || null,
-    sourceSynced: Number(r.source_synced) === 1
+    sourceSynced: Number(r.source_synced) === 1,
+    teacherType: r.teacher_type || null
   }));
 }
 
@@ -543,10 +600,7 @@ async function saveExtracurricularBulk(periode, items) {
       const jumlahHadir = parseInt(row.jumlahHadir, 10) || 0;
       const nominal = Number(row.nominal) || 0;
       if (Number(current.source_synced) === 1) {
-        await conn.query(
-          'UPDATE pengeluaran_ekstrakurikuler SET nominal=? WHERE id=?',
-          [nominal, row.id]
-        );
+        continue;
       } else {
         await conn.query(
           'UPDATE pengeluaran_ekstrakurikuler SET jumlah_hadir=?, nominal=? WHERE id=?',
@@ -559,6 +613,52 @@ async function saveExtracurricularBulk(periode, items) {
   } catch (e) {
     await conn.rollback();
     throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+async function getExtracurricularRates() {
+  await ensureExtracurricularTable();
+  const rates = await extracurricularJournals.getRates();
+  return {
+    pendamping: Number(rates[extracurricularJournals.TYPE_PENDAMPING] || 0),
+    guruEkstra: Number(rates[extracurricularJournals.TYPE_GURU_EKSTRA] || 0)
+  };
+}
+
+async function saveExtracurricularRates(data) {
+  await ensureExtracurricularTable();
+  const pendamping = Math.max(0, Number(data?.pendamping) || 0);
+  const guruEkstra = Math.max(0, Number(data?.guruEkstra) || 0);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const [key, value] of [
+      ['RATE_EXTRA_PENDAMPING', pendamping],
+      ['RATE_EXTRA_GURU', guruEkstra]
+    ]) {
+      await conn.query(`
+        INSERT INTO konfigurasi (config_key, config_value) VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)
+      `, [key, value]);
+    }
+    await conn.query(`
+      UPDATE pengeluaran_ekstrakurikuler
+      SET nominal = CASE
+        WHEN teacher_type = ? THEN ?
+        WHEN teacher_type = ? THEN ?
+        ELSE nominal END
+      WHERE source_synced = 1 AND jumlah_hadir = 0
+    `, [
+      extracurricularJournals.TYPE_PENDAMPING, pendamping,
+      extracurricularJournals.TYPE_GURU_EKSTRA, guruEkstra
+    ]);
+    await conn.commit();
+    return { success: true, message: 'Tarif global honor ekstrakurikuler berhasil disimpan.' };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
   } finally {
     conn.release();
   }
@@ -1539,6 +1639,8 @@ module.exports = {
   getExtracurricularMasterOptions,
   getExtracurricularExpenses,
   getExtracurricularMonthSheet,
+  getExtracurricularRates,
+  saveExtracurricularRates,
   getDisciplineMonthSheet,
   getActivities,
   addActivity,
