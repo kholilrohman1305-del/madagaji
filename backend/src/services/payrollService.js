@@ -273,6 +273,7 @@ async function ensureExtracurricularTable() {
     'ADD COLUMN source_extra_id BIGINT NULL',
     'ADD COLUMN source_extra_teacher_id BIGINT NULL',
     'ADD COLUMN teacher_type VARCHAR(30) NULL',
+    'ADD COLUMN attendance_manual TINYINT(1) NOT NULL DEFAULT 0',
     'ADD COLUMN source_synced TINYINT(1) NOT NULL DEFAULT 0'
   ]) {
     try {
@@ -528,7 +529,7 @@ async function getExtracurricularExpenses(startDate, endDate) {
   await ensureExtracurricularTable();
   const [rows] = await pool.query(
     `SELECT id, tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan,
-            expense_id, source_synced, teacher_type
+            expense_id, source_synced, teacher_type, attendance_manual
      FROM pengeluaran_ekstrakurikuler
      WHERE tanggal BETWEEN ? AND ?
      ORDER BY tanggal DESC, id DESC`,
@@ -546,7 +547,8 @@ async function getExtracurricularExpenses(startDate, endDate) {
     keterangan: r.keterangan || '',
     expenseId: r.expense_id || null,
     sourceSynced: Number(r.source_synced) === 1,
-    teacherType: r.teacher_type || null
+    teacherType: r.teacher_type || null,
+    attendanceManual: Number(r.attendance_manual) === 1
   }));
 }
 
@@ -556,7 +558,7 @@ async function getExtracurricularMonthSheet(periode) {
   const startDate = `${periode}-01`;
   const [rows] = await pool.query(
     `SELECT id, tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan,
-            expense_id, source_synced, teacher_type
+            expense_id, source_synced, teacher_type, attendance_manual
      FROM pengeluaran_ekstrakurikuler
      WHERE tanggal BETWEEN ? AND LAST_DAY(?)
      ORDER BY teacher_name ASC, nama_ekstra ASC, id ASC`,
@@ -574,7 +576,8 @@ async function getExtracurricularMonthSheet(periode) {
     keterangan: r.keterangan || '',
     expenseId: r.expense_id || null,
     sourceSynced: Number(r.source_synced) === 1,
-    teacherType: r.teacher_type || null
+    teacherType: r.teacher_type || null,
+    attendanceManual: Number(r.attendance_manual) === 1
   }));
 }
 
@@ -600,7 +603,10 @@ async function saveExtracurricularBulk(periode, items) {
       const jumlahHadir = parseInt(row.jumlahHadir, 10) || 0;
       const nominal = Number(row.nominal) || 0;
       if (Number(current.source_synced) === 1) {
-        continue;
+        await conn.query(
+          'UPDATE pengeluaran_ekstrakurikuler SET jumlah_hadir=?, attendance_manual=1 WHERE id=?',
+          [jumlahHadir, row.id]
+        );
       } else {
         await conn.query(
           'UPDATE pengeluaran_ekstrakurikuler SET jumlah_hadir=?, nominal=? WHERE id=?',
@@ -649,7 +655,7 @@ async function saveExtracurricularRates(data) {
         WHEN teacher_type = ? THEN ?
         WHEN teacher_type = ? THEN ?
         ELSE nominal END
-      WHERE source_synced = 1 AND jumlah_hadir = 0
+      WHERE source_synced = 1 AND (jumlah_hadir = 0 OR attendance_manual = 1)
     `, [
       extracurricularJournals.TYPE_PENDAMPING, pendamping,
       extracurricularJournals.TYPE_GURU_EKSTRA, guruEkstra
@@ -1296,7 +1302,7 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     jumlah: exp.jumlahHadir || 0,
     nominal: exp.nominal || 0,
     totalNominal: exp.jumlahDiterima || ((exp.jumlahHadir || 0) * (exp.nominal || 0)),
-    totalBisyaroh: -Math.abs(exp.jumlahDiterima || exp.nominal || 0),
+    totalBisyaroh: -Math.abs(Number(exp.jumlahDiterima || 0)),
     isExpense: true,
     expenseType: 'extracurricular',
     tanggal: exp.tanggal

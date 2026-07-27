@@ -14,6 +14,9 @@ export default function Ekstrakurikuler() {
   const [rates, setRates] = useState({ pendamping: 0, guruEkstra: 0 });
   const [loading, setLoading] = useState(true);
   const [savingRates, setSavingRates] = useState(false);
+  const [search, setSearch] = useState('');
+  const [attendanceDrafts, setAttendanceDrafts] = useState({});
+  const [savingAttendance, setSavingAttendance] = useState({});
 
   const rupiah = useMemo(() => new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -28,7 +31,9 @@ export default function Ekstrakurikuler() {
         api.get('/payroll/extracurricular/sheet', { params: { periode: targetPeriode } }),
         api.get('/payroll/extracurricular/rates')
       ]);
-      setItems(sheetResponse.data || []);
+      const rows = sheetResponse.data || [];
+      setItems(rows);
+      setAttendanceDrafts(Object.fromEntries(rows.map((item) => [item.id, item.jumlahHadir ?? 0])));
       setRates({
         pendamping: Number(ratesResponse.data?.pendamping || 0),
         guruEkstra: Number(ratesResponse.data?.guruEkstra || 0)
@@ -51,6 +56,35 @@ export default function Ekstrakurikuler() {
       setSavingRates(false);
     }
   }
+
+  async function saveAttendance(item) {
+    const jumlahHadir = Math.max(0, Number(attendanceDrafts[item.id]) || 0);
+    setSavingAttendance((previous) => ({ ...previous, [item.id]: true }));
+    try {
+      await api.put('/payroll/extracurricular/sheet', {
+        periode,
+        items: [{ id: item.id, jumlahHadir, nominal: item.nominal }]
+      });
+      setItems((previous) => previous.map((row) => (
+        row.id === item.id
+          ? { ...row, jumlahHadir, jumlahDiterima: jumlahHadir * Number(row.nominal || 0), attendanceManual: true }
+          : row
+      )));
+    } finally {
+      setSavingAttendance((previous) => ({ ...previous, [item.id]: false }));
+    }
+  }
+
+  const visibleItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return [...items]
+      .filter((item) => !query || [item.namaEkstra, item.teacherName, TYPE_LABELS[item.teacherType]]
+        .some((value) => String(value || '').toLowerCase().includes(query)))
+      .sort((a, b) => (
+        String(a.namaEkstra || '').localeCompare(String(b.namaEkstra || ''), 'id', { numeric: true })
+        || String(a.teacherName || '').localeCompare(String(b.teacherName || ''), 'id')
+      ));
+  }, [items, search]);
 
   return (
     <div>
@@ -91,6 +125,13 @@ export default function Ekstrakurikuler() {
 
         <div className="toolbar">
           <input type="month" value={periode} onChange={(event) => setPeriode(event.target.value)} />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Cari ekstra, guru, atau jenis…"
+            style={{ minWidth: 250 }}
+          />
           <button className="outline" type="button" onClick={() => load(periode)} disabled={loading}>Muat Ulang</button>
           <button className="outline no-print" type="button" onClick={() => window.print()}>Cetak</button>
           <span style={{ color: 'var(--muted)', fontSize: 13 }}>
@@ -106,36 +147,52 @@ export default function Ekstrakurikuler() {
               <thead>
                 <tr>
                   <th className="print-only center">No.</th>
+                  <th>Nama Ekstra</th>
                   <th>Nama Guru</th>
                   <th>Jenis</th>
-                  <th>Nama Ekstra</th>
                   <th>Jumlah Hadir</th>
-                  <th>Tarif / Hadir</th>
+                  <th>Tarif</th>
                   <th>Jumlah Diterima</th>
                   <th className="print-only center print-ttd">TTD</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, index) => (
+                {visibleItems.map((item, index) => (
                   <tr key={item.id}>
                     <td className="print-only center">{index + 1}</td>
+                    <td style={{ fontWeight: 800 }}>{item.namaEkstra}</td>
                     <td style={{ fontWeight: 700 }}>{item.teacherName}</td>
                     <td>
                       <span style={{ padding: '3px 9px', borderRadius: 999, background: item.teacherType === 'guru_ekstra' ? '#ede9fe' : '#dbeafe', color: item.teacherType === 'guru_ekstra' ? '#6d28d9' : '#1d4ed8', fontSize: 11, fontWeight: 800 }}>
                         {TYPE_LABELS[item.teacherType] || 'Manual'}
                       </span>
                     </td>
-                    <td>{item.namaEkstra}</td>
-                    <td><strong>{item.jumlahHadir}</strong> pertemuan</td>
+                    <td>
+                      <input
+                        type="number"
+                        min="0"
+                        value={attendanceDrafts[item.id] ?? item.jumlahHadir ?? 0}
+                        onChange={(event) => setAttendanceDrafts((previous) => ({ ...previous, [item.id]: event.target.value }))}
+                        onBlur={() => saveAttendance(item)}
+                        disabled={savingAttendance[item.id]}
+                        title="Jumlah dari eMada dapat dikoreksi manual"
+                        style={{ width: 92 }}
+                      />
+                      <small style={{ display: 'block', marginTop: 3, color: item.attendanceManual ? '#b45309' : 'var(--muted)' }}>
+                        {item.attendanceManual ? 'Manual' : 'Otomatis eMada'}
+                      </small>
+                    </td>
                     <td>{rupiah.format(item.nominal)}</td>
-                    <td style={{ fontWeight: 800 }}>{rupiah.format(item.jumlahDiterima)}</td>
+                    <td style={{ fontWeight: 800 }}>
+                      {rupiah.format((Number(attendanceDrafts[item.id]) || 0) * Number(item.nominal || 0))}
+                    </td>
                     <td className="print-only"></td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {items.length === 0 && (
-              <div className="empty">Belum ada penugasan pengajar ekstrakurikuler aktif di MyMada.</div>
+            {visibleItems.length === 0 && (
+              <div className="empty">{search ? 'Data yang dicari tidak ditemukan.' : 'Belum ada penugasan pengajar ekstrakurikuler aktif di MyMada.'}</div>
             )}
           </>
         )}

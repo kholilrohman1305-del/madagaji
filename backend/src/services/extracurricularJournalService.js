@@ -65,6 +65,7 @@ async function ensureTables() {
       source_extra_id BIGINT NULL,
       source_extra_teacher_id BIGINT NULL,
       teacher_type VARCHAR(30) NULL,
+      attendance_manual TINYINT(1) NOT NULL DEFAULT 0,
       source_synced TINYINT(1) NOT NULL DEFAULT 0,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -73,6 +74,7 @@ async function ensureTables() {
   await addColumn('pengeluaran_ekstrakurikuler', 'ADD COLUMN source_extra_id BIGINT NULL');
   await addColumn('pengeluaran_ekstrakurikuler', 'ADD COLUMN source_extra_teacher_id BIGINT NULL');
   await addColumn('pengeluaran_ekstrakurikuler', 'ADD COLUMN teacher_type VARCHAR(30) NULL');
+  await addColumn('pengeluaran_ekstrakurikuler', 'ADD COLUMN attendance_manual TINYINT(1) NOT NULL DEFAULT 0');
   await addColumn('pengeluaran_ekstrakurikuler', 'ADD COLUMN source_synced TINYINT(1) NOT NULL DEFAULT 0');
   try { await pool.query('ALTER TABLE pengeluaran_ekstrakurikuler DROP INDEX uq_extra_synced_month'); } catch (_) {}
   try {
@@ -131,7 +133,7 @@ async function recalculateMonth(conn, event) {
   const totalHonor = Number(totals.total_honor || 0);
 
   const [existingRows] = await conn.query(`
-    SELECT id FROM pengeluaran_ekstrakurikuler
+    SELECT id, attendance_manual FROM pengeluaran_ekstrakurikuler
     WHERE tanggal = ? AND source_extra_id = ?
       AND COALESCE(source_extra_teacher_id, 0) = ?
       AND teacher_type = ? AND source_synced = 1
@@ -139,11 +141,19 @@ async function recalculateMonth(conn, event) {
   `, [start, event.extracurricular_id, sourceTeacherId, teacherType]);
   const nominal = total > 0 ? totalHonor / total : Number((await getRates(conn))[teacherType] || 0);
   if (existingRows[0]) {
-    await conn.query(`
-      UPDATE pengeluaran_ekstrakurikuler
-      SET teacher_name = ?, nama_ekstra = ?, jumlah_hadir = ?, nominal = ?
-      WHERE id = ?
-    `, [event.teacher_name, event.extracurricular_name, total, nominal, existingRows[0].id]);
+    if (Number(existingRows[0].attendance_manual) === 1) {
+      await conn.query(`
+        UPDATE pengeluaran_ekstrakurikuler
+        SET teacher_name = ?, nama_ekstra = ?
+        WHERE id = ?
+      `, [event.teacher_name, event.extracurricular_name, existingRows[0].id]);
+    } else {
+      await conn.query(`
+        UPDATE pengeluaran_ekstrakurikuler
+        SET teacher_name = ?, nama_ekstra = ?, jumlah_hadir = ?, nominal = ?
+        WHERE id = ?
+      `, [event.teacher_name, event.extracurricular_name, total, nominal, existingRows[0].id]);
+    }
     return;
   }
   await conn.query(`

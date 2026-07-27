@@ -40,7 +40,7 @@ export default function RekapBisyaroh() {
         api.get('/payroll/summary', { params: { startDate, endDate } }),
         api.get('/payroll/activities', { params: { startDate, endDate } })
       ]);
-      setItems(summaryRes.data || []);
+      setItems((summaryRes.data || []).filter((item) => !item.isExpense));
       setActivities(activityRes.data || []);
     } finally {
       setLoading(false);
