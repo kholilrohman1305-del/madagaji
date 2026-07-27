@@ -4,6 +4,7 @@ const payroll = require('../services/payrollService');
 const attendance = require('../services/attendanceService');
 const pool = require('../db');
 const { formatDateToYMD } = require('../utils/date');
+const extracurricularJournals = require('../services/extracurricularJournalService');
 
 const router = express.Router();
 
@@ -228,6 +229,12 @@ router.post('/journal-sync', async (req, res, next) => {
     }
     next(e);
   }
+});
+
+router.post('/extracurricular-journal-sync', async (req, res, next) => {
+  try {
+    res.json(await extracurricularJournals.syncJournal(req.body || {}));
+  } catch (e) { next(e); }
 });
 
 // GET /api/external/schedule-guru?nama={nama}&hari={hari}

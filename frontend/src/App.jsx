@@ -37,6 +37,7 @@ import SebaranMapel from './pages/SebaranMapel.jsx';
 import DetailGuru from './pages/DetailGuru.jsx';
 import DetailMapel from './pages/DetailMapel.jsx';
 import LandingHub from './pages/LandingHub.jsx';
+import JadwalEkstrakurikuler from './pages/JadwalEkstrakurikuler.jsx';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -77,6 +78,7 @@ export default function App() {
                     <Route path="/" element={<Navigate to="/dasbor" replace />} />
                     <Route path="/dasbor" element={<Dashboard />} />
                     <Route path="/kehadiran" element={<Kehadiran />} />
+                    <Route path="/jadwal-ekstrakurikuler" element={<RoleRoute roles={['admin']}><JadwalEkstrakurikuler /></RoleRoute>} />
                     <Route path="/penjadwalan" element={<RoleRoute roles={['admin']}><Penjadwalan /></RoleRoute>} />
                     <Route path="/statistik-guru" element={<RoleRoute roles={['admin']}><StatistikGuru /></RoleRoute>} />
                     <Route path="/rekap-bisyaroh" element={<RoleRoute roles={['admin']}><RekapBisyaroh /></RoleRoute>} />

@@ -163,7 +163,7 @@ export default function Ekstrakurikuler() {
   return (
     <div>
       <div className="modern-table-card">
-        <div className="modern-table-title"><Wallet size={24} /> Ekstrakurikuler</div>
+        <div className="modern-table-title"><Wallet size={24} /> Honor Ekstrakurikuler</div>
         <div className="toolbar">
           <input type="month" value={periode} onChange={(e) => setPeriode(e.target.value)} />
           <button className="outline" onClick={applyPeriode}>Terapkan</button>
@@ -171,7 +171,7 @@ export default function Ekstrakurikuler() {
           <input
             type="number"
             min="0"
-            placeholder="Hadir semua"
+            placeholder="Pertemuan manual"
             value={bulkValues.jumlahHadir}
             onChange={(e) => setBulkValues((prev) => ({ ...prev, jumlahHadir: e.target.value }))}
             style={{ width: 140 }}
@@ -201,7 +201,7 @@ export default function Ekstrakurikuler() {
               <th className="print-only center">No.</th>
               <th>Nama Guru</th>
               <th>Nama Ekstra</th>
-              <th>Jumlah Hadir</th>
+              <th>Jumlah Pertemuan</th>
               <th>Nominal</th>
               <th>Jumlah Diterima</th>
               <th className="no-print">Aksi</th>
@@ -222,9 +222,11 @@ export default function Ekstrakurikuler() {
                       type="number"
                       min="0"
                       value={jumlahHadir}
+                      disabled={it.sourceSynced}
                       onChange={(e) => onDraftChange(it.id, 'jumlahHadir', e.target.value)}
                       style={{ width: 120 }}
                     />
+                    {it.sourceSynced && <small style={{ display: 'block', color: 'var(--muted)' }}>Otomatis dari jurnal eMada</small>}
                   </td>
                   <td>
                     <input

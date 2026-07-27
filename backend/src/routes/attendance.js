@@ -1,7 +1,14 @@
 const express = require('express');
 const attendance = require('../services/attendanceService');
+const extracurricularJournals = require('../services/extracurricularJournalService');
 
 const router = express.Router();
+
+router.get('/extracurricular-matrix', async (req, res, next) => {
+  try {
+    res.json(await extracurricularJournals.getMatrix(req.query.period));
+  } catch (e) { next(e); }
+});
 
 router.get('/schedule', async (req, res, next) => {
   try {

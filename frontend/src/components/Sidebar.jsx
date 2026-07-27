@@ -23,7 +23,8 @@ import {
   LogOut,
   PanelLeftClose,
   LayoutGrid,
-  UserCog
+  UserCog,
+  CalendarDays
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -76,6 +77,7 @@ export default function Sidebar({ hidden, onToggle }) {
       <div className="nav-section">
         <div className="nav-title">Kehadiran</div>
         <LinkItem to="/kehadiran" label="Kehadiran" icon={CalendarCheck} />
+        {user?.role === 'admin' && <LinkItem to="/jadwal-ekstrakurikuler" label="Jadwal Ekstrakurikuler" icon={CalendarDays} />}
         {user?.role === 'admin' && <LinkItem to="/penjadwalan" label="Penjadwalan" icon={CalendarClock} />}
         {user?.role === 'admin' && <LinkItem to="/auto-schedule" label="Auto Jadwal" icon={Wand2} />}
         <LinkItem to="/jadwal-guru" label="Jadwal Guru" icon={UserCheck} />
@@ -92,7 +94,7 @@ export default function Sidebar({ hidden, onToggle }) {
         {user?.role === 'admin' && <LinkItem to="/cetak-bisyaroh" label="Cetak Bisyaroh" icon={Printer} />}
         <LinkItem to="/slip-gaji" label="Slip Gaji" icon={FileText} />
         {user?.role === 'admin' && <LinkItem to="/pengeluaran-lain" label="Pengeluaran Lain" icon={Wallet} />}
-        {user?.role === 'admin' && <LinkItem to="/ekstrakurikuler" label="Ekstrakurikuler" icon={ClipboardList} />}
+        {user?.role === 'admin' && <LinkItem to="/ekstrakurikuler" label="Honor Ekstrakurikuler" icon={ClipboardList} />}
         {user?.role === 'admin' && <LinkItem to="/kedisiplinan" label="Kedisiplinan" icon={ClipboardList} />}
         {user?.role === 'admin' && <LinkItem to="/total-bisyaroh" label="Total Bisyaroh" icon={PieChart} />}
         {user?.role === 'admin' && <LinkItem to="/setting-bisyaroh" label="Setting Bisyaroh" icon={Settings} />}

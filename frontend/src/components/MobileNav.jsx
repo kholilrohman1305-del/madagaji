@@ -19,6 +19,7 @@ export default function MobileNav() {
   const allMenus = [
     { to: '/dasbor',           label: 'Dasbor',           icon: LayoutDashboard, admin: false },
     { to: '/kehadiran',        label: 'Kehadiran',        icon: CalendarCheck,   admin: false },
+    { to: '/jadwal-ekstrakurikuler', label: 'Jadwal Ekstra', icon: CalendarClock, admin: true },
     { to: '/jadwal-guru',      label: 'Jadwal Guru',      icon: UserCheck,       admin: false },
     { to: '/jadwal-kelas',     label: 'Jadwal Kelas',     icon: GraduationCap,   admin: false },
     { to: '/slip-gaji',        label: 'Slip Gaji',        icon: FileText,        admin: false },
@@ -30,7 +31,7 @@ export default function MobileNav() {
     { to: '/rekap-bisyaroh',   label: 'Rekap Bisyaroh',   icon: Receipt,         admin: true },
     { to: '/cetak-bisyaroh',   label: 'Cetak Bisyaroh',   icon: Printer,         admin: true },
     { to: '/pengeluaran-lain', label: 'Pengeluaran',      icon: Wallet,          admin: true },
-    { to: '/ekstrakurikuler',  label: 'Ekstrakurikuler',  icon: ClipboardList,   admin: true },
+    { to: '/ekstrakurikuler',  label: 'Honor Ekstra',      icon: ClipboardList,   admin: true },
     { to: '/kedisiplinan',     label: 'Kedisiplinan',     icon: ClipboardList,   admin: true },
     { to: '/total-bisyaroh',   label: 'Total Bisyaroh',   icon: PieChart,        admin: true },
     { to: '/setting-bisyaroh', label: 'Setting Bisyaroh', icon: Settings,        admin: true },
