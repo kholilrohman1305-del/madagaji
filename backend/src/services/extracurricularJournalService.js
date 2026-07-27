@@ -135,24 +135,39 @@ async function recalculateMonth(conn, event) {
   const [existingRows] = await conn.query(`
     SELECT id, attendance_manual FROM pengeluaran_ekstrakurikuler
     WHERE tanggal = ? AND source_extra_id = ?
-      AND COALESCE(source_extra_teacher_id, 0) = ?
       AND teacher_type = ? AND source_synced = 1
+      AND (
+        COALESCE(source_extra_teacher_id, 0) = ?
+        OR LOWER(TRIM(teacher_name)) = LOWER(TRIM(?))
+      )
+    ORDER BY (COALESCE(source_extra_teacher_id, 0) = ?) DESC, id ASC
     LIMIT 1
-  `, [start, event.extracurricular_id, sourceTeacherId, teacherType]);
+  `, [
+    start, event.extracurricular_id, teacherType,
+    sourceTeacherId, event.teacher_name, sourceTeacherId
+  ]);
   const nominal = total > 0 ? totalHonor / total : Number((await getRates(conn))[teacherType] || 0);
   if (existingRows[0]) {
     if (Number(existingRows[0].attendance_manual) === 1) {
       await conn.query(`
         UPDATE pengeluaran_ekstrakurikuler
-        SET teacher_name = ?, nama_ekstra = ?
+        SET teacher_id = ?, teacher_name = ?, nama_ekstra = ?, source_extra_teacher_id = ?
         WHERE id = ?
-      `, [event.teacher_name, event.extracurricular_name, existingRows[0].id]);
+      `, [
+        syntheticTeacherId(sourceTeacherId, event.extracurricular_id, teacherType),
+        event.teacher_name, event.extracurricular_name, sourceTeacherId, existingRows[0].id
+      ]);
     } else {
       await conn.query(`
         UPDATE pengeluaran_ekstrakurikuler
-        SET teacher_name = ?, nama_ekstra = ?, jumlah_hadir = ?, nominal = ?
+        SET teacher_id = ?, teacher_name = ?, nama_ekstra = ?, jumlah_hadir = ?,
+            nominal = ?, source_extra_teacher_id = ?
         WHERE id = ?
-      `, [event.teacher_name, event.extracurricular_name, total, nominal, existingRows[0].id]);
+      `, [
+        syntheticTeacherId(sourceTeacherId, event.extracurricular_id, teacherType),
+        event.teacher_name, event.extracurricular_name, total, nominal,
+        sourceTeacherId, existingRows[0].id
+      ]);
     }
     return;
   }

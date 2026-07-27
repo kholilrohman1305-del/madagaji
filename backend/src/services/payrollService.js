@@ -417,6 +417,9 @@ async function ensureExtracurricularMonthRows(periode) {
   const sourceKeys = new Set(currentRows
     .filter((row) => Number(row.source_synced) === 1)
     .map((row) => `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`));
+  const visibleSourceKeys = new Set(currentRows
+    .filter((row) => Number(row.source_synced) === 1)
+    .map((row) => `${row.source_extra_id}|${row.teacher_type}|${String(row.teacher_name || '').trim().toLowerCase()}`));
   const [masterAssignments] = await masterPool.query(`
     SELECT e.id AS extracurricular_id, e.name AS extracurricular_name,
            e.pembina_teacher_id, t.name AS pendamping_name,
@@ -448,7 +451,8 @@ async function ensureExtracurricularMonthRows(periode) {
   ].filter(Boolean));
   for (const assignment of assignments) {
     const sourceKey = `${assignment.extraId}|${assignment.sourceTeacherId}|${assignment.teacherType}`;
-    if (sourceKeys.has(sourceKey)) continue;
+    const visibleKey = `${assignment.extraId}|${assignment.teacherType}|${String(assignment.teacherName || '').trim().toLowerCase()}`;
+    if (sourceKeys.has(sourceKey) || visibleSourceKeys.has(visibleKey)) continue;
     await pool.query(`
       INSERT INTO pengeluaran_ekstrakurikuler
         (tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal,
@@ -461,7 +465,9 @@ async function ensureExtracurricularMonthRows(periode) {
       assignment.extraId, assignment.sourceTeacherId, assignment.teacherType
     ]);
     sourceKeys.add(sourceKey);
+    visibleSourceKeys.add(visibleKey);
   }
+  await consolidateExtracurricularRows(monthStart, monthStart);
 
   const [latestMonthRows] = await pool.query(
     `SELECT DATE_FORMAT(MAX(tanggal), '%Y-%m') AS ym
@@ -525,8 +531,84 @@ async function ensureExtracurricularMonthRows(periode) {
   }
 }
 
+function normalizedIdentity(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+async function consolidateExtracurricularRows(startDate, endDate) {
+  const [rows] = await pool.query(`
+    SELECT *
+    FROM pengeluaran_ekstrakurikuler
+    WHERE tanggal BETWEEN ? AND LAST_DAY(?)
+    ORDER BY source_synced DESC, attendance_manual DESC, updated_at DESC, id ASC
+  `, [startDate, endDate]);
+  if (rows.length < 2) return 0;
+
+  const explicitTypes = new Map();
+  for (const row of rows) {
+    if (!row.teacher_type) continue;
+    const base = `${monthKey(row.tanggal)}|${normalizedIdentity(row.nama_ekstra)}|${normalizedIdentity(row.teacher_name)}`;
+    if (!explicitTypes.has(base)) explicitTypes.set(base, new Set());
+    explicitTypes.get(base).add(row.teacher_type);
+  }
+  const groups = new Map();
+  for (const row of rows) {
+    const base = `${monthKey(row.tanggal)}|${normalizedIdentity(row.nama_ekstra)}|${normalizedIdentity(row.teacher_name)}`;
+    const knownTypes = explicitTypes.get(base);
+    const resolvedType = row.teacher_type || (knownTypes?.size === 1 ? [...knownTypes][0] : 'manual');
+    const key = `${base}|${resolvedType}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ ...row, resolvedType });
+  }
+
+  let removed = 0;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      const canonical = group[0];
+      const manual = group.find((row) => Number(row.attendance_manual) === 1);
+      const synced = group.find((row) => Number(row.source_synced) === 1);
+      const count = manual
+        ? Number(manual.jumlah_hadir || 0)
+        : Math.max(...group.map((row) => Number(row.jumlah_hadir || 0)));
+      const nominalRow = manual || group.find((row) => Number(row.nominal || 0) > 0) || canonical;
+      const source = synced || canonical;
+      const duplicateIds = group.slice(1).map((row) => row.id);
+      await conn.query(`
+        UPDATE pengeluaran_ekstrakurikuler
+        SET jumlah_hadir = ?, nominal = ?, teacher_type = ?,
+            attendance_manual = ?, source_extra_id = ?,
+            source_extra_teacher_id = ?, source_synced = ?,
+            expense_id = COALESCE(expense_id, ?)
+        WHERE id = ?
+      `, [
+        count, Number(nominalRow.nominal || 0),
+        canonical.resolvedType === 'manual' ? null : canonical.resolvedType,
+        manual ? 1 : 0,
+        source.source_extra_id || null,
+        source.source_extra_teacher_id || null,
+        Number(source.source_synced) === 1 ? 1 : 0,
+        group.find((row) => row.expense_id)?.expense_id || null,
+        canonical.id
+      ]);
+      await conn.query('DELETE FROM pengeluaran_ekstrakurikuler WHERE id IN (?)', [duplicateIds]);
+      removed += duplicateIds.length;
+    }
+    await conn.commit();
+    return removed;
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+
 async function getExtracurricularExpenses(startDate, endDate) {
   await ensureExtracurricularTable();
+  await consolidateExtracurricularRows(startDate, endDate);
   const [rows] = await pool.query(
     `SELECT id, tanggal, teacher_id, teacher_name, nama_ekstra, jumlah_hadir, nominal, keterangan,
             expense_id, source_synced, teacher_type, attendance_manual
