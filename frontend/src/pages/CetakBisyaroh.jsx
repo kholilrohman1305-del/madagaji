@@ -36,6 +36,11 @@ const getTaskDetails = (item) => [
   parseTask(item.tugasTambahan3)
 ].filter(Boolean);
 
+const EXTRACURRICULAR_TYPE_LABELS = {
+  pendamping_kbm: 'Pendamping Ekstra',
+  guru_ekstra: 'Guru Ekstra'
+};
+
 const findTeacherByTask = (items, keyword) => {
   const needle = String(keyword || '').toLowerCase();
   const found = items.find((item) => getTaskDetails(item).some((task) => String(task.title || '').toLowerCase().includes(needle)));
@@ -237,22 +242,22 @@ export default function CetakBisyaroh() {
             <thead>
               <tr>
                 <th>No.</th>
-                <th>Kategori</th>
+                <th className="text-left">Kategori</th>
                 <th>Jumlah</th>
                 <th>Nominal</th>
                 <th>Total</th>
-                <th>TTD</th>
+                <th className="text-left">TTD</th>
               </tr>
             </thead>
             <tbody>
               {expenses.map((exp, idx) => (
                 <tr key={exp.id}>
                   <td className="center">{idx + 1}</td>
-                  <td>{exp.kategori}</td>
+                  <td className="text-left">{exp.kategori}</td>
                   <td>{exp.jumlah ?? 1}</td>
                   <td style={{ fontWeight: 600 }}>{formatRupiah(exp.nominal)}</td>
                   <td style={{ fontWeight: 700 }}>{formatRupiah(exp.totalNominal || (Number(exp.jumlah || 0) * Number(exp.nominal || 0)))}</td>
-                  <td className="print-ttd">{idx + 1}</td>
+                  <td className="print-ttd text-left">{idx + 1}</td>
                 </tr>
               ))}
               {expenses.length > 0 && (
@@ -278,27 +283,29 @@ export default function CetakBisyaroh() {
                 <table className="table print-show cetak-bisyaroh-expense">
                   <thead>
                     <tr>
-                      <th>No.</th>
-                      <th>Nama</th>
+                      <th className="text-left">Nama Guru</th>
+                      <th className="text-left">Nama Ekstra</th>
+                      <th className="text-left">Jenis</th>
                       <th>Jumlah</th>
                       <th>Nominal</th>
                       <th>Total</th>
-                      <th>TTD</th>
+                      <th className="text-left">TTD</th>
                     </tr>
                   </thead>
                   <tbody>
                     {extracurricularItems.map((item, idx) => (
                       <tr key={`extra-${idx}`}>
-                        <td className="center">{idx + 1}</td>
-                        <td>{item.nama}</td>
+                        <td className="text-left">{item.teacherName || '-'}</td>
+                        <td className="text-left">{item.namaEkstra || '-'}</td>
+                        <td className="text-left">{EXTRACURRICULAR_TYPE_LABELS[item.teacherType] || '-'}</td>
                         <td>{item.jumlah ?? 0}</td>
                         <td>{formatRupiah(item.nominal)}</td>
                         <td style={{ fontWeight: 700 }}>{formatRupiah(Math.abs(Number(item.totalNominal || item.totalBisyaroh || 0)))}</td>
-                        <td className="print-ttd">{idx + 1}</td>
+                        <td className="print-ttd text-left">{idx + 1}</td>
                       </tr>
                     ))}
                     <tr className="cetak-grand-row">
-                      <td colSpan="4">TOTAL EKSTRAKURIKULER</td>
+                      <td colSpan="5">TOTAL EKSTRAKURIKULER</td>
                       <td>{formatRupiah(totalExtracurricular)}</td>
                       <td></td>
                     </tr>
@@ -314,22 +321,22 @@ export default function CetakBisyaroh() {
                   <thead>
                     <tr>
                       <th>No.</th>
-                      <th>Nama</th>
+                      <th className="text-left">Nama Guru/Kategori</th>
                       <th>Jumlah</th>
                       <th>Nominal</th>
                       <th>Total</th>
-                      <th>TTD</th>
+                      <th className="text-left">TTD</th>
                     </tr>
                   </thead>
                   <tbody>
                     {disciplineItems.map((item, idx) => (
                       <tr key={`discipline-${idx}`}>
                         <td className="center">{idx + 1}</td>
-                        <td>{item.nama}</td>
+                        <td className="text-left">{item.nama}</td>
                         <td>{item.jumlah ?? 0}</td>
                         <td>{formatRupiah(item.nominal)}</td>
                         <td style={{ fontWeight: 700 }}>{formatRupiah(Math.abs(Number(item.totalNominal || item.totalBisyaroh || 0)))}</td>
-                        <td className="print-ttd">{idx + 1}</td>
+                        <td className="print-ttd text-left">{idx + 1}</td>
                       </tr>
                     ))}
                     <tr className="cetak-grand-row">

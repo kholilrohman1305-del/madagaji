@@ -117,48 +117,86 @@ export default function Kehadiran() {
     mobileJamFilter === 'all' ? jamList : jamList.filter(jam => String(jam) === String(mobileJamFilter))
   ), [jamList, mobileJamFilter]);
 
+  const attendanceSummary = useMemo(() => items.reduce((summary, item) => {
+    if (item.status === 'Hadir') summary.hadir += 1;
+    else if (item.status === 'Izin') summary.izin += 1;
+    else if (item.status === 'Tidak Hadir') summary.absen += 1;
+    else summary.belumDiisi += 1;
+    return summary;
+  }, { hadir: 0, izin: 0, absen: 0, belumDiisi: 0 }), [items]);
+
   return (
-    <div>
+    <div className="attendance-page">
       {loading && <KehadiranSkeleton />}
       {!loading && (
-      <div className="modern-table-card">
-        <div className="modern-table-title">
-          <CalendarCheck size={24} /> Input Kehadiran
-        </div>
-        <div className="toolbar">
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-          <button className="secondary" onClick={save} disabled={saving || locked}>
-            <Save size={18} /> Simpan Kehadiran
-          </button>
-          <button className="outline" onClick={openHoliday}>
-            <Sun size={18} /> Libur
-          </button>
-          {locked && (
-            <button className="outline" onClick={clearHoliday}>
-              <Unlock size={18} /> Buka Kunci
-            </button>
-          )}
-        </div>
-        <div className="legend">
-          <span className="legend-item">
-            <span className="legend-dot status-hadir" /> Hadir
-          </span>
-          <span className="legend-item">
-            <span className="legend-dot status-izin" /> Izin
-          </span>
-          <span className="legend-item">
-            <span className="legend-dot status-absen" /> Tidak Hadir
-          </span>
-        </div>
-        {locked && (
-          <div className="stat" style={{ marginTop: 16 }}>
-            <div className="label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Lock size={14} /> Hari Libur
+      <>
+        <section className="modern-table-card attendance-control-card">
+          <div className="attendance-control-heading">
+            <div>
+              <div className="modern-table-title">
+                <CalendarCheck size={24} /> Input Kehadiran
+              </div>
+              <p>Atur tanggal dan status hari, kemudian simpan seluruh perubahan pada matriks.</p>
             </div>
-            <div className="value">{holidayReason || 'Tanpa keterangan'}</div>
+            <span className={`attendance-day-badge ${locked ? 'is-holiday' : 'is-active'}`}>
+              {locked ? <Lock size={15} /> : <CalendarCheck size={15} />}
+              {locked ? 'Hari libur' : 'Hari aktif'}
+            </span>
           </div>
-        )}
-        {isMobile ? (
+          <div className="attendance-action-grid">
+            <label className="attendance-date-field">
+              <span>Tanggal Kehadiran</span>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+            </label>
+            <div className="attendance-action-buttons">
+              <button className="secondary" onClick={save} disabled={saving || locked}>
+                <Save size={18} /> {saving ? 'Menyimpan...' : 'Simpan Kehadiran'}
+              </button>
+              <button className="outline" onClick={openHoliday}>
+                <Sun size={18} /> Jadikan Libur
+              </button>
+              {locked && (
+                <button className="outline" onClick={clearHoliday}>
+                  <Unlock size={18} /> Buka Kunci
+                </button>
+              )}
+            </div>
+          </div>
+          {locked && (
+            <div className="attendance-holiday-notice">
+              <Lock size={18} />
+              <div>
+                <strong>Matriks dikunci karena hari libur</strong>
+                <span>{holidayReason || 'Tanpa keterangan'}</span>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="modern-table-card attendance-matrix-card">
+          <div className="attendance-matrix-heading">
+            <div>
+              <div className="modern-table-title">Matriks Kehadiran KBM</div>
+              <p>Klik jadwal untuk mengubah status: kosong, hadir, izin, atau tidak hadir.</p>
+            </div>
+            <div className="attendance-matrix-meta">
+              <span><strong>{classes.length}</strong> Kelas</span>
+              <span><strong>{jamList.length}</strong> Jam</span>
+              <span><strong>{items.length}</strong> Jadwal</span>
+            </div>
+          </div>
+          <div className="attendance-summary-row">
+            <span className="attendance-summary-item status-hadir"><strong>{attendanceSummary.hadir}</strong> Hadir</span>
+            <span className="attendance-summary-item status-izin"><strong>{attendanceSummary.izin}</strong> Izin</span>
+            <span className="attendance-summary-item status-absen"><strong>{attendanceSummary.absen}</strong> Tidak Hadir</span>
+            <span className="attendance-summary-item status-empty"><strong>{attendanceSummary.belumDiisi}</strong> Belum Diisi</span>
+          </div>
+          <div className="legend attendance-matrix-legend">
+            <span className="legend-item"><span className="legend-dot status-hadir" /> Hadir</span>
+            <span className="legend-item"><span className="legend-dot status-izin" /> Izin</span>
+            <span className="legend-item"><span className="legend-dot status-absen" /> Tidak Hadir</span>
+          </div>
+          {isMobile ? (
           /* Versi mobile: kartu per kelas, chip jam diketuk untuk ganti
              status (kosong -> Hadir -> Izin -> Tidak Hadir), tanpa scroll samping. */
           <>
@@ -216,6 +254,7 @@ export default function Kehadiran() {
             </div>
           </>
         ) : (
+        <div className="attendance-matrix-scroll">
         <table className="table attendance-table">
           <thead>
             <tr>
@@ -258,9 +297,11 @@ export default function Kehadiran() {
             ))}
           </tbody>
         </table>
+        </div>
         )}
         {items.length === 0 && <div className="empty">Belum ada data.</div>}
-      </div>
+        </section>
+      </>
       )}
 
       {showHolidayModal && (

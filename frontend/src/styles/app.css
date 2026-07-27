@@ -4199,3 +4199,279 @@ input[type="checkbox"] {
     text-align: center;
   }
 }
+
+/* Kehadiran: kontrol dan matriks dipisahkan agar alur input lebih jelas. */
+.attendance-page {
+  display: grid;
+  gap: 24px;
+}
+
+.attendance-control-card,
+.attendance-matrix-card {
+  overflow: hidden;
+}
+
+.attendance-control-heading,
+.attendance-matrix-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.attendance-control-heading p,
+.attendance-matrix-heading p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.attendance-day-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.attendance-day-badge.is-active {
+  color: #047857;
+  background: #d1fae5;
+  border: 1px solid #6ee7b7;
+}
+
+.attendance-day-badge.is-holiday {
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+}
+
+.attendance-action-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  align-items: end;
+  gap: 18px;
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f8fafc, #eff6ff);
+}
+
+.attendance-date-field {
+  display: grid;
+  gap: 7px;
+}
+
+.attendance-date-field span {
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.attendance-date-field input {
+  width: 100%;
+}
+
+.attendance-action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.attendance-holiday-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 14px;
+  padding: 13px 15px;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 14px;
+  background: #fff1f2;
+}
+
+.attendance-holiday-notice div {
+  display: grid;
+  gap: 2px;
+}
+
+.attendance-holiday-notice span {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.attendance-matrix-meta,
+.attendance-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.attendance-matrix-meta span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 7px 11px;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.attendance-matrix-meta strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.attendance-summary-row {
+  margin-top: 20px;
+}
+
+.attendance-summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 110px;
+  padding: 9px 12px;
+  border: 1px solid;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.attendance-summary-item strong {
+  font-size: 16px;
+}
+
+.attendance-summary-item.status-hadir {
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.attendance-summary-item.status-izin {
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.attendance-summary-item.status-absen {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.attendance-summary-item.status-empty {
+  color: #475569;
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.attendance-matrix-legend {
+  margin: 14px 0 16px;
+  padding-top: 14px;
+  border-top: 1px solid #eef2f7;
+}
+
+.attendance-matrix-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 260px);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+}
+
+.attendance-matrix-scroll .attendance-table {
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.attendance-matrix-scroll .attendance-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  color: #e2e8f0;
+  background: linear-gradient(135deg, #0f172a, #1e3a8a);
+  border-color: rgba(255, 255, 255, .12);
+}
+
+.attendance-matrix-scroll .attendance-table .kelas-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  padding: 14px;
+  color: #1e3a8a;
+  background: #eff6ff;
+  border-right: 2px solid #bfdbfe;
+}
+
+.attendance-matrix-scroll .attendance-table thead th:first-child {
+  left: 0;
+  z-index: 4;
+}
+
+.cetak-bisyaroh-expense .text-left {
+  text-align: left !important;
+}
+
+@media (max-width: 768px) {
+  .attendance-page {
+    gap: 14px;
+  }
+
+  .attendance-control-heading,
+  .attendance-matrix-heading {
+    display: grid;
+    gap: 12px;
+  }
+
+  .attendance-day-badge {
+    justify-self: start;
+  }
+
+  .attendance-action-grid {
+    grid-template-columns: 1fr;
+    padding: 13px;
+    margin-top: 16px;
+  }
+
+  .attendance-action-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .attendance-action-buttons button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .attendance-action-buttons button:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .attendance-matrix-meta {
+    gap: 6px;
+  }
+
+  .attendance-summary-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .attendance-summary-item {
+    min-width: 0;
+  }
+
+  .attendance-matrix-legend {
+    gap: 10px;
+  }
+}

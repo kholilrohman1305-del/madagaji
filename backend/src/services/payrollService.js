@@ -1368,6 +1368,9 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
   const extracurricularExpenses = await getExtracurricularExpenses(startDate, endDate);
   const extracurricularItems = extracurricularExpenses.map(exp => ({
     nama: `Ekstrakurikuler - ${exp.namaEkstra} (${exp.teacherName})`,
+    teacherName: exp.teacherName,
+    namaEkstra: exp.namaEkstra,
+    teacherType: exp.teacherType,
     tmt: '-',
     bisyarohMengajar: '-',
     totalHadir: '-',
