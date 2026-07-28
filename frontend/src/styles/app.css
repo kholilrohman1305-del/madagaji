@@ -158,6 +158,11 @@
   background: #fff;
 }
 
+.extra-schedule-controls button {
+  min-height: 46px;
+  white-space: nowrap;
+}
+
 .extra-schedule-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -294,8 +299,8 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  height: 58px;
-  padding: 8px;
+  height: 66px;
+  padding: 10px;
   background: linear-gradient(180deg, #172554, #1e3a8a);
   color: #fff;
   text-align: center;
@@ -307,38 +312,40 @@
 }
 
 .extra-matrix-table thead th span {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 850;
 }
 
 .extra-matrix-table thead th small {
-  margin-top: 1px;
+  margin-top: 2px;
   color: #bfdbfe;
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .extra-matrix-table .extra-matrix-corner {
   left: 0;
   z-index: 4;
-  min-width: 126px;
+  min-width: 142px;
   background: linear-gradient(145deg, #0f172a, #172554);
+  font-size: 14px;
 }
 
 .extra-matrix-day {
   position: sticky;
   left: 0;
   z-index: 3;
-  width: 126px;
-  padding: 12px;
+  width: 142px;
+  padding: 16px;
   background: #f1f5f9;
   color: #334155;
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 850;
   text-align: left;
 }
 
 .extra-matrix-table td {
-  min-width: 205px;
-  padding: 7px;
+  min-width: 235px;
+  padding: 9px;
   vertical-align: top;
   background: #fff;
 }
@@ -348,7 +355,7 @@
 }
 
 .extra-matrix-cell-stack {
-  min-height: 70px;
+  min-height: 88px;
   display: grid;
   align-content: start;
   gap: 7px;
@@ -356,7 +363,7 @@
 
 .extra-matrix-empty {
   display: grid;
-  min-height: 62px;
+  min-height: 80px;
   place-items: center;
   color: #cbd5e1;
 }
@@ -373,15 +380,15 @@
 }
 
 .extra-schedule-tile.compact {
-  padding: 9px 9px 9px 12px;
-  border-radius: 11px;
+  padding: 12px 11px 11px 15px;
+  border-radius: 12px;
   box-shadow: 0 4px 12px var(--extra-glow);
 }
 
 .extra-schedule-accent {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 4px;
+  width: 5px;
   background: var(--extra-solid);
 }
 
@@ -394,16 +401,16 @@
 
 .extra-schedule-tile-head strong {
   color: var(--extra-ink);
-  font-size: 12.5px;
-  line-height: 1.25;
+  font-size: 14.5px;
+  line-height: 1.32;
 }
 
 .extra-schedule-tile-head > span {
-  padding: 2px 6px;
+  padding: 3px 7px;
   border-radius: 999px;
   background: var(--extra-solid);
   color: #fff;
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 850;
   white-space: nowrap;
 }
@@ -412,11 +419,11 @@
 .extra-schedule-teachers {
   display: flex;
   align-items: flex-start;
-  gap: 5px;
-  margin-top: 7px;
+  gap: 7px;
+  margin-top: 8px;
   color: #475569;
-  font-size: 10.5px;
-  line-height: 1.35;
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 
 .extra-schedule-time svg,
@@ -534,16 +541,19 @@
 
   .extra-schedule-controls {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .extra-schedule-controls input {
+    grid-column: 1 / -1;
     width: 100%;
     min-width: 0;
   }
 
   .extra-schedule-controls button {
+    width: 100%;
     min-height: 44px;
+    padding-inline: 13px;
   }
 
   .extra-schedule-stats {
@@ -622,12 +632,12 @@
   }
 
   .extra-mobile-day-head strong {
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .extra-mobile-day-head span {
     color: #bfdbfe;
-    font-size: 9.5px;
+    font-size: 11px;
     font-weight: 750;
   }
 
@@ -644,7 +654,7 @@
     margin: 0;
     padding: 11px;
     color: #94a3b8;
-    font-size: 10.5px;
+    font-size: 12px;
   }
 
   .extra-mobile-schedule-list {
@@ -654,7 +664,16 @@
   }
 
   .extra-schedule-tile {
-    padding: 11px 11px 10px 14px;
+    padding: 14px 13px 13px 17px;
+  }
+
+  .extra-schedule-tile-head strong {
+    font-size: 15px;
+  }
+
+  .extra-schedule-time,
+  .extra-schedule-teachers {
+    font-size: 13px;
   }
 
   .extra-detail-days {

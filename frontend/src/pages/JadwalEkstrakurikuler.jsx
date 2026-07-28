@@ -1,31 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, CalendarDays, Clock3, Grid3X3, ListChecks, RefreshCw, UsersRound } from 'lucide-react';
+import { Activity, CalendarDays, Clock3, Download, Grid3X3, ListChecks, RefreshCw, UsersRound } from 'lucide-react';
 import api from '../api';
 import useIsMobile from '../hooks/useIsMobile';
+import { buildExtraColorMap, colorForExtra } from '../utils/extracurricularColors.mjs';
+import { downloadExtracurricularMatrixPdf } from '../utils/extracurricularMatrixPdf.mjs';
 
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
-function colorForExtra(item) {
-  const key = String(item?.extracurricularId || item?.name || 'ekstra');
-  let hash = 2166136261;
-  for (let index = 0; index < key.length; index += 1) {
-    hash ^= key.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  const hue = Math.abs(hash) % 360;
-  const saturation = 62 + (Math.abs(hash >> 8) % 22);
-  const lightness = 42 + (Math.abs(hash >> 16) % 12);
-  return {
-    solid: `hsl(${hue} ${saturation}% ${lightness}%)`,
-    ink: `hsl(${hue} ${Math.min(88, saturation + 8)}% 24%)`,
-    soft: `hsl(${hue} ${Math.max(45, saturation - 8)}% 95%)`,
-    border: `hsl(${hue} ${saturation}% 79%)`,
-    glow: `hsl(${hue} ${saturation}% ${lightness}% / .18)`
-  };
-}
-
-function ScheduleTile({ item, compact = false }) {
-  const color = colorForExtra(item);
+function ScheduleTile({ item, colorMap, compact = false }) {
+  const color = colorForExtra(item, colorMap);
   return (
     <article
       className={`extra-schedule-tile${compact ? ' compact' : ''}`}
@@ -58,6 +41,7 @@ export default function JadwalEkstrakurikuler() {
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const isMobile = useIsMobile();
 
   async function load() {
@@ -96,6 +80,18 @@ export default function JadwalEkstrakurikuler() {
   }, [rows]);
   const totalMeetings = rows.reduce((sum, row) => sum + Number(row.meetings || 0), 0);
   const activeDays = grouped.filter((group) => group.items.length).length;
+  const colorMap = useMemo(() => buildExtraColorMap(rows), [rows]);
+
+  async function downloadMatrixPdf() {
+    setDownloadingPdf(true);
+    try {
+      await downloadExtracurricularMatrixPdf(rows, period);
+    } catch (error) {
+      window.alert(error.message || 'PDF matriks jadwal gagal dibuat.');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
 
   return (
     <div className="extra-schedule-page">
@@ -109,6 +105,9 @@ export default function JadwalEkstrakurikuler() {
           <input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} />
           <button className="outline" type="button" onClick={load} disabled={loading}>
             <RefreshCw size={16} /> Muat Ulang
+          </button>
+          <button type="button" onClick={downloadMatrixPdf} disabled={loading || downloadingPdf || !timeSlots.length}>
+            <Download size={16} /> {downloadingPdf ? 'Membuat PDF…' : 'Unduh PDF F4'}
           </button>
         </div>
       </header>
@@ -139,7 +138,7 @@ export default function JadwalEkstrakurikuler() {
                 </div>
                 {items.length ? (
                   <div className="extra-mobile-schedule-list">
-                    {items.map((item) => <ScheduleTile key={`${day}-${item.extracurricularId}`} item={item} />)}
+                    {items.map((item) => <ScheduleTile key={`${day}-${item.extracurricularId}`} item={item} colorMap={colorMap} />)}
                   </div>
                 ) : <p>Tidak ada jadwal.</p>}
               </section>
@@ -147,7 +146,7 @@ export default function JadwalEkstrakurikuler() {
           </div>
         ) : (
           <div className="extra-matrix-scroll">
-            <table className="extra-matrix-table" style={{ minWidth: Math.max(820, 145 + (timeSlots.length * 210)) }}>
+            <table className="extra-matrix-table" style={{ minWidth: Math.max(960, 160 + (timeSlots.length * 240)) }}>
               <thead>
                 <tr>
                   <th className="extra-matrix-corner">Hari</th>
@@ -167,7 +166,7 @@ export default function JadwalEkstrakurikuler() {
                         <td key={`${day}-${slot}`}>
                           <div className="extra-matrix-cell-stack">
                             {items.map((item) => (
-                              <ScheduleTile key={`${day}-${slot}-${item.extracurricularId}`} item={item} compact />
+                              <ScheduleTile key={`${day}-${slot}-${item.extracurricularId}`} item={item} colorMap={colorMap} compact />
                             ))}
                             {!items.length && <span className="extra-matrix-empty">—</span>}
                           </div>
@@ -205,7 +204,7 @@ export default function JadwalEkstrakurikuler() {
                   isMobile ? (
                     <div className="extra-detail-mobile-list">
                       {items.map((item) => {
-                        const color = colorForExtra(item);
+                        const color = colorForExtra(item, colorMap);
                         return (
                           <article
                             className="extra-detail-mobile-card"
@@ -234,7 +233,7 @@ export default function JadwalEkstrakurikuler() {
                         </thead>
                         <tbody>
                           {items.map((item) => {
-                            const color = colorForExtra(item);
+                            const color = colorForExtra(item, colorMap);
                             return (
                               <tr key={`detail-row-${day}-${item.extracurricularId}`}>
                                 <td><span className="extra-time-pill"><Clock3 size={13} />{item.startTime && item.endTime ? `${item.startTime}–${item.endTime}` : '-'}</span></td>
