@@ -171,10 +171,14 @@ export default function RekapBisyaroh() {
 
   const sameMonth = startDate.slice(0, 7) === endDate.slice(0, 7);
   const selectedPeriod = startDate.slice(0, 7);
+  const regularTeacherItems = useMemo(
+    () => items.filter((item) => Number(item.guruId || 0) > -1000000000),
+    [items]
+  );
   const filteredItems = useMemo(() => {
     const needle = String(search || '').trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((item) => {
+    if (!needle) return regularTeacherItems;
+    return regularTeacherItems.filter((item) => {
       const extraDetails = (item.extraCompensationItems || [])
         .map((detail) => `${detail.label || ''} ${detail.type || ''}`)
         .join(' ');
@@ -186,7 +190,7 @@ export default function RekapBisyaroh() {
         extraDetails
       ].some((value) => String(value || '').toLowerCase().includes(needle));
     });
-  }, [items, search]);
+  }, [regularTeacherItems, search]);
 
   const executePayrollAction = async (action, reason = '') => {
     setPayrollAction(action);
@@ -499,7 +503,7 @@ export default function RekapBisyaroh() {
         )}
         {search && filteredItems.length > 0 && (
           <div style={{ marginTop: 10, color: 'var(--muted)', fontSize: 12 }}>
-            Menampilkan {filteredItems.length} dari {items.length} guru.
+            Menampilkan {filteredItems.length} dari {regularTeacherItems.length} guru.
           </div>
         )}
         {loading && <div className="empty">Memuat...</div>}

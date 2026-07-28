@@ -112,7 +112,11 @@ export default function CetakBisyaroh() {
   const matchesSearch = (...values) => !searchNeedle || values.some((value) =>
     String(value || '').toLowerCase().includes(searchNeedle)
   );
-  const allTeacherItems = items.filter(it => !it.isExpense);
+  // Guru Ekstra khusus dibayarkan pada tabel Ekstrakurikuler, sehingga tidak
+  // diduplikasi lagi pada Daftar Penerima Bisyaroh guru KBM.
+  const allTeacherItems = items.filter(it =>
+    !it.isExpense && Number(it.guruId || 0) > -1000000000
+  );
   const teacherItems = allTeacherItems.filter((item) => matchesSearch(
     item.nama,
     item.tugasTambahan1,
