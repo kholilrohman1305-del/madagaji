@@ -402,8 +402,9 @@ async function ensureExtracurricularMonthRows(periode) {
   await ensureExtracurricularTable();
   const monthStart = `${periode}-01`;
   const [currentRows] = await pool.query(
-    `SELECT id, teacher_id, teacher_name, nama_ekstra, source_extra_id,
-            source_extra_teacher_id, teacher_type, source_synced
+    `SELECT id, teacher_id, teacher_name, nama_ekstra, jumlah_hadir,
+            attendance_manual, source_extra_id, source_extra_teacher_id,
+            teacher_type, source_synced
      FROM pengeluaran_ekstrakurikuler
      WHERE tanggal BETWEEN ? AND LAST_DAY(?)`,
     [monthStart, monthStart]
@@ -427,13 +428,14 @@ async function ensureExtracurricularMonthRows(periode) {
     .filter((row) => Number(row.source_synced) === 1)
     .map((row) => `${row.source_extra_id}|${row.teacher_type}|${String(row.teacher_name || '').trim().toLowerCase()}`));
   const [ignoredRows] = await pool.query(`
-    SELECT source_extra_id, source_extra_teacher_id, teacher_type
+    SELECT source_extra_id, source_extra_teacher_id, teacher_type, ignore_reason
     FROM pengeluaran_ekstrakurikuler_ignored
     WHERE periode = ?
   `, [periode]);
-  const ignoredSourceKeys = new Set(ignoredRows.map(
-    (row) => `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`
-  ));
+  const ignoredSources = new Map(ignoredRows.map((row) => [
+    `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`,
+    row.ignore_reason || 'manual_delete'
+  ]));
   const [masterAssignments] = await masterPool.query(`
     SELECT e.id AS extracurricular_id, e.name AS extracurricular_name,
            e.pembina_teacher_id, t.name AS pendamping_name,
@@ -474,9 +476,22 @@ async function ensureExtracurricularMonthRows(periode) {
       teacherType: extracurricularJournals.TYPE_GURU_EKSTRA
     } : null
   ].filter(Boolean));
+  const activeAssignmentSourceKeys = new Set(assignments.map(
+    (assignment) => `${assignment.extraId}|${assignment.sourceTeacherId}|${assignment.teacherType}`
+  ));
   for (const assignment of assignments) {
     const sourceKey = `${assignment.extraId}|${assignment.sourceTeacherId}|${assignment.teacherType}`;
-    if (ignoredSourceKeys.has(sourceKey)) continue;
+    const ignoreReason = ignoredSources.get(sourceKey);
+    if (ignoreReason === 'role_transition') {
+      await pool.query(`
+        DELETE FROM pengeluaran_ekstrakurikuler_ignored
+        WHERE periode = ? AND source_extra_id = ?
+          AND source_extra_teacher_id = ? AND teacher_type = ?
+      `, [periode, assignment.extraId, assignment.sourceTeacherId, assignment.teacherType]);
+      ignoredSources.delete(sourceKey);
+    } else if (ignoreReason) {
+      continue;
+    }
     const visibleKey = `${assignment.extraId}|${assignment.teacherType}|${String(assignment.teacherName || '').trim().toLowerCase()}`;
     const existingSourceRow = sourceRowsByKey.get(sourceKey);
     if (existingSourceRow) {
@@ -492,6 +507,95 @@ async function ensureExtracurricularMonthRows(periode) {
           [assignment.teacherId, assignment.teacherName, assignment.extraName, existingSourceRow.id]
         );
       }
+      const staleRoleRows = currentRows.filter((row) => {
+        if (Number(row.id) === Number(existingSourceRow.id) || Number(row.source_synced) !== 1) return false;
+        if (Number(row.source_extra_id) !== assignment.extraId) return false;
+        if (normalizedIdentity(row.teacher_name) !== normalizedIdentity(assignment.teacherName)) return false;
+        const previousKey = `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`;
+        return !activeAssignmentSourceKeys.has(previousKey);
+      });
+      if (staleRoleRows.length) {
+        for (const staleRow of staleRoleRows) {
+          await pool.query(`
+            INSERT INTO pengeluaran_ekstrakurikuler_ignored
+              (periode, source_extra_id, source_extra_teacher_id, teacher_type,
+               teacher_name, nama_ekstra, ignore_reason)
+            VALUES (?, ?, ?, ?, ?, ?, 'role_transition')
+            ON DUPLICATE KEY UPDATE
+              teacher_name = VALUES(teacher_name), nama_ekstra = VALUES(nama_ekstra),
+              ignore_reason = 'role_transition'
+          `, [
+            periode, staleRow.source_extra_id, staleRow.source_extra_teacher_id,
+            staleRow.teacher_type, staleRow.teacher_name, staleRow.nama_ekstra
+          ]);
+        }
+        const mergedAttendance = Math.max(
+          Number(existingSourceRow.jumlah_hadir) || 0,
+          ...staleRoleRows.map((row) => Number(row.jumlah_hadir) || 0)
+        );
+        const attendanceManual = [
+          existingSourceRow,
+          ...staleRoleRows
+        ].some((row) => Number(row.attendance_manual) === 1) ? 1 : 0;
+        await pool.query(`
+          UPDATE pengeluaran_ekstrakurikuler
+          SET jumlah_hadir = ?, attendance_manual = ?, nominal = ?,
+              teacher_id = ?, teacher_name = ?, nama_ekstra = ?
+          WHERE id = ?
+        `, [
+          mergedAttendance, attendanceManual, Number(rates[assignment.teacherType] || 0),
+          assignment.teacherId, assignment.teacherName, assignment.extraName,
+          existingSourceRow.id
+        ]);
+        await pool.query(
+          'DELETE FROM pengeluaran_ekstrakurikuler WHERE id IN (?)',
+          [staleRoleRows.map((row) => row.id)]
+        );
+      }
+      continue;
+    }
+    const transitionRow = currentRows.find((row) => {
+      if (Number(row.source_synced) !== 1) return false;
+      if (Number(row.source_extra_id) !== assignment.extraId) return false;
+      if (normalizedIdentity(row.teacher_name) !== normalizedIdentity(assignment.teacherName)) return false;
+      const previousKey = `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`;
+      return previousKey !== sourceKey && !activeAssignmentSourceKeys.has(previousKey);
+    });
+    if (transitionRow) {
+      const previousKey = `${transitionRow.source_extra_id}|${transitionRow.source_extra_teacher_id}|${transitionRow.teacher_type}`;
+      await pool.query(`
+        INSERT INTO pengeluaran_ekstrakurikuler_ignored
+          (periode, source_extra_id, source_extra_teacher_id, teacher_type,
+           teacher_name, nama_ekstra, ignore_reason)
+        VALUES (?, ?, ?, ?, ?, ?, 'role_transition')
+        ON DUPLICATE KEY UPDATE
+          teacher_name = VALUES(teacher_name), nama_ekstra = VALUES(nama_ekstra),
+          ignore_reason = 'role_transition'
+      `, [
+        periode, transitionRow.source_extra_id, transitionRow.source_extra_teacher_id,
+        transitionRow.teacher_type, transitionRow.teacher_name, transitionRow.nama_ekstra
+      ]);
+      await pool.query(`
+        UPDATE pengeluaran_ekstrakurikuler
+        SET teacher_id = ?, teacher_name = ?, nama_ekstra = ?, nominal = ?,
+            source_extra_id = ?, source_extra_teacher_id = ?, teacher_type = ?,
+            keterangan = ?
+        WHERE id = ?
+      `, [
+        assignment.teacherId, assignment.teacherName, assignment.extraName,
+        Number(rates[assignment.teacherType] || 0), assignment.extraId,
+        assignment.sourceTeacherId, assignment.teacherType,
+        'Peran pengajar diperbarui otomatis dari MyMada; kehadiran dihitung dari jurnal eMada',
+        transitionRow.id
+      ]);
+      sourceRowsByKey.delete(previousKey);
+      sourceRowsByKey.set(sourceKey, transitionRow);
+      transitionRow.teacher_id = assignment.teacherId;
+      transitionRow.teacher_name = assignment.teacherName;
+      transitionRow.nama_ekstra = assignment.extraName;
+      transitionRow.source_extra_id = assignment.extraId;
+      transitionRow.source_extra_teacher_id = assignment.sourceTeacherId;
+      transitionRow.teacher_type = assignment.teacherType;
       continue;
     }
     if (visibleSourceKeys.has(visibleKey)) continue;
@@ -816,10 +920,12 @@ async function deleteExtracurricularDuplicate(periode, id) {
     ) {
       await conn.query(`
         INSERT INTO pengeluaran_ekstrakurikuler_ignored
-          (periode, source_extra_id, source_extra_teacher_id, teacher_type, teacher_name, nama_ekstra)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (periode, source_extra_id, source_extra_teacher_id, teacher_type,
+           teacher_name, nama_ekstra, ignore_reason)
+        VALUES (?, ?, ?, ?, ?, ?, 'manual_delete')
         ON DUPLICATE KEY UPDATE
-          teacher_name = VALUES(teacher_name), nama_ekstra = VALUES(nama_ekstra)
+          teacher_name = VALUES(teacher_name), nama_ekstra = VALUES(nama_ekstra),
+          ignore_reason = 'manual_delete'
       `, [
         periode, target.source_extra_id, target.source_extra_teacher_id,
         target.teacher_type, target.teacher_name, target.nama_ekstra

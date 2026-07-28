@@ -93,11 +93,16 @@ async function ensureTables() {
       teacher_type VARCHAR(30) NOT NULL,
       teacher_name VARCHAR(160) NULL,
       nama_ekstra VARCHAR(160) NULL,
+      ignore_reason VARCHAR(30) NOT NULL DEFAULT 'manual_delete',
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE KEY uq_extra_ignored_source
         (periode, source_extra_id, source_extra_teacher_id, teacher_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
+  await addColumn(
+    'pengeluaran_ekstrakurikuler_ignored',
+    "ADD COLUMN ignore_reason VARCHAR(30) NOT NULL DEFAULT 'manual_delete'"
+  );
   ensured = true;
 }
 
