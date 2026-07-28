@@ -45,6 +45,15 @@ router.get('/schedule/:guruId', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /api/external/extracurricular-matrix?period=YYYY-MM
+// Matriks resmi ekstrakurikuler untuk ditampilkan aplikasi lain (MyMada).
+router.get('/extracurricular-matrix', async (req, res, next) => {
+  try {
+    const data = await extracurricularJournals.getMatrix(req.query.period);
+    res.json({ success: true, data });
+  } catch (e) { next(e); }
+});
+
 // GET /api/external/class-subject-settings
 // Sumber sebaran mapel per kelas untuk MyMada. Data utama diambil dari
 // class_subjects MadaFlow; jika tabel itu kosong, gunakan jadwal sebagai
