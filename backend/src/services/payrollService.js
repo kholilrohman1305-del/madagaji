@@ -1576,6 +1576,28 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
       transportDays: []
     });
   });
+  // Guru Ekstra memakai namespace ID sintetis agar tidak bertabrakan dengan
+  // guru KBM. ID yang sama juga dipakai oleh sinkron honor ekstrakurikuler.
+  try {
+    const [extraTeacherRows] = await masterPool.query(
+      'SELECT id, name FROM extra_teachers WHERE is_active=1 ORDER BY name'
+    );
+    extraTeacherRows.forEach((row) => {
+      const syntheticId = String(-(1000000000 + Number(row.id)));
+      guruMap.set(syntheticId, {
+        guruId: syntheticId,
+        nama: row.name,
+        tmt: 0,
+        classification: 'GURU EKSTRA',
+        totalHadir: 0,
+        totalIzin: 0,
+        totalTidakHadir: 0,
+        transportDays: []
+      });
+    });
+  } catch (error) {
+    if (!String(error.message || '').includes('doesn\'t exist')) throw error;
+  }
 
   const [attendanceRows] = await pool.query(
     'SELECT tanggal_only, guru_id, status, jumlah_jam FROM kehadiran WHERE tanggal_only BETWEEN ? AND ?',

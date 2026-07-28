@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../api';
-import { Printer, Calendar, Wallet, FileText } from 'lucide-react';
+import { Printer, Calendar, Wallet, FileText, Search } from 'lucide-react';
 
 const formatRupiah = (value) => {
   const num = Number(value || 0);
@@ -65,6 +65,7 @@ export default function CetakBisyaroh() {
   const [expenses, setExpenses] = useState([]);
   const [totalData, setTotalData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
   const debounceRef = useRef(null);
 
   const load = async () => {
@@ -107,23 +108,47 @@ export default function CetakBisyaroh() {
     setTimeout(() => window.print(), 50);
   };
 
-  const teacherItems = items.filter(it => !it.isExpense);
+  const searchNeedle = String(search || '').trim().toLowerCase();
+  const matchesSearch = (...values) => !searchNeedle || values.some((value) =>
+    String(value || '').toLowerCase().includes(searchNeedle)
+  );
+  const allTeacherItems = items.filter(it => !it.isExpense);
+  const teacherItems = allTeacherItems.filter((item) => matchesSearch(
+    item.nama,
+    item.tugasTambahan1,
+    item.tugasTambahan2,
+    item.tugasTambahan3,
+    ...(item.extraCompensationItems || []).map((detail) => detail.label)
+  ));
+  const filteredExpenses = expenses.filter((item) => matchesSearch(
+    item.kategori,
+    item.penerima,
+    item.keterangan
+  ));
   const totalMengajar = teacherItems.reduce((sum, it) => sum + Number(it.bisyarohMengajar || 0), 0);
   const totalTransport = teacherItems.reduce((sum, it) => sum + Number(it.bisyarohTransport || 0) + Number(it.bisyarohTransportKegiatan || 0), 0);
   const totalTugas = teacherItems.reduce((sum, it) => sum + Number(it.honorTugas || 0), 0);
   const totalWiyathabakti = teacherItems.reduce((sum, it) => sum + Number(it.wiyathabakti || 0), 0);
   const totalDiterima = teacherItems.reduce((sum, it) => sum + getTeacherReceivedTotal(it), 0);
-  const totalExpense = expenses.reduce((sum, exp) => {
+  const totalExpense = filteredExpenses.reduce((sum, exp) => {
     const total = exp.totalNominal || (Number(exp.jumlah || 0) * Number(exp.nominal || 0));
     return sum + Number(total || 0);
   }, 0);
   const totalJamMengajar = teacherItems.reduce((sum, it) => sum + Number(it.totalHadir || 0), 0);
-  const extracurricularItems = items.filter(it => it.isExpense && it.expenseType === 'extracurricular');
-  const disciplineItems = items.filter(it => it.isExpense && it.expenseType === 'discipline');
+  const extracurricularItems = items.filter(it =>
+    it.isExpense &&
+    it.expenseType === 'extracurricular' &&
+    matchesSearch(it.teacherName, it.namaEkstra, it.teacherType, it.nama)
+  );
+  const disciplineItems = items.filter(it =>
+    it.isExpense &&
+    it.expenseType === 'discipline' &&
+    matchesSearch(it.nama, it.teacherName, it.keterangan)
+  );
   const totalExtracurricular = extracurricularItems.reduce((sum, it) => sum + Math.abs(Number(it.totalNominal || it.totalBisyaroh || 0)), 0);
   const totalDiscipline = disciplineItems.reduce((sum, it) => sum + Math.abs(Number(it.totalNominal || it.totalBisyaroh || 0)), 0);
-  const kepalaMadrasahName = findTeacherByTask(teacherItems, 'kepala madrasah');
-  const bendaharaName = findTeacherByTask(teacherItems, 'bendahara');
+  const kepalaMadrasahName = findTeacherByTask(allTeacherItems, 'kepala madrasah');
+  const bendaharaName = findTeacherByTask(allTeacherItems, 'bendahara');
   const totalRows = totalData ? [
     { no: 1, label: 'Wiyatabhakti', value: totalData.wiyathabakti || 0, color: 'var(--primary-500)' },
     { no: 2, label: 'Bisyaroh Mengajar', value: totalData.bisyarohMengajar || 0, color: 'var(--success-500)' },
@@ -134,7 +159,19 @@ export default function CetakBisyaroh() {
     { no: 7, label: 'Ekstrakurikuler', value: totalData.pengeluaranEkstrakurikuler || 0, color: '#be123c' },
     { no: 8, label: 'Kedisiplinan', value: totalData.pengeluaranKedisiplinan || 0, color: '#b45309' }
   ] : [];
-  const totalBisyarohValue = totalData?.total ?? totalRows.reduce((sum, row) => sum + Number(row.value || 0), 0);
+  const displayedTotalRows = searchNeedle ? [
+    { no: 1, label: 'Wiyatabhakti', value: totalWiyathabakti, color: 'var(--primary-500)' },
+    { no: 2, label: 'Bisyaroh Mengajar', value: totalMengajar, color: 'var(--success-500)' },
+    { no: 3, label: 'Transport Kehadiran', value: teacherItems.reduce((sum, item) => sum + Number(item.bisyarohTransport || 0), 0), color: 'var(--purple-500)' },
+    { no: 4, label: 'Transport Kegiatan', value: teacherItems.reduce((sum, item) => sum + Number(item.bisyarohTransportKegiatan || 0), 0), color: 'var(--cyan-500)' },
+    { no: 5, label: 'Tugas Tambahan', value: totalTugas, color: 'var(--orange-500)' },
+    { no: 6, label: 'Pengeluaran Lain', value: totalExpense, color: 'var(--danger-500)' },
+    { no: 7, label: 'Ekstrakurikuler', value: totalExtracurricular, color: '#be123c' },
+    { no: 8, label: 'Kedisiplinan', value: totalDiscipline, color: '#b45309' }
+  ] : totalRows;
+  const totalBisyarohValue = searchNeedle
+    ? displayedTotalRows.reduce((sum, row) => sum + Number(row.value || 0), 0)
+    : (totalData?.total ?? totalRows.reduce((sum, row) => sum + Number(row.value || 0), 0));
 
   return (
     <div>
@@ -147,6 +184,16 @@ export default function CetakBisyaroh() {
           </div>
           <span style={{ color: 'var(--muted)' }}>s/d</span>
           <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <div style={{ position: 'relative', minWidth: 230, flex: '1 1 230px', maxWidth: 340 }}>
+            <Search size={17} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Cari guru, ekstra, atau kategori…"
+              style={{ width: '100%', paddingLeft: 35 }}
+            />
+          </div>
           <button onClick={print}>
             <Printer size={18} /> Cetak PDF (Landscape)
           </button>
@@ -258,7 +305,7 @@ export default function CetakBisyaroh() {
               </tr>
             </thead>
             <tbody>
-              {expenses.map((exp, idx) => (
+              {filteredExpenses.map((exp, idx) => (
                 <tr key={exp.id}>
                   <td className="center">{idx + 1}</td>
                   <td className="text-left">{exp.kategori}</td>
@@ -268,7 +315,7 @@ export default function CetakBisyaroh() {
                   <td className="print-ttd text-left">{idx + 1}</td>
                 </tr>
               ))}
-              {expenses.length > 0 && (
+              {filteredExpenses.length > 0 && (
                 <tr className="cetak-grand-row">
                   <td colSpan="4">TOTAL PENGELUARAN LAIN</td>
                   <td>{formatRupiah(totalExpense)}</td>
@@ -277,7 +324,7 @@ export default function CetakBisyaroh() {
               )}
             </tbody>
           </table>
-          {expenses.length === 0 && !loading && <div className="empty">Belum ada pengeluaran.</div>}
+          {filteredExpenses.length === 0 && !loading && <div className="empty">{search ? 'Tidak ada pengeluaran yang cocok.' : 'Belum ada pengeluaran.'}</div>}
 
         </div>
       </div>
@@ -403,7 +450,7 @@ export default function CetakBisyaroh() {
                 </tr>
               </thead>
               <tbody>
-                {totalRows.map(row => (
+                {displayedTotalRows.map(row => (
                   <tr key={row.no}>
                     <td className="center">{row.no}</td>
                     <td>

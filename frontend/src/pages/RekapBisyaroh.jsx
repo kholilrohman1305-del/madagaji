@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../api';
 import {
   Receipt, Calendar, Plus, Printer, Users, X, Save,
-  Calculator, Lock, Unlock, RefreshCw, CheckCircle2, Clock3
+  Calculator, Lock, Unlock, RefreshCw, CheckCircle2, Clock3, Search
 } from 'lucide-react';
 
 const formatRupiah = (value) => {
@@ -33,6 +33,7 @@ export default function RekapBisyaroh() {
   const [payrollState, setPayrollState] = useState(null);
   const [payrollAction, setPayrollAction] = useState('');
   const [showGenerateGuide, setShowGenerateGuide] = useState(false);
+  const [search, setSearch] = useState('');
   const [activityForm, setActivityForm] = useState({
     tanggal: new Date().toISOString().slice(0, 10),
     nama: '',
@@ -170,6 +171,22 @@ export default function RekapBisyaroh() {
 
   const sameMonth = startDate.slice(0, 7) === endDate.slice(0, 7);
   const selectedPeriod = startDate.slice(0, 7);
+  const filteredItems = useMemo(() => {
+    const needle = String(search || '').trim().toLowerCase();
+    if (!needle) return items;
+    return items.filter((item) => {
+      const extraDetails = (item.extraCompensationItems || [])
+        .map((detail) => `${detail.label || ''} ${detail.type || ''}`)
+        .join(' ');
+      return [
+        item.nama,
+        item.tugasTambahan1,
+        item.tugasTambahan2,
+        item.tugasTambahan3,
+        extraDetails
+      ].some((value) => String(value || '').toLowerCase().includes(needle));
+    });
+  }, [items, search]);
 
   const executePayrollAction = async (action, reason = '') => {
     setPayrollAction(action);
@@ -245,6 +262,16 @@ export default function RekapBisyaroh() {
           </div>
           <span style={{ color: 'var(--muted)' }}>s/d</span>
           <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <div style={{ position: 'relative', minWidth: 230, flex: '1 1 230px', maxWidth: 340 }}>
+            <Search size={17} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Cari nama guru atau bisyaroh…"
+              style={{ width: '100%', paddingLeft: 35 }}
+            />
+          </div>
           <button className="secondary" onClick={() => setShowActivityModal(true)}>
             <Plus size={18} /> Transport Kegiatan
           </button>
@@ -370,7 +397,7 @@ export default function RekapBisyaroh() {
               </tr>
             </thead>
             <tbody>
-              {items.map((it, idx) => (
+              {filteredItems.map((it, idx) => (
                 <tr key={idx}>
                   <td style={{ fontWeight: 600 }}>{it.nama}</td>
                   <td>{it.tmt || '-'}</td>
@@ -467,7 +494,14 @@ export default function RekapBisyaroh() {
             Nilai jumlah transport akan dibagi otomatis ke tiap bulan dalam periode.
           </div>
         )}
-        {items.length === 0 && !loading && <div className="empty">Belum ada data.</div>}
+        {filteredItems.length === 0 && !loading && (
+          <div className="empty">{search ? `Tidak ada data yang cocok dengan “${search}”.` : 'Belum ada data.'}</div>
+        )}
+        {search && filteredItems.length > 0 && (
+          <div style={{ marginTop: 10, color: 'var(--muted)', fontSize: 12 }}>
+            Menampilkan {filteredItems.length} dari {items.length} guru.
+          </div>
+        )}
         {loading && <div className="empty">Memuat...</div>}
       </div>
 

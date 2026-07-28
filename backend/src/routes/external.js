@@ -108,8 +108,14 @@ router.get('/class-subject-settings', async (req, res, next) => {
 // GET /api/external/payslip/:guruId?period=YYYY-MM - one teacher's bisyaroh breakdown
 router.get('/payslip/:guruId', async (req, res, next) => {
   try {
-    const guruId = String(req.params.guruId || '').trim();
-    if (!guruId) return res.status(400).json({ success: false, message: 'guruId wajib diisi.' });
+    const rawGuruId = String(req.params.guruId || '').trim();
+    if (!rawGuruId) return res.status(400).json({ success: false, message: 'guruId wajib diisi.' });
+    const guruId = String(req.query.source || '').trim() === 'extra_teacher'
+      ? String(-(1000000000 + Number(rawGuruId)))
+      : rawGuruId;
+    if (String(req.query.source || '').trim() === 'extra_teacher' && !/^\d+$/.test(rawGuruId)) {
+      return res.status(400).json({ success: false, message: 'ID Guru Ekstra tidak valid.' });
+    }
     const { startDate, endDate } = resolvePeriodRange(req.query.period);
     const period = startDate.slice(0, 7);
     const data = await payroll.getPayrollSnapshotPayslip(period, guruId);
