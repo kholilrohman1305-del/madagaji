@@ -436,23 +436,29 @@ async function ensureExtracurricularMonthRows(periode) {
     `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`,
     row.ignore_reason || 'manual_delete'
   ]));
-  const [masterAssignments] = await masterPool.query(`
-    SELECT e.id AS extracurricular_id, e.name AS extracurricular_name,
-           e.pembina_teacher_id, t.name AS pendamping_name,
-           e.pembina_extra_teacher_id,
-           COALESCE(e.pembina_extra_source_type, 'extra_teacher') AS pembina_extra_source_type,
-           COALESCE(gt.name, et.name) AS extra_teacher_name
-    FROM extracurriculars e
-    LEFT JOIN teachers t ON t.id = e.pembina_teacher_id AND t.is_active = 1
-    LEFT JOIN teachers gt
-      ON COALESCE(e.pembina_extra_source_type, 'extra_teacher') = 'teacher'
-     AND gt.id = e.pembina_extra_teacher_id AND gt.is_active = 1
-    LEFT JOIN extra_teachers et
-      ON COALESCE(e.pembina_extra_source_type, 'extra_teacher') = 'extra_teacher'
-     AND et.id = e.pembina_extra_teacher_id AND et.is_active = 1
-    WHERE e.is_active = 1
-    ORDER BY e.name
-  `).catch(() => [[]]);
+  let masterAssignments = [];
+  let masterSyncAvailable = true;
+  try {
+    [masterAssignments] = await masterPool.query(`
+      SELECT e.id AS extracurricular_id, e.name AS extracurricular_name,
+             e.pembina_teacher_id, t.name AS pendamping_name,
+             e.pembina_extra_teacher_id,
+             COALESCE(e.pembina_extra_source_type, 'extra_teacher') AS pembina_extra_source_type,
+             COALESCE(gt.name, et.name) AS extra_teacher_name
+      FROM extracurriculars e
+      LEFT JOIN teachers t ON t.id = e.pembina_teacher_id AND t.is_active = 1
+      LEFT JOIN teachers gt
+        ON COALESCE(e.pembina_extra_source_type, 'extra_teacher') = 'teacher'
+       AND gt.id = e.pembina_extra_teacher_id AND gt.is_active = 1
+      LEFT JOIN extra_teachers et
+        ON COALESCE(e.pembina_extra_source_type, 'extra_teacher') = 'extra_teacher'
+       AND et.id = e.pembina_extra_teacher_id AND et.is_active = 1
+      WHERE e.is_active = 1
+      ORDER BY e.name
+    `);
+  } catch (_) {
+    masterSyncAvailable = false;
+  }
   const rates = await extracurricularJournals.getRates();
   const assignments = masterAssignments.flatMap((row) => [
     row.pembina_teacher_id && row.pendamping_name ? {
@@ -482,7 +488,7 @@ async function ensureExtracurricularMonthRows(periode) {
   for (const assignment of assignments) {
     const sourceKey = `${assignment.extraId}|${assignment.sourceTeacherId}|${assignment.teacherType}`;
     const ignoreReason = ignoredSources.get(sourceKey);
-    if (ignoreReason === 'role_transition') {
+    if (ignoreReason === 'role_transition' || ignoreReason === 'source_removed') {
       await pool.query(`
         DELETE FROM pengeluaran_ekstrakurikuler_ignored
         WHERE periode = ? AND source_extra_id = ?
@@ -620,6 +626,51 @@ async function ensureExtracurricularMonthRows(periode) {
       nama_ekstra: assignment.extraName
     });
     visibleSourceKeys.add(visibleKey);
+  }
+  const [[periodState]] = await pool.query(
+    "SELECT DATE_FORMAT(CURDATE(), '%Y-%m') AS current_period"
+  );
+  if (masterSyncAvailable && String(periode) >= String(periodState?.current_period || '')) {
+    const [latestSyncedRows] = await pool.query(`
+      SELECT id, source_extra_id, source_extra_teacher_id, teacher_type,
+             teacher_name, nama_ekstra
+      FROM pengeluaran_ekstrakurikuler
+      WHERE tanggal BETWEEN ? AND LAST_DAY(?) AND source_synced = 1
+    `, [monthStart, monthStart]);
+    const removedSourceRows = latestSyncedRows.filter((row) => {
+      const key = `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`;
+      return !activeAssignmentSourceKeys.has(key);
+    });
+    if (removedSourceRows.length) {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        for (const row of removedSourceRows) {
+          await conn.query(`
+            INSERT INTO pengeluaran_ekstrakurikuler_ignored
+              (periode, source_extra_id, source_extra_teacher_id, teacher_type,
+               teacher_name, nama_ekstra, ignore_reason)
+            VALUES (?, ?, ?, ?, ?, ?, 'source_removed')
+            ON DUPLICATE KEY UPDATE
+              teacher_name = VALUES(teacher_name), nama_ekstra = VALUES(nama_ekstra),
+              ignore_reason = IF(ignore_reason = 'manual_delete', ignore_reason, 'source_removed')
+          `, [
+            periode, row.source_extra_id, row.source_extra_teacher_id,
+            row.teacher_type, row.teacher_name, row.nama_ekstra
+          ]);
+        }
+        await conn.query(
+          'DELETE FROM pengeluaran_ekstrakurikuler WHERE id IN (?)',
+          [removedSourceRows.map((row) => row.id)]
+        );
+        await conn.commit();
+      } catch (error) {
+        await conn.rollback();
+        throw error;
+      } finally {
+        conn.release();
+      }
+    }
   }
   await consolidateExtracurricularRows(monthStart, monthStart);
 
