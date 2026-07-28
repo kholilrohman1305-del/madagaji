@@ -100,7 +100,10 @@ function normalizeType(value) {
 
 function syntheticTeacherId(sourceTeacherId, extracurricularId, teacherType) {
   const source = Number(sourceTeacherId) || Number(extracurricularId) || 0;
-  return teacherType === TYPE_PENDAMPING ? source : -(1000000000 + source);
+  if (teacherType === TYPE_PENDAMPING) return source;
+  return source < 0
+    ? -(2000000000 + Math.abs(source))
+    : -(1000000000 + source);
 }
 
 async function getRates(conn = pool) {
@@ -115,10 +118,18 @@ async function getRates(conn = pool) {
   };
 }
 
-async function resolveCanonicalTeacherName(teacherType, sourceTeacherId, incomingName) {
+function sourceIdentityId(teacherType, sourceKind, sourceTeacherId) {
+  const id = Math.abs(Number(sourceTeacherId) || 0);
+  if (teacherType === TYPE_GURU_EKSTRA && sourceKind === 'teacher') return -id;
+  return id;
+}
+
+async function resolveCanonicalTeacherName(teacherType, sourceKind, sourceTeacherId, incomingName) {
   const id = Number(sourceTeacherId);
   if (!id) return incomingName;
-  const table = teacherType === TYPE_PENDAMPING ? 'teachers' : 'extra_teachers';
+  const table = teacherType === TYPE_PENDAMPING || sourceKind === 'teacher'
+    ? 'teachers'
+    : 'extra_teachers';
   try {
     const [rows] = await masterPool.query(
       `SELECT name FROM ${table} WHERE id = ? LIMIT 1`,
@@ -249,8 +260,10 @@ async function syncJournal(payload) {
     for (const rawTeacher of rawTeachers) {
       const teacherType = normalizeType(rawTeacher.teacher_type);
       const incomingTeacherName = String(rawTeacher.teacher_name || '').trim();
+      const sourceKind = rawTeacher.source_teacher_kind === 'teacher' ? 'teacher' : 'extra_teacher';
       const teacherName = await resolveCanonicalTeacherName(
         teacherType,
+        sourceKind,
         rawTeacher.source_teacher_id,
         incomingTeacherName
       );
@@ -259,7 +272,11 @@ async function syncJournal(payload) {
       const before = beforeRows.find((row) => row.teacher_type === teacherType);
       const event = {
         ...eventBase,
-        extra_teacher_id: Number(rawTeacher.source_teacher_id) || null,
+        extra_teacher_id: sourceIdentityId(
+          teacherType,
+          sourceKind,
+          rawTeacher.source_teacher_id
+        ) || null,
         teacher_name: teacherName,
         teacher_type: teacherType,
         attendance_status: rawTeacher.status === 'Hadir' ? 'Hadir' : 'Tidak Hadir',
@@ -314,10 +331,17 @@ async function getMatrix(period) {
   const [masterRows] = await masterPool.query(`
     SELECT e.id, e.name, e.implementation_day, e.start_time, e.end_time,
            e.pembina_teacher_id, t.name AS pendamping_name,
-           e.pembina_extra_teacher_id, et.name AS extra_teacher_name
+           e.pembina_extra_teacher_id,
+           COALESCE(e.pembina_extra_source_type, 'extra_teacher') AS pembina_extra_source_type,
+           COALESCE(gt.name, et.name) AS extra_teacher_name
     FROM extracurriculars e
     LEFT JOIN teachers t ON t.id = e.pembina_teacher_id
-    LEFT JOIN extra_teachers et ON et.id = e.pembina_extra_teacher_id
+    LEFT JOIN teachers gt
+      ON COALESCE(e.pembina_extra_source_type, 'extra_teacher') = 'teacher'
+     AND gt.id = e.pembina_extra_teacher_id
+    LEFT JOIN extra_teachers et
+      ON COALESCE(e.pembina_extra_source_type, 'extra_teacher') = 'extra_teacher'
+     AND et.id = e.pembina_extra_teacher_id
     WHERE e.is_active = 1
     ORDER BY e.implementation_day, e.start_time, e.name
   `);

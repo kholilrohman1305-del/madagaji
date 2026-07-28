@@ -429,10 +429,17 @@ async function ensureExtracurricularMonthRows(periode) {
   const [masterAssignments] = await masterPool.query(`
     SELECT e.id AS extracurricular_id, e.name AS extracurricular_name,
            e.pembina_teacher_id, t.name AS pendamping_name,
-           e.pembina_extra_teacher_id, et.name AS extra_teacher_name
+           e.pembina_extra_teacher_id,
+           COALESCE(e.pembina_extra_source_type, 'extra_teacher') AS pembina_extra_source_type,
+           COALESCE(gt.name, et.name) AS extra_teacher_name
     FROM extracurriculars e
     LEFT JOIN teachers t ON t.id = e.pembina_teacher_id AND t.is_active = 1
-    LEFT JOIN extra_teachers et ON et.id = e.pembina_extra_teacher_id AND et.is_active = 1
+    LEFT JOIN teachers gt
+      ON COALESCE(e.pembina_extra_source_type, 'extra_teacher') = 'teacher'
+     AND gt.id = e.pembina_extra_teacher_id AND gt.is_active = 1
+    LEFT JOIN extra_teachers et
+      ON COALESCE(e.pembina_extra_source_type, 'extra_teacher') = 'extra_teacher'
+     AND et.id = e.pembina_extra_teacher_id AND et.is_active = 1
     WHERE e.is_active = 1
     ORDER BY e.name
   `).catch(() => [[]]);
@@ -449,8 +456,12 @@ async function ensureExtracurricularMonthRows(periode) {
     row.pembina_extra_teacher_id && row.extra_teacher_name ? {
       extraId: Number(row.extracurricular_id),
       extraName: row.extracurricular_name,
-      sourceTeacherId: Number(row.pembina_extra_teacher_id),
-      teacherId: -(1000000000 + Number(row.pembina_extra_teacher_id)),
+      sourceTeacherId: row.pembina_extra_source_type === 'teacher'
+        ? -Number(row.pembina_extra_teacher_id)
+        : Number(row.pembina_extra_teacher_id),
+      teacherId: row.pembina_extra_source_type === 'teacher'
+        ? -(2000000000 + Number(row.pembina_extra_teacher_id))
+        : -(1000000000 + Number(row.pembina_extra_teacher_id)),
       teacherName: row.extra_teacher_name,
       teacherType: extracurricularJournals.TYPE_GURU_EKSTRA
     } : null
