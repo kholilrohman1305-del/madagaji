@@ -47,6 +47,14 @@ const findTeacherByTask = (items, keyword) => {
   return found?.nama || '-';
 };
 
+const getTeacherReceivedTotal = (item) => (
+  Number(item.bisyarohMengajar || 0) +
+  Number(item.bisyarohTransport || 0) +
+  Number(item.bisyarohTransportKegiatan || 0) +
+  Number(item.honorTugas || 0) +
+  Number(item.wiyathabakti || 0)
+);
+
 export default function CetakBisyaroh() {
   const today = new Date();
   const defaultStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -104,7 +112,7 @@ export default function CetakBisyaroh() {
   const totalTransport = teacherItems.reduce((sum, it) => sum + Number(it.bisyarohTransport || 0) + Number(it.bisyarohTransportKegiatan || 0), 0);
   const totalTugas = teacherItems.reduce((sum, it) => sum + Number(it.honorTugas || 0), 0);
   const totalWiyathabakti = teacherItems.reduce((sum, it) => sum + Number(it.wiyathabakti || 0), 0);
-  const totalDiterima = teacherItems.reduce((sum, it) => sum + Number(it.totalBisyaroh || 0), 0);
+  const totalDiterima = teacherItems.reduce((sum, it) => sum + getTeacherReceivedTotal(it), 0);
   const totalExpense = expenses.reduce((sum, exp) => {
     const total = exp.totalNominal || (Number(exp.jumlah || 0) * Number(exp.nominal || 0));
     return sum + Number(total || 0);
@@ -208,7 +216,7 @@ export default function CetakBisyaroh() {
                     )}
                   </td>
                   <td>{formatRupiah(it.wiyathabakti)}</td>
-                  <td className="cetak-total-cell">{formatRupiah(it.totalBisyaroh)}</td>
+                  <td className="cetak-total-cell">{formatRupiah(getTeacherReceivedTotal(it))}</td>
                   <td className="print-ttd">{idx + 1}</td>
                 </tr>
                 );

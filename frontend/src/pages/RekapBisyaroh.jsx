@@ -365,7 +365,7 @@ export default function RekapBisyaroh() {
                 <th>Tugas 1</th>
                 <th>Tugas 2</th>
                 <th>Tugas 3</th>
-                <th>Kompensasi Tambahan</th>
+                <th style={{ minWidth: 250 }}>Bisyaroh Tambahan</th>
                 <th style={{ background: 'var(--success-100)' }}>Jumlah Diterima</th>
               </tr>
             </thead>
@@ -415,7 +415,46 @@ export default function RekapBisyaroh() {
                   <td>{it.tugasTambahan1 || '-'}</td>
                   <td>{it.tugasTambahan2 || '-'}</td>
                   <td>{it.tugasTambahan3 || '-'}</td>
-                  <td>{formatRupiah(it.extraCompensationTotal || 0)}</td>
+                  <td style={{ minWidth: 250 }}>
+                    {(it.extraCompensationItems || []).length === 0 ? (
+                      <span style={{ color: 'var(--muted)' }}>-</span>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {(it.extraCompensationItems || []).map((detail, detailIdx) => (
+                          <div
+                            key={`${detail.type || 'tambahan'}-${detail.label || detailIdx}-${detailIdx}`}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'minmax(0, 1fr) auto',
+                              gap: 10,
+                              paddingBottom: 7,
+                              borderBottom: '1px dashed var(--border)'
+                            }}
+                          >
+                            <div>
+                              <strong style={{ display: 'block', fontSize: 12 }}>{detail.label || 'Bisyaroh Tambahan'}</strong>
+                              <span style={{ color: 'var(--muted)', fontSize: 11 }}>
+                                {Number(detail.qty || 0).toLocaleString('id-ID')} × {formatRupiah(detail.rate || 0)}
+                              </span>
+                            </div>
+                            <strong style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{formatRupiah(detail.total || 0)}</strong>
+                          </div>
+                        ))}
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                          paddingTop: 2,
+                          fontSize: 12,
+                          color: 'var(--primary-700)',
+                          fontWeight: 800
+                        }}>
+                          <span>Total Tambahan</span>
+                          <span>{formatRupiah(it.extraCompensationTotal || 0)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </td>
                   <td style={{ fontWeight: 700, color: 'var(--success-600)' }}>{formatRupiah(it.totalBisyaroh)}</td>
                 </tr>
               ))}
