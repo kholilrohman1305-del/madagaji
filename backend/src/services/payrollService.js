@@ -7,6 +7,80 @@ const extracurricularJournals = require('./extracurricularJournalService');
 const configCache = new TTLCache(30000);
 let expenseIdModeCache = null; // 'auto' | 'string'
 let manualActivityTableReady = false;
+let payrollSnapshotTablesReady = false;
+
+function normalizePayrollPeriod(value) {
+  const period = String(value || '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+    const error = new Error('Periode wajib berformat YYYY-MM.');
+    error.status = 400;
+    throw error;
+  }
+  return period;
+}
+
+function payrollPeriodRange(periodValue) {
+  const period = normalizePayrollPeriod(periodValue);
+  const [year, month] = period.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  return {
+    period,
+    startDate: `${period}-01`,
+    endDate: `${period}-${String(lastDay).padStart(2, '0')}`
+  };
+}
+
+async function ensurePayrollSnapshotTables() {
+  if (payrollSnapshotTablesReady) return;
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS payroll_periods (
+      period CHAR(7) PRIMARY KEY,
+      status VARCHAR(20) NOT NULL DEFAULT 'generated',
+      generated_at DATETIME NULL,
+      generated_by VARCHAR(100) NULL,
+      locked_at DATETIME NULL,
+      locked_by VARCHAR(100) NULL,
+      unlocked_at DATETIME NULL,
+      unlocked_by VARCHAR(100) NULL,
+      unlock_reason VARCHAR(500) NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_payroll_period_status (status)
+    )`
+  );
+  for (const definition of [
+    'ADD COLUMN unlocked_at DATETIME NULL',
+    'ADD COLUMN unlocked_by VARCHAR(100) NULL',
+    'ADD COLUMN unlock_reason VARCHAR(500) NULL'
+  ]) {
+    try {
+      await pool.query(`ALTER TABLE payroll_periods ${definition}`);
+    } catch (error) {
+      if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
+  }
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS payroll_snapshots (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      period CHAR(7) NOT NULL,
+      guru_id VARCHAR(32) NOT NULL,
+      teacher_name VARCHAR(255) NOT NULL,
+      total DECIMAL(18,2) NOT NULL DEFAULT 0,
+      payload_json LONGTEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_payroll_snapshot_teacher (period, guru_id),
+      INDEX idx_payroll_snapshot_period (period),
+      CONSTRAINT fk_payroll_snapshot_period
+        FOREIGN KEY (period) REFERENCES payroll_periods(period)
+        ON DELETE CASCADE ON UPDATE CASCADE
+    )`
+  );
+  payrollSnapshotTablesReady = true;
+}
+
+function payrollActorName(actor) {
+  return String(actor?.display_name || actor?.username || actor?.id || 'admin').trim().slice(0, 100);
+}
 
 async function ensureManualActivityTable() {
   if (manualActivityTableReady) return;
@@ -2011,9 +2085,10 @@ async function getPayslipData(startDate, endDate, guruId) {
   };
 }
 
-async function getAllPayslipsData(startDate, endDate) {
+async function getAllPayslipsData(startDate, endDate, options = {}) {
   const summaryData = await getTeacherAttendanceSummary(startDate, endDate);
-  const allTeacherData = summaryData.filter(i => !i.isExpense && i.totalBisyaroh > 0);
+  const includeZero = options.includeZero === true;
+  const allTeacherData = summaryData.filter(i => !i.isExpense && (includeZero || i.totalBisyaroh > 0));
 
   const configMap = await getConfigMap();
   const rateMengajar = parseFloat(configMap.get('RATE_MENGAJAR')) || 0;
@@ -2023,6 +2098,7 @@ async function getAllPayslipsData(startDate, endDate) {
   const currentYear = new Date().getFullYear();
 
   return allTeacherData.map(t => ({
+    guruId: String(t.guruId),
     transportRate: t.transportRate || 0,
     nama: t.nama,
     periode: monthKey(startDate),
@@ -2045,8 +2121,241 @@ async function getAllPayslipsData(startDate, endDate) {
       })),
       { nama: 'Tugas Tambahan', qty: 1, rate: t.honorTugas, total: t.honorTugas }
     ],
+    totalPendapatan: t.totalBisyaroh,
     gajiBersih: t.totalBisyaroh
   }));
+}
+
+async function getPayrollPeriodStatus(periodValue) {
+  const { period } = payrollPeriodRange(periodValue);
+  await ensurePayrollSnapshotTables();
+  const [rows] = await pool.query(
+    `SELECT p.period, p.status, p.generated_at, p.generated_by, p.locked_at, p.locked_by,
+            p.unlocked_at, p.unlocked_by, p.unlock_reason,
+            COUNT(s.id) AS teacher_count, COALESCE(SUM(s.total), 0) AS grand_total
+     FROM payroll_periods p
+     LEFT JOIN payroll_snapshots s ON s.period = p.period
+     WHERE p.period = ?
+     GROUP BY p.period, p.status, p.generated_at, p.generated_by, p.locked_at, p.locked_by,
+              p.unlocked_at, p.unlocked_by, p.unlock_reason
+     LIMIT 1`,
+    [period]
+  );
+  if (!rows.length) {
+    return {
+      period,
+      status: 'not_generated',
+      generatedAt: null,
+      generatedBy: null,
+      lockedAt: null,
+      lockedBy: null,
+      unlockedAt: null,
+      unlockedBy: null,
+      unlockReason: null,
+      teacherCount: 0,
+      grandTotal: 0
+    };
+  }
+  const row = rows[0];
+  return {
+    period: row.period,
+    status: row.status === 'locked' ? 'locked' : 'generated',
+    generatedAt: row.generated_at || null,
+    generatedBy: row.generated_by || null,
+    lockedAt: row.locked_at || null,
+    lockedBy: row.locked_by || null,
+    unlockedAt: row.unlocked_at || null,
+    unlockedBy: row.unlocked_by || null,
+    unlockReason: row.unlock_reason || null,
+    teacherCount: Number(row.teacher_count || 0),
+    grandTotal: Number(row.grand_total || 0)
+  };
+}
+
+async function generatePayrollPeriod(periodValue, actor) {
+  const { period, startDate, endDate } = payrollPeriodRange(periodValue);
+  await ensurePayrollSnapshotTables();
+  const current = await getPayrollPeriodStatus(period);
+  if (current.status === 'locked') {
+    const error = new Error('Bisyaroh periode ini sudah dikunci. Buka kunci sebelum melakukan generate ulang.');
+    error.status = 409;
+    throw error;
+  }
+
+  const payslips = await getAllPayslipsData(startDate, endDate, { includeZero: true });
+  const actorName = payrollActorName(actor);
+  const generatedAt = new Date();
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(
+      `INSERT INTO payroll_periods
+         (period, status, generated_at, generated_by, locked_at, locked_by,
+          unlocked_at, unlocked_by, unlock_reason)
+       VALUES (?, 'generated', ?, ?, NULL, NULL, NULL, NULL, NULL)
+       ON DUPLICATE KEY UPDATE
+         status='generated', generated_at=VALUES(generated_at), generated_by=VALUES(generated_by),
+         locked_at=NULL, locked_by=NULL, unlocked_at=NULL, unlocked_by=NULL, unlock_reason=NULL`,
+      [period, generatedAt, actorName]
+    );
+    await connection.query('DELETE FROM payroll_snapshots WHERE period = ?', [period]);
+    if (payslips.length) {
+      const values = payslips.map((payslip) => [
+        period,
+        String(payslip.guruId),
+        String(payslip.nama || '-'),
+        Number(payslip.gajiBersih || 0),
+        JSON.stringify({
+          ...payslip,
+          periode: period,
+          payrollStatus: 'generated',
+          generatedAt: generatedAt.toISOString(),
+          generatedBy: actorName,
+          lockedAt: null,
+          lockedBy: null
+        })
+      ]);
+      await connection.query(
+        `INSERT INTO payroll_snapshots
+           (period, guru_id, teacher_name, total, payload_json)
+         VALUES ?`,
+        [values]
+      );
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  return {
+    success: true,
+    message: current.status === 'generated'
+      ? `Bisyaroh ${period} berhasil digenerate ulang.`
+      : `Bisyaroh ${period} berhasil digenerate.`,
+    ...(await getPayrollPeriodStatus(period))
+  };
+}
+
+async function lockPayrollPeriod(periodValue, actor) {
+  const { period } = payrollPeriodRange(periodValue);
+  await ensurePayrollSnapshotTables();
+  const current = await getPayrollPeriodStatus(period);
+  if (current.status === 'not_generated') {
+    const error = new Error('Generate Bisyaroh terlebih dahulu sebelum mengunci periode.');
+    error.status = 409;
+    throw error;
+  }
+  const actorName = payrollActorName(actor);
+  const lockedAt = new Date();
+  await pool.query(
+    `UPDATE payroll_periods
+     SET status='locked', locked_at=?, locked_by=?
+     WHERE period=?`,
+    [lockedAt, actorName, period]
+  );
+  const [rows] = await pool.query(
+    'SELECT id, payload_json FROM payroll_snapshots WHERE period = ?',
+    [period]
+  );
+  for (const row of rows) {
+    const payload = JSON.parse(row.payload_json);
+    payload.payrollStatus = 'locked';
+    payload.lockedAt = lockedAt.toISOString();
+    payload.lockedBy = actorName;
+    await pool.query(
+      'UPDATE payroll_snapshots SET payload_json = ? WHERE id = ?',
+      [JSON.stringify(payload), row.id]
+    );
+  }
+  return {
+    success: true,
+    message: `Bisyaroh ${period} berhasil dikunci.`,
+    ...(await getPayrollPeriodStatus(period))
+  };
+}
+
+async function unlockPayrollPeriod(periodValue, actor, reasonValue) {
+  const { period } = payrollPeriodRange(periodValue);
+  await ensurePayrollSnapshotTables();
+  const reason = String(reasonValue || '').trim();
+  if (!reason) {
+    const error = new Error('Alasan membuka kunci wajib diisi.');
+    error.status = 400;
+    throw error;
+  }
+  const current = await getPayrollPeriodStatus(period);
+  if (current.status !== 'locked') {
+    const error = new Error('Periode Bisyaroh ini tidak sedang terkunci.');
+    error.status = 409;
+    throw error;
+  }
+  const actorName = payrollActorName(actor);
+  const unlockedAt = new Date();
+  await pool.query(
+    `UPDATE payroll_periods
+     SET status='generated', locked_at=NULL, locked_by=NULL,
+         unlocked_at=?, unlocked_by=?, unlock_reason=?
+     WHERE period=?`,
+    [unlockedAt, actorName, reason.slice(0, 500), period]
+  );
+  const [rows] = await pool.query(
+    'SELECT id, payload_json FROM payroll_snapshots WHERE period = ?',
+    [period]
+  );
+  for (const row of rows) {
+    const payload = JSON.parse(row.payload_json);
+    payload.payrollStatus = 'generated';
+    payload.lockedAt = null;
+    payload.lockedBy = null;
+    payload.unlockedAt = unlockedAt.toISOString();
+    payload.unlockedBy = actorName;
+    payload.unlockReason = reason.slice(0, 500);
+    await pool.query(
+      'UPDATE payroll_snapshots SET payload_json = ? WHERE id = ?',
+      [JSON.stringify(payload), row.id]
+    );
+  }
+  return {
+    success: true,
+    message: `Kunci Bisyaroh ${period} berhasil dibuka. Generate ulang jika ada koreksi data.`,
+    ...(await getPayrollPeriodStatus(period))
+  };
+}
+
+async function getPayrollSnapshotPayslip(periodValue, guruIdValue) {
+  const { period } = payrollPeriodRange(periodValue);
+  const guruId = String(guruIdValue || '').trim();
+  if (!guruId) {
+    const error = new Error('guruId wajib diisi.');
+    error.status = 400;
+    throw error;
+  }
+  const state = await getPayrollPeriodStatus(period);
+  if (state.status === 'not_generated') {
+    return { ...state, payslip: null };
+  }
+  const [rows] = await pool.query(
+    `SELECT payload_json
+     FROM payroll_snapshots
+     WHERE period = ? AND guru_id = ?
+     LIMIT 1`,
+    [period, guruId]
+  );
+  if (!rows.length) return { ...state, payslip: null };
+  const payslip = JSON.parse(rows[0].payload_json);
+  return {
+    ...state,
+    payslip: {
+      ...payslip,
+      payrollStatus: state.status,
+      generatedAt: state.generatedAt,
+      generatedBy: state.generatedBy,
+      lockedAt: state.lockedAt,
+      lockedBy: state.lockedBy
+    }
+  };
 }
 
 module.exports = {
@@ -2059,6 +2368,11 @@ module.exports = {
   saveManualActivity,
   getPayslipData,
   getAllPayslipsData,
+  getPayrollPeriodStatus,
+  generatePayrollPeriod,
+  lockPayrollPeriod,
+  unlockPayrollPeriod,
+  getPayrollSnapshotPayslip,
   getOtherExpenses,
   getActiveTeachers,
   getExtracurricularMasterOptions,

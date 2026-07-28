@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../api';
-import { Receipt, Calendar, Plus, Printer, Users, X, Save } from 'lucide-react';
+import {
+  Receipt, Calendar, Plus, Printer, Users, X, Save,
+  Calculator, Lock, Unlock, RefreshCw, CheckCircle2, Clock3
+} from 'lucide-react';
 
 const formatRupiah = (value) => {
   const num = Number(value || 0);
@@ -27,6 +30,8 @@ export default function RekapBisyaroh() {
   const [manualActivityMap, setManualActivityMap] = useState({});
   const [savingTransport, setSavingTransport] = useState({});
   const [savingActivity, setSavingActivity] = useState({});
+  const [payrollState, setPayrollState] = useState(null);
+  const [payrollAction, setPayrollAction] = useState('');
   const [activityForm, setActivityForm] = useState({
     tanggal: new Date().toISOString().slice(0, 10),
     nama: '',
@@ -47,6 +52,15 @@ export default function RekapBisyaroh() {
     }
   };
 
+  const loadPayrollState = async (period = startDate.slice(0, 7)) => {
+    if (startDate.slice(0, 7) !== endDate.slice(0, 7)) {
+      setPayrollState(null);
+      return;
+    }
+    const response = await api.get('/payroll/period-status', { params: { periode: period } });
+    setPayrollState(response.data || null);
+  };
+
   useEffect(() => {
     api.get('/master/teachers').then(res => setTeachers(res.data || []));
   }, []);
@@ -59,6 +73,10 @@ export default function RekapBisyaroh() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+    loadPayrollState().catch(() => setPayrollState(null));
   }, [startDate, endDate]);
 
   useEffect(() => {
@@ -150,6 +168,39 @@ export default function RekapBisyaroh() {
   };
 
   const sameMonth = startDate.slice(0, 7) === endDate.slice(0, 7);
+  const selectedPeriod = startDate.slice(0, 7);
+
+  const runPayrollAction = async (action) => {
+    const labels = {
+      generate: payrollState?.status === 'generated' ? 'generate ulang' : 'generate',
+      lock: 'mengunci',
+      unlock: 'membuka kunci'
+    };
+    let reason = '';
+    if (action === 'unlock') {
+      reason = String(window.prompt('Tuliskan alasan membuka kunci Bisyaroh:') || '').trim();
+      if (!reason) return;
+    }
+    if (!window.confirm(`Yakin ingin ${labels[action]} Bisyaroh periode ${selectedPeriod}?`)) return;
+    setPayrollAction(action);
+    try {
+      const response = await api.post(`/payroll/${action}`, { periode: selectedPeriod, reason });
+      setPayrollState(response.data || null);
+      await load();
+    } finally {
+      setPayrollAction('');
+    }
+  };
+
+  const formatTimestamp = (value) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('id-ID', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  };
 
   const toggleTeacher = (guruId) => {
     setActivityForm(prev => {
@@ -188,6 +239,99 @@ export default function RekapBisyaroh() {
             <Printer size={18} /> Cetak PDF
           </button>
         </div>
+
+        {sameMonth && payrollState && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 16,
+            marginBottom: 18,
+            padding: 16,
+            borderRadius: 14,
+            border: `1px solid ${
+              payrollState.status === 'locked' ? 'var(--success-300)' :
+              payrollState.status === 'generated' ? 'var(--primary-300)' : 'var(--warning-300)'
+            }`,
+            background: payrollState.status === 'locked' ? 'var(--success-50)' :
+              payrollState.status === 'generated' ? 'var(--primary-50)' : 'var(--warning-50)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 240 }}>
+              <div style={{ marginTop: 2 }}>
+                {payrollState.status === 'locked'
+                  ? <Lock size={22} />
+                  : payrollState.status === 'generated'
+                    ? <CheckCircle2 size={22} />
+                    : <Clock3 size={22} />}
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, marginBottom: 4 }}>
+                  {payrollState.status === 'locked'
+                    ? 'Bisyaroh Terkunci'
+                    : payrollState.status === 'generated'
+                      ? 'Bisyaroh Sudah Digenerate'
+                      : 'Bisyaroh Belum Digenerate'}
+                </div>
+                <div style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.5 }}>
+                  {payrollState.status === 'not_generated' ? (
+                    <>Guru masih melihat Rp0 di MyMada sampai admin melakukan generate.</>
+                  ) : (
+                    <>
+                      {payrollState.teacherCount || 0} guru · {formatRupiah(payrollState.grandTotal)}
+                      {' · '}Dibuat {formatTimestamp(payrollState.generatedAt)}
+                      {payrollState.generatedBy ? ` oleh ${payrollState.generatedBy}` : ''}
+                      {payrollState.status === 'locked' && (
+                        <> · Dikunci {formatTimestamp(payrollState.lockedAt)}</>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {payrollState.status === 'not_generated' && (
+                <button
+                  className="secondary"
+                  onClick={() => runPayrollAction('generate')}
+                  disabled={Boolean(payrollAction)}
+                >
+                  <Calculator size={18} />
+                  {payrollAction === 'generate' ? 'Memproses...' : 'Generate Bisyaroh'}
+                </button>
+              )}
+              {payrollState.status === 'generated' && (
+                <>
+                  <button
+                    className="secondary"
+                    onClick={() => runPayrollAction('generate')}
+                    disabled={Boolean(payrollAction)}
+                  >
+                    <RefreshCw size={18} />
+                    {payrollAction === 'generate' ? 'Memproses...' : 'Generate Ulang'}
+                  </button>
+                  <button onClick={() => runPayrollAction('lock')} disabled={Boolean(payrollAction)}>
+                    <Lock size={18} />
+                    {payrollAction === 'lock' ? 'Mengunci...' : 'Kunci Bisyaroh'}
+                  </button>
+                </>
+              )}
+              {payrollState.status === 'locked' && (
+                <button className="outline" onClick={() => runPayrollAction('unlock')} disabled={Boolean(payrollAction)}>
+                  <Unlock size={18} />
+                  {payrollAction === 'unlock' ? 'Membuka...' : 'Buka Kunci'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!sameMonth && (
+          <div style={{ marginBottom: 18, padding: 12, background: 'var(--warning-50)', borderRadius: 8, fontSize: 13, color: 'var(--warning-600)' }}>
+            Generate Bisyaroh hanya tersedia untuk satu bulan penuh. Pilih tanggal awal dan akhir dalam bulan yang sama.
+          </div>
+        )}
 
         <div style={{ overflowX: 'auto' }}>
           <table className="table">

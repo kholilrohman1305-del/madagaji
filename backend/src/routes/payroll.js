@@ -1,5 +1,6 @@
 const express = require('express');
 const payroll = require('../services/payrollService');
+const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -8,6 +9,35 @@ router.get('/summary', async (req, res, next) => {
     const { startDate, endDate } = req.query;
     if (!startDate || !endDate) return res.status(400).json({ success: false, message: 'startDate dan endDate wajib.' });
     res.json(await payroll.getTeacherAttendanceSummary(startDate, endDate));
+  } catch (e) { next(e); }
+});
+
+router.get('/period-status', requireRole(['admin']), async (req, res, next) => {
+  try {
+    if (!req.query.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.getPayrollPeriodStatus(req.query.periode));
+  } catch (e) { next(e); }
+});
+
+router.post('/generate', requireRole(['admin']), async (req, res, next) => {
+  try {
+    if (!req.body?.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.generatePayrollPeriod(req.body.periode, req.user));
+  } catch (e) { next(e); }
+});
+
+router.post('/lock', requireRole(['admin']), async (req, res, next) => {
+  try {
+    if (!req.body?.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.lockPayrollPeriod(req.body.periode, req.user));
+  } catch (e) { next(e); }
+});
+
+router.post('/unlock', requireRole(['admin']), async (req, res, next) => {
+  try {
+    if (!req.body?.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    if (!String(req.body?.reason || '').trim()) return res.status(400).json({ success: false, message: 'Alasan membuka kunci wajib diisi.' });
+    res.json(await payroll.unlockPayrollPeriod(req.body.periode, req.user, req.body.reason));
   } catch (e) { next(e); }
 });
 

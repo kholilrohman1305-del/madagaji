@@ -111,7 +111,8 @@ router.get('/payslip/:guruId', async (req, res, next) => {
     const guruId = String(req.params.guruId || '').trim();
     if (!guruId) return res.status(400).json({ success: false, message: 'guruId wajib diisi.' });
     const { startDate, endDate } = resolvePeriodRange(req.query.period);
-    const data = await payroll.getPayslipData(startDate, endDate, guruId);
+    const period = startDate.slice(0, 7);
+    const data = await payroll.getPayrollSnapshotPayslip(period, guruId);
     res.json({ success: true, data: { ...data, startDate, endDate } });
   } catch (e) {
     if (String(e.message || '').includes('tidak ditemukan')) {
