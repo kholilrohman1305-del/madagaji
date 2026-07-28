@@ -32,6 +32,7 @@ export default function RekapBisyaroh() {
   const [savingActivity, setSavingActivity] = useState({});
   const [payrollState, setPayrollState] = useState(null);
   const [payrollAction, setPayrollAction] = useState('');
+  const [showGenerateGuide, setShowGenerateGuide] = useState(false);
   const [activityForm, setActivityForm] = useState({
     tanggal: new Date().toISOString().slice(0, 10),
     nama: '',
@@ -170,9 +171,26 @@ export default function RekapBisyaroh() {
   const sameMonth = startDate.slice(0, 7) === endDate.slice(0, 7);
   const selectedPeriod = startDate.slice(0, 7);
 
-  const runPayrollAction = async (action) => {
+  const executePayrollAction = async (action, reason = '') => {
+    setPayrollAction(action);
+    try {
+      const response = await api.post(`/payroll/${action}`, { periode: selectedPeriod, reason });
+      setPayrollState(response.data || null);
+      await load();
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      setPayrollAction('');
+    }
+  };
+
+  const requestPayrollAction = async (action) => {
+    if (action === 'generate') {
+      setShowGenerateGuide(true);
+      return;
+    }
     const labels = {
-      generate: payrollState?.status === 'generated' ? 'generate ulang' : 'generate',
       lock: 'mengunci',
       unlock: 'membuka kunci'
     };
@@ -182,14 +200,12 @@ export default function RekapBisyaroh() {
       if (!reason) return;
     }
     if (!window.confirm(`Yakin ingin ${labels[action]} Bisyaroh periode ${selectedPeriod}?`)) return;
-    setPayrollAction(action);
-    try {
-      const response = await api.post(`/payroll/${action}`, { periode: selectedPeriod, reason });
-      setPayrollState(response.data || null);
-      await load();
-    } finally {
-      setPayrollAction('');
-    }
+    await executePayrollAction(action, reason);
+  };
+
+  const confirmGenerate = async () => {
+    const success = await executePayrollAction('generate');
+    if (success) setShowGenerateGuide(false);
   };
 
   const formatTimestamp = (value) => {
@@ -294,7 +310,7 @@ export default function RekapBisyaroh() {
               {payrollState.status === 'not_generated' && (
                 <button
                   className="secondary"
-                  onClick={() => runPayrollAction('generate')}
+                  onClick={() => requestPayrollAction('generate')}
                   disabled={Boolean(payrollAction)}
                 >
                   <Calculator size={18} />
@@ -305,20 +321,20 @@ export default function RekapBisyaroh() {
                 <>
                   <button
                     className="secondary"
-                    onClick={() => runPayrollAction('generate')}
+                    onClick={() => requestPayrollAction('generate')}
                     disabled={Boolean(payrollAction)}
                   >
                     <RefreshCw size={18} />
                     {payrollAction === 'generate' ? 'Memproses...' : 'Generate Ulang'}
                   </button>
-                  <button onClick={() => runPayrollAction('lock')} disabled={Boolean(payrollAction)}>
+                  <button onClick={() => requestPayrollAction('lock')} disabled={Boolean(payrollAction)}>
                     <Lock size={18} />
                     {payrollAction === 'lock' ? 'Mengunci...' : 'Kunci Bisyaroh'}
                   </button>
                 </>
               )}
               {payrollState.status === 'locked' && (
-                <button className="outline" onClick={() => runPayrollAction('unlock')} disabled={Boolean(payrollAction)}>
+                <button className="outline" onClick={() => requestPayrollAction('unlock')} disabled={Boolean(payrollAction)}>
                   <Unlock size={18} />
                   {payrollAction === 'unlock' ? 'Membuka...' : 'Buka Kunci'}
                 </button>
@@ -478,6 +494,151 @@ export default function RekapBisyaroh() {
                 <Save size={18} /> Simpan
               </button>
               <button className="outline" onClick={() => setShowActivityModal(false)}>Batal</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showGenerateGuide && (
+        <div className="modal-backdrop">
+          <div className="modal" style={{ width: 'min(680px, calc(100vw - 24px))', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="modal-header">
+              <div>
+                <h3 className="modal-title" style={{ marginBottom: 4 }}>
+                  <Calculator size={24} /> Panduan Generate Bisyaroh
+                </h3>
+                <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+                  Periode {selectedPeriod}
+                </div>
+              </div>
+              <button
+                className="modal-close"
+                onClick={() => setShowGenerateGuide(false)}
+                disabled={Boolean(payrollAction)}
+                aria-label="Tutup"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              gap: 10,
+              padding: 14,
+              marginBottom: 18,
+              borderRadius: 12,
+              border: '1px solid var(--warning-300)',
+              background: 'var(--warning-50)',
+              color: 'var(--warning-700, #7a4d00)',
+              lineHeight: 1.55
+            }}>
+              <Clock3 size={22} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <strong style={{ display: 'block', marginBottom: 3 }}>Periksa data sebelum melanjutkan</strong>
+                Pastikan kehadiran, transport, kegiatan, tugas tambahan, honor ekstra, dan tarif periode ini sudah benar.
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 12 }}>
+              {[
+                {
+                  no: 1,
+                  title: 'Sistem menghitung ulang seluruh komponen',
+                  text: 'MadaFlow mengambil data terbaru pada periode yang dipilih dan menghitung Bisyaroh setiap guru.'
+                },
+                {
+                  no: 2,
+                  title: 'Hasil disimpan sebagai snapshot resmi',
+                  text: 'Nilai yang dihasilkan disimpan terpisah agar tidak berubah otomatis ketika data sumber berubah.'
+                },
+                {
+                  no: 3,
+                  title: 'Bisyaroh langsung terlihat di MyMada',
+                  text: 'Status “Belum digenerate” berubah menjadi “Sudah digenerate”, lalu nominal dan rincian tampil pada akun guru.'
+                },
+                {
+                  no: 4,
+                  title: 'Admin memeriksa lalu mengunci periode',
+                  text: 'Jika hasil sudah benar, gunakan tombol “Kunci Bisyaroh” agar periode tidak dapat digenerate ulang tanpa membuka kunci.'
+                }
+              ].map((step) => (
+                <div key={step.no} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '36px 1fr',
+                  gap: 11,
+                  alignItems: 'start',
+                  padding: 12,
+                  border: '1px solid var(--border)',
+                  borderRadius: 12
+                }}>
+                  <div style={{
+                    width: 34,
+                    height: 34,
+                    display: 'grid',
+                    placeItems: 'center',
+                    borderRadius: '50%',
+                    background: 'var(--primary-100)',
+                    color: 'var(--primary-700)',
+                    fontWeight: 900
+                  }}>
+                    {step.no}
+                  </div>
+                  <div>
+                    <strong style={{ display: 'block', marginBottom: 3 }}>{step.title}</strong>
+                    <span style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.55 }}>{step.text}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{
+              marginTop: 18,
+              padding: 15,
+              borderRadius: 12,
+              background: 'var(--primary-50)',
+              border: '1px solid var(--primary-200)'
+            }}>
+              <strong style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                <RefreshCw size={18} /> Jika hasilnya salah, bagaimana mengembalikannya?
+              </strong>
+              <ol style={{ margin: 0, paddingLeft: 20, color: 'var(--muted)', fontSize: 13, lineHeight: 1.7 }}>
+                <li>Jika belum dikunci: perbaiki data sumber, lalu klik <strong>Generate Ulang</strong>.</li>
+                <li>Jika sudah dikunci: klik <strong>Buka Kunci</strong> dan tuliskan alasan koreksi.</li>
+                <li>Perbaiki data, lakukan <strong>Generate Ulang</strong>, periksa hasilnya, lalu kunci kembali.</li>
+                <li>Generate ulang akan mengganti snapshot periode tersebut dan memperbarui tampilan MyMada.</li>
+              </ol>
+            </div>
+
+            {payrollState?.status === 'generated' && (
+              <div style={{
+                marginTop: 14,
+                padding: 12,
+                borderRadius: 10,
+                background: 'var(--danger-50, #fff1f2)',
+                color: 'var(--danger-700, #9f1239)',
+                fontSize: 13,
+                fontWeight: 700
+              }}>
+                Perhatian: ini adalah generate ulang. Snapshot lama periode {selectedPeriod} akan diganti dengan hasil terbaru.
+              </div>
+            )}
+
+            <div className="toolbar" style={{ marginTop: 20, marginBottom: 0, justifyContent: 'flex-end' }}>
+              <button
+                className="outline"
+                onClick={() => setShowGenerateGuide(false)}
+                disabled={Boolean(payrollAction)}
+              >
+                Batal
+              </button>
+              <button className="secondary" onClick={confirmGenerate} disabled={Boolean(payrollAction)}>
+                {payrollState?.status === 'generated' ? <RefreshCw size={18} /> : <Calculator size={18} />}
+                {payrollAction === 'generate'
+                  ? 'Sedang Memproses...'
+                  : payrollState?.status === 'generated'
+                    ? 'Saya Paham, Generate Ulang'
+                    : 'Saya Paham, Generate Sekarang'}
+              </button>
             </div>
           </div>
         </div>
