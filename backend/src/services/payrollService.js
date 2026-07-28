@@ -1629,7 +1629,17 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     [startDate, endDate]
   );
   extraRows.forEach((row) => {
-    const teacherKey = String(row.teacher_id || '').trim();
+    const rawTeacherId = Number(row.teacher_id || 0);
+    let teacherKey = String(row.teacher_id || '').trim();
+    // Posisi "Guru Ekstra" dapat diisi guru KBM. Sinkronisasi menyimpan
+    // identitasnya sebagai -(2.000.000.000 + teacher_id); kembalikan ke ID
+    // guru KBM agar honor muncul pada slip MyMada akun guru tersebut.
+    if (rawTeacherId <= -2000000000) {
+      teacherKey = String(Math.abs(rawTeacherId) - 2000000000);
+    } else if (rawTeacherId < 0 && Math.abs(rawTeacherId) < 1000000000) {
+      // Kompatibilitas baris manual lama untuk akun extra_teachers.
+      teacherKey = String(-(1000000000 + Math.abs(rawTeacherId)));
+    }
     if (!teacherKey) return;
     const list = extraCompensationMap.get(teacherKey) || [];
     list.push({
