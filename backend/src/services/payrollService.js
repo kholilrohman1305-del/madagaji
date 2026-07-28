@@ -426,6 +426,14 @@ async function ensureExtracurricularMonthRows(periode) {
   const visibleSourceKeys = new Set(currentRows
     .filter((row) => Number(row.source_synced) === 1)
     .map((row) => `${row.source_extra_id}|${row.teacher_type}|${String(row.teacher_name || '').trim().toLowerCase()}`));
+  const [ignoredRows] = await pool.query(`
+    SELECT source_extra_id, source_extra_teacher_id, teacher_type
+    FROM pengeluaran_ekstrakurikuler_ignored
+    WHERE periode = ?
+  `, [periode]);
+  const ignoredSourceKeys = new Set(ignoredRows.map(
+    (row) => `${row.source_extra_id}|${row.source_extra_teacher_id}|${row.teacher_type}`
+  ));
   const [masterAssignments] = await masterPool.query(`
     SELECT e.id AS extracurricular_id, e.name AS extracurricular_name,
            e.pembina_teacher_id, t.name AS pendamping_name,
@@ -468,6 +476,7 @@ async function ensureExtracurricularMonthRows(periode) {
   ].filter(Boolean));
   for (const assignment of assignments) {
     const sourceKey = `${assignment.extraId}|${assignment.sourceTeacherId}|${assignment.teacherType}`;
+    if (ignoredSourceKeys.has(sourceKey)) continue;
     const visibleKey = `${assignment.extraId}|${assignment.teacherType}|${String(assignment.teacherName || '').trim().toLowerCase()}`;
     const existingSourceRow = sourceRowsByKey.get(sourceKey);
     if (existingSourceRow) {
@@ -702,6 +711,133 @@ async function getExtracurricularMonthSheet(periode) {
     teacherType: r.teacher_type || null,
     attendanceManual: Number(r.attendance_manual) === 1
   }));
+}
+
+async function getExtracurricularDuplicateAudit(periode) {
+  if (!/^\d{4}-\d{2}$/.test(String(periode || ''))) {
+    throw new Error('Format periode tidak valid. Gunakan YYYY-MM.');
+  }
+  await ensureExtracurricularMonthRows(periode);
+  const startDate = `${periode}-01`;
+  const [rows] = await pool.query(`
+    SELECT id, DATE_FORMAT(tanggal, '%Y-%m-%d') AS tanggal, teacher_id, teacher_name,
+           nama_ekstra, jumlah_hadir, nominal, source_extra_id,
+           source_extra_teacher_id, teacher_type, attendance_manual, source_synced
+    FROM pengeluaran_ekstrakurikuler
+    WHERE tanggal BETWEEN ? AND LAST_DAY(?)
+    ORDER BY nama_ekstra ASC, teacher_name ASC, teacher_type ASC, id ASC
+  `, [startDate, startDate]);
+
+  const grouped = new Map();
+  for (const row of rows) {
+    const key = `${normalizedIdentity(row.nama_ekstra)}|${normalizedIdentity(row.teacher_name)}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  }
+
+  const duplicates = [...grouped.values()]
+    .filter((group) => group.length > 1)
+    .map((group) => {
+      const types = new Set(group.map((row) => row.teacher_type || 'manual'));
+      const crossRole = types.size > 1;
+      return {
+        namaEkstra: group[0].nama_ekstra,
+        teacherName: group[0].teacher_name,
+        conflictType: crossRole ? 'cross_role' : 'same_role',
+        explanation: crossRole
+          ? 'Nama guru yang sama tercatat pada lebih dari satu peran honor di ekstrakurikuler yang sama.'
+          : 'Nama guru dan jenis penugasan yang sama tercatat lebih dari satu kali pada periode ini.',
+        rows: group.map((row) => ({
+          id: row.id,
+          tanggal: row.tanggal,
+          teacherId: String(row.teacher_id),
+          teacherName: row.teacher_name,
+          namaEkstra: row.nama_ekstra,
+          jumlahHadir: Number(row.jumlah_hadir) || 0,
+          nominal: Number(row.nominal) || 0,
+          jumlahDiterima: (Number(row.jumlah_hadir) || 0) * (Number(row.nominal) || 0),
+          teacherType: row.teacher_type || null,
+          sourceSynced: Number(row.source_synced) === 1,
+          sourceExtraId: row.source_extra_id,
+          sourceExtraTeacherId: row.source_extra_teacher_id,
+          attendanceManual: Number(row.attendance_manual) === 1
+        }))
+      };
+    });
+
+  return {
+    periode,
+    duplicateCount: duplicates.reduce((total, group) => total + group.rows.length - 1, 0),
+    groups: duplicates
+  };
+}
+
+async function deleteExtracurricularDuplicate(periode, id) {
+  if (!/^\d{4}-\d{2}$/.test(String(periode || ''))) {
+    throw new Error('Format periode tidak valid. Gunakan YYYY-MM.');
+  }
+  const rowId = Number(id);
+  if (!Number.isInteger(rowId) || rowId <= 0) throw new Error('ID data tidak valid.');
+  await ensureExtracurricularTable();
+  const startDate = `${periode}-01`;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [periodRows] = await conn.query(`
+      SELECT *
+      FROM pengeluaran_ekstrakurikuler
+      WHERE tanggal BETWEEN ? AND LAST_DAY(?)
+      FOR UPDATE
+    `, [startDate, startDate]);
+    const target = periodRows.find((row) => Number(row.id) === rowId);
+    if (!target) throw new Error('Data yang akan dihapus tidak ditemukan pada periode ini.');
+
+    const siblings = periodRows.filter((row) => (
+      normalizedIdentity(row.nama_ekstra) === normalizedIdentity(target.nama_ekstra)
+      && normalizedIdentity(row.teacher_name) === normalizedIdentity(target.teacher_name)
+    ));
+    if (siblings.length < 2) {
+      throw new Error('Data ini bukan lagi data ganda. Silakan jalankan pengecekan ulang.');
+    }
+
+    const hasSameSourceSibling = siblings.some((row) => (
+      Number(row.id) !== rowId
+      && Number(row.source_synced) === 1
+      && Number(row.source_extra_id) === Number(target.source_extra_id)
+      && Number(row.source_extra_teacher_id) === Number(target.source_extra_teacher_id)
+      && String(row.teacher_type || '') === String(target.teacher_type || '')
+    ));
+    if (
+      Number(target.source_synced) === 1
+      && target.source_extra_id !== null
+      && target.source_extra_teacher_id !== null
+      && target.teacher_type
+      && !hasSameSourceSibling
+    ) {
+      await conn.query(`
+        INSERT INTO pengeluaran_ekstrakurikuler_ignored
+          (periode, source_extra_id, source_extra_teacher_id, teacher_type, teacher_name, nama_ekstra)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          teacher_name = VALUES(teacher_name), nama_ekstra = VALUES(nama_ekstra)
+      `, [
+        periode, target.source_extra_id, target.source_extra_teacher_id,
+        target.teacher_type, target.teacher_name, target.nama_ekstra
+      ]);
+    }
+
+    await conn.query('DELETE FROM pengeluaran_ekstrakurikuler WHERE id = ?', [rowId]);
+    await conn.commit();
+    return {
+      success: true,
+      message: 'Data ganda berhasil dihapus dan tidak akan dibuat ulang oleh sinkronisasi pada periode ini.'
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 async function saveExtracurricularBulk(periode, items) {
@@ -1771,6 +1907,8 @@ module.exports = {
   getExtracurricularMasterOptions,
   getExtracurricularExpenses,
   getExtracurricularMonthSheet,
+  getExtracurricularDuplicateAudit,
+  deleteExtracurricularDuplicate,
   getExtracurricularRates,
   saveExtracurricularRates,
   getDisciplineMonthSheet,

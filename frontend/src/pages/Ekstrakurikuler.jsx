@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api';
-import { Save, Wallet } from 'lucide-react';
+import { AlertTriangle, Save, SearchCheck, Trash2, Wallet, X } from 'lucide-react';
 
 const TYPE_LABELS = {
   pendamping_kbm: 'Pendamping Ekstra',
@@ -17,6 +17,10 @@ export default function Ekstrakurikuler() {
   const [search, setSearch] = useState('');
   const [attendanceDrafts, setAttendanceDrafts] = useState({});
   const [savingAttendance, setSavingAttendance] = useState({});
+  const [duplicateAudit, setDuplicateAudit] = useState(null);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [deletingDuplicate, setDeletingDuplicate] = useState(null);
+  const [duplicateError, setDuplicateError] = useState('');
 
   const rupiah = useMemo(() => new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -72,6 +76,37 @@ export default function Ekstrakurikuler() {
       )));
     } finally {
       setSavingAttendance((previous) => ({ ...previous, [item.id]: false }));
+    }
+  }
+
+  async function checkDuplicates() {
+    setCheckingDuplicates(true);
+    setDuplicateError('');
+    try {
+      const response = await api.get('/payroll/extracurricular/duplicates', { params: { periode } });
+      setDuplicateAudit(response.data);
+    } catch (error) {
+      setDuplicateError(error.response?.data?.message || error.message || 'Pengecekan data ganda gagal.');
+      setDuplicateAudit({ periode, duplicateCount: 0, groups: [] });
+    } finally {
+      setCheckingDuplicates(false);
+    }
+  }
+
+  async function deleteDuplicate(row) {
+    const role = TYPE_LABELS[row.teacherType] || 'Data manual';
+    if (!window.confirm(`Hapus ${role} atas nama ${row.teacherName} dari ${row.namaEkstra} untuk periode ${periode}?`)) return;
+    setDeletingDuplicate(row.id);
+    setDuplicateError('');
+    try {
+      await api.delete(`/payroll/extracurricular/duplicates/${row.id}`, { params: { periode } });
+      await load(periode);
+      const response = await api.get('/payroll/extracurricular/duplicates', { params: { periode } });
+      setDuplicateAudit(response.data);
+    } catch (error) {
+      setDuplicateError(error.response?.data?.message || error.message || 'Data ganda gagal dihapus.');
+    } finally {
+      setDeletingDuplicate(null);
     }
   }
 
@@ -133,6 +168,9 @@ export default function Ekstrakurikuler() {
             style={{ minWidth: 250 }}
           />
           <button className="outline" type="button" onClick={() => load(periode)} disabled={loading}>Muat Ulang</button>
+          <button className="outline no-print" type="button" onClick={checkDuplicates} disabled={checkingDuplicates}>
+            <SearchCheck size={18} /> {checkingDuplicates ? 'Memeriksa…' : 'Cek Data Ganda'}
+          </button>
           <button className="outline no-print" type="button" onClick={() => window.print()}>Cetak</button>
           <span style={{ color: 'var(--muted)', fontSize: 13 }}>
             Data pengajar dan ekstrakurikuler otomatis dari MyMada; kehadiran otomatis dari jurnal eMada.
@@ -197,6 +235,98 @@ export default function Ekstrakurikuler() {
           </>
         )}
       </div>
+
+      {duplicateAudit && (
+        <div className="modal-backdrop no-print" role="presentation" onMouseDown={() => setDuplicateAudit(null)}>
+          <div
+            className="modal extra-duplicate-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="duplicate-audit-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <div className="modal-title" id="duplicate-audit-title">
+                  <SearchCheck size={22} /> Pemeriksaan Data Ganda
+                </div>
+                <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 5 }}>Periode {duplicateAudit.periode}</div>
+              </div>
+              <button className="modal-close" type="button" onClick={() => setDuplicateAudit(null)} aria-label="Tutup">
+                <X size={20} />
+              </button>
+            </div>
+
+            {duplicateError && (
+              <div className="extra-duplicate-notice danger">
+                <AlertTriangle size={19} /> <span>{duplicateError}</span>
+              </div>
+            )}
+
+            {!duplicateError && duplicateAudit.groups.length === 0 && (
+              <div className="extra-duplicate-notice success">
+                <SearchCheck size={20} />
+                <span><strong>Tidak ada data ganda.</strong><br />Honor ekstrakurikuler pada periode ini sudah konsisten.</span>
+              </div>
+            )}
+
+            {duplicateAudit.groups.length > 0 && (
+              <>
+                <div className="extra-duplicate-notice warning">
+                  <AlertTriangle size={20} />
+                  <span>
+                    Ditemukan <strong>{duplicateAudit.duplicateCount} data berlebih</strong>.
+                    Periksa jenis dan tarif, lalu hapus hanya baris yang memang tidak seharusnya menerima honor.
+                  </span>
+                </div>
+                <div className="extra-duplicate-groups">
+                  {duplicateAudit.groups.map((group) => (
+                    <section className="extra-duplicate-group" key={`${group.namaEkstra}-${group.teacherName}`}>
+                      <div className="extra-duplicate-group-head">
+                        <div>
+                          <strong>{group.namaEkstra}</strong>
+                          <div>{group.teacherName}</div>
+                        </div>
+                        <span className={`badge ${group.conflictType === 'cross_role' ? 'warning' : 'danger'}`}>
+                          {group.conflictType === 'cross_role' ? 'Bentrok Peran' : 'Duplikat Sejenis'}
+                        </span>
+                      </div>
+                      <p>{group.explanation}</p>
+                      <div className="extra-duplicate-rows">
+                        {group.rows.map((row) => (
+                          <article className="extra-duplicate-row" key={row.id}>
+                            <div>
+                              <span className="extra-duplicate-role">{TYPE_LABELS[row.teacherType] || 'Manual'}</span>
+                              <small>ID #{row.id} · {row.sourceSynced ? 'Sinkron otomatis' : 'Input manual'}</small>
+                            </div>
+                            <div>
+                              <small>Hadir</small>
+                              <strong>{row.jumlahHadir}</strong>
+                            </div>
+                            <div>
+                              <small>Tarif</small>
+                              <strong>{rupiah.format(row.nominal)}</strong>
+                            </div>
+                            <button
+                              className="danger sm"
+                              type="button"
+                              onClick={() => deleteDuplicate(row)}
+                              disabled={deletingDuplicate !== null}
+                            >
+                              <Trash2 size={16} />
+                              {deletingDuplicate === row.id ? 'Menghapus…' : 'Hapus Baris Ini'}
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

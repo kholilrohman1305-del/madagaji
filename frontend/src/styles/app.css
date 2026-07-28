@@ -2159,6 +2159,119 @@ input[type="checkbox"] {
   color: var(--danger-600);
 }
 
+.extra-duplicate-modal {
+  width: min(880px, 100%);
+}
+
+.extra-duplicate-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.extra-duplicate-notice.success {
+  color: var(--success-700);
+  background: var(--success-50);
+  border: 1px solid var(--success-200);
+}
+
+.extra-duplicate-notice.warning {
+  color: #92400e;
+  background: var(--warning-50);
+  border: 1px solid var(--warning-200);
+}
+
+.extra-duplicate-notice.danger {
+  color: var(--danger-600);
+  background: var(--danger-50);
+  border: 1px solid var(--danger-200);
+}
+
+.extra-duplicate-groups,
+.extra-duplicate-rows {
+  display: grid;
+  gap: 12px;
+}
+
+.extra-duplicate-group {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.extra-duplicate-group-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.extra-duplicate-group-head strong {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 3px;
+}
+
+.extra-duplicate-group > p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 9px 0 12px;
+}
+
+.extra-duplicate-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.5fr) minmax(70px, .5fr) minmax(120px, .8fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--border);
+}
+
+.extra-duplicate-row > div {
+  display: grid;
+  gap: 3px;
+}
+
+.extra-duplicate-row small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.extra-duplicate-role {
+  font-weight: 800;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .extra-duplicate-modal {
+    width: 100%;
+  }
+
+  .extra-duplicate-group-head,
+  .extra-duplicate-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .extra-duplicate-group-head > div,
+  .extra-duplicate-row > div:first-child,
+  .extra-duplicate-row button {
+    grid-column: 1 / -1;
+  }
+
+  .extra-duplicate-row button {
+    width: 100%;
+  }
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

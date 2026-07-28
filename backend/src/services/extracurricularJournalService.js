@@ -84,6 +84,20 @@ async function ensureTables() {
         (tanggal, source_extra_id, source_extra_teacher_id, teacher_type, source_synced)
     `);
   } catch (_) {}
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pengeluaran_ekstrakurikuler_ignored (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      periode CHAR(7) NOT NULL,
+      source_extra_id BIGINT NOT NULL,
+      source_extra_teacher_id BIGINT NOT NULL,
+      teacher_type VARCHAR(30) NOT NULL,
+      teacher_name VARCHAR(160) NULL,
+      nama_ekstra VARCHAR(160) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_extra_ignored_source
+        (periode, source_extra_id, source_extra_teacher_id, teacher_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
   ensured = true;
 }
 
@@ -146,6 +160,13 @@ async function recalculateMonth(conn, event) {
   const start = monthStart(event.event_date);
   const sourceTeacherId = Number(event.extra_teacher_id) || 0;
   const teacherType = normalizeType(event.teacher_type);
+  const [ignoredRows] = await conn.query(`
+    SELECT id FROM pengeluaran_ekstrakurikuler_ignored
+    WHERE periode = ? AND source_extra_id = ?
+      AND source_extra_teacher_id = ? AND teacher_type = ?
+    LIMIT 1
+  `, [start.slice(0, 7), event.extracurricular_id, sourceTeacherId, teacherType]);
+  if (ignoredRows[0]) return;
   const [[totals]] = await conn.query(`
     SELECT COUNT(*) AS total, COALESCE(SUM(rate_snapshot), 0) AS total_honor
     FROM extracurricular_journal_events

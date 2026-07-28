@@ -109,6 +109,22 @@ router.get('/extracurricular/sheet', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get('/extracurricular/duplicates', async (req, res, next) => {
+  try {
+    const { periode } = req.query;
+    if (!periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.getExtracurricularDuplicateAudit(periode));
+  } catch (e) { next(e); }
+});
+
+router.delete('/extracurricular/duplicates/:id', async (req, res, next) => {
+  try {
+    const { periode } = req.query;
+    if (!periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.deleteExtracurricularDuplicate(periode, req.params.id));
+  } catch (e) { next(e); }
+});
+
 router.get('/extracurricular/rates', async (req, res, next) => {
   try { res.json(await payroll.getExtracurricularRates()); } catch (e) { next(e); }
 });
