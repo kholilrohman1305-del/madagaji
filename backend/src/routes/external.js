@@ -321,6 +321,24 @@ router.get('/schedule-kelas', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /api/external/schedule-slots?kelas=X.1&hari=Rabu
+// Matriks waktu KBM resmi dari konfigurasi MadaFlow. Tidak bergantung pada
+// ada/tidaknya mapel di suatu slot sehingga aman untuk deteksi bentrok.
+router.get('/schedule-slots', async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    const kelas = String(req.query.kelas || '').trim();
+    const hari = String(req.query.hari || '').trim();
+    if (!kelas || !hari) {
+      return res.status(400).json({ success: false, message: 'kelas dan hari wajib diisi.' });
+    }
+    const rows = await schedule.getSlotMatrix({ className: kelas, hari });
+    res.json({ success: true, generatedAt: new Date().toISOString(), data: rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/external/payroll-total?period=YYYY-MM
 // Total bisyaroh breakdown seluruh guru sebulan — untuk dashboard kepala madrasah
 router.get('/payroll-total', async (req, res, next) => {

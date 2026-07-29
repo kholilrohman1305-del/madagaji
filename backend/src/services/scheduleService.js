@@ -167,6 +167,33 @@ async function getSchedule(filters = {}, options = {}) {
   return result;
 }
 
+async function getSlotMatrix({ className, hari }) {
+  const config = await getScheduleConfig().catch(() => null);
+  const tingkat = extractTingkat(className);
+  const configuredSlots = config?.slotsByTingkat?.[tingkat]?.[hari];
+  let slotNumbers = Array.isArray(configuredSlots)
+    ? configuredSlots.map(Number).filter((value) => Number.isInteger(value) && value > 0)
+    : [];
+  if (!slotNumbers.length) {
+    const total = Number(config?.hoursByDayByTingkat?.[tingkat]?.[hari] || config?.hoursByDay?.[hari] || 0);
+    if (total > 0) slotNumbers = Array.from({ length: total }, (_, index) => index + 1);
+  }
+  if (!slotNumbers.length) {
+    const [rows] = await pool.query(
+      'SELECT DISTINCT jam_ke FROM jadwal WHERE hari = ? ORDER BY CAST(jam_ke AS UNSIGNED)',
+      [hari]
+    );
+    slotNumbers = rows.map((row) => Number(row.jam_ke)).filter(Number.isInteger);
+  }
+  return [...new Set(slotNumbers)].sort((a, b) => a - b).map((jamKe) => ({
+    jamKe,
+    tingkat,
+    hari,
+    timeZone: 'Asia/Jakarta',
+    ...getSlotTime(config, tingkat, hari, jamKe)
+  }));
+}
+
 async function getSubjectDetail() {
   const scheduleRows = await getSchedule({});
   const [subjects] = await masterPool.query('SELECT id, name FROM subjects WHERE is_active=1 ORDER BY name');
@@ -330,4 +357,12 @@ async function deleteAllSchedule() {
   return { success: true, message: `Semua jadwal berhasil dihapus (${result.affectedRows} slot).`, deleted: result.affectedRows };
 }
 
-module.exports = { getSchedule, getSubjectDetail, addSchedule, updateSchedule, deleteSchedule, deleteAllSchedule };
+module.exports = {
+  getSchedule,
+  getSlotMatrix,
+  getSubjectDetail,
+  addSchedule,
+  updateSchedule,
+  deleteSchedule,
+  deleteAllSchedule
+};

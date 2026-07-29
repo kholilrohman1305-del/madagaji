@@ -36,7 +36,8 @@ async function ensureTables() {
       end_time TIME NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_extra_source_teacher (source_journal_id, teacher_type),
+      UNIQUE KEY uq_extra_source_teacher_identity
+        (source_journal_id, teacher_type, extra_teacher_id),
       INDEX idx_extra_event_period (event_date, extracurricular_id, extra_teacher_id, teacher_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
@@ -44,10 +45,12 @@ async function ensureTables() {
   await addColumn('extracurricular_journal_events', "ADD COLUMN attendance_status VARCHAR(20) NOT NULL DEFAULT 'Hadir'");
   await addColumn('extracurricular_journal_events', 'ADD COLUMN rate_snapshot DECIMAL(15,2) NOT NULL DEFAULT 0.00');
   try { await pool.query('ALTER TABLE extracurricular_journal_events DROP INDEX uq_extra_source_journal'); } catch (_) {}
+  try { await pool.query('ALTER TABLE extracurricular_journal_events DROP INDEX uq_extra_source_teacher'); } catch (_) {}
   try {
     await pool.query(`
       ALTER TABLE extracurricular_journal_events
-      ADD UNIQUE KEY uq_extra_source_teacher (source_journal_id, teacher_type)
+      ADD UNIQUE KEY uq_extra_source_teacher_identity
+        (source_journal_id, teacher_type, extra_teacher_id)
     `);
   } catch (_) {}
 
@@ -282,7 +285,7 @@ async function syncJournal(payload) {
       throw new Error('Data jurnal ekstrakurikuler tidak lengkap.');
     }
     const rates = await getRates(conn);
-    const incomingTypes = [];
+    const incomingKeys = [];
     for (const rawTeacher of rawTeachers) {
       const teacherType = normalizeType(rawTeacher.teacher_type);
       const incomingTeacherName = String(rawTeacher.teacher_name || '').trim();
@@ -294,15 +297,20 @@ async function syncJournal(payload) {
         incomingTeacherName
       );
       if (!teacherName) throw new Error('Nama pengajar ekstrakurikuler tidak lengkap.');
-      incomingTypes.push(teacherType);
-      const before = beforeRows.find((row) => row.teacher_type === teacherType);
+      const sourceTeacherIdentity = sourceIdentityId(
+        teacherType,
+        sourceKind,
+        rawTeacher.source_teacher_id
+      ) || null;
+      const identityKey = `${teacherType}|${String(sourceTeacherIdentity || '')}`;
+      incomingKeys.push(identityKey);
+      const before = beforeRows.find((row) => (
+        row.teacher_type === teacherType
+        && Number(row.extra_teacher_id || 0) === Number(sourceTeacherIdentity || 0)
+      ));
       const event = {
         ...eventBase,
-        extra_teacher_id: sourceIdentityId(
-          teacherType,
-          sourceKind,
-          rawTeacher.source_teacher_id
-        ) || null,
+        extra_teacher_id: sourceTeacherIdentity,
         teacher_name: teacherName,
         teacher_type: teacherType,
         attendance_status: rawTeacher.status === 'Hadir' ? 'Hadir' : 'Tidak Hadir',
@@ -334,7 +342,9 @@ async function syncJournal(payload) {
       }
       await recalculateMonth(conn, event);
     }
-    const removed = beforeRows.filter((row) => !incomingTypes.includes(row.teacher_type));
+    const removed = beforeRows.filter((row) => !incomingKeys.includes(
+      `${row.teacher_type}|${String(row.extra_teacher_id || '')}`
+    ));
     for (const oldEvent of removed) {
       await conn.query('DELETE FROM extracurricular_journal_events WHERE id = ?', [oldEvent.id]);
       await recalculateMonth(conn, oldEvent);
