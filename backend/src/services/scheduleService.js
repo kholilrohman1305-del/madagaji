@@ -48,14 +48,24 @@ function minutesToTime(totalMinutes) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+function normalizeClockTime(value) {
+  const match = /^(\d{1,2}):(\d{2})/.exec(String(value || '').trim());
+  if (!match) return '';
+  const hour = Math.min(23, Math.max(0, Number(match[1]) || 0));
+  const minute = Math.min(59, Math.max(0, Number(match[2]) || 0));
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 function getSlotTime(config, tingkat, hari, jamKe) {
   const saved = config?.slotTimesByTingkat?.[tingkat]?.[hari]?.[jamKe] || config?.slotTimesByTingkat?.[tingkat]?.[hari]?.[String(jamKe)];
   if (saved?.start && saved?.end) {
-    const startMin = timeToMinutes(saved.start);
-    const endMin = timeToMinutes(saved.end);
+    const startTime = normalizeClockTime(saved.start);
+    const endTime = normalizeClockTime(saved.end);
+    const startMin = timeToMinutes(startTime);
+    const endMin = timeToMinutes(endTime);
     return {
-      startTime: saved.start,
-      endTime: saved.end,
+      startTime,
+      endTime,
       durationMinutes: startMin != null && endMin != null ? Math.max(0, endMin - startMin) : null
     };
   }
@@ -81,9 +91,9 @@ function isScheduleConflictError(err) {
   return msg.includes('uniq_jadwal_kelas') || msg.includes('hari') && msg.includes('jam_ke') && msg.includes('kelas');
 }
 
-async function getSchedule(filters = {}) {
+async function getSchedule(filters = {}, options = {}) {
   const key = cacheKey(filters);
-  const cached = scheduleCache.get(key);
+  const cached = options.fresh ? null : scheduleCache.get(key);
   if (cached) return cached;
 
   const where = [];
@@ -137,8 +147,12 @@ async function getSchedule(filters = {}) {
     return {
       rowId: idx + 1,
       id: r.id,
+      slotId: r.id,
+      slotKey: `${String(r.hari || '').trim().toLowerCase()}|${String(Number(r.jam_ke))}`,
+      timeZone: 'Asia/Jakarta',
+      timeFormat: 'HH:mm',
       hari: r.hari,
-      jamKe: r.jam_ke,
+      jamKe: String(Number(r.jam_ke)),
       kelas: r.kelas,
       namaKelas,
       mapelId: r.mapel_id,

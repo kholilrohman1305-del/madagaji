@@ -38,10 +38,11 @@ router.get('/public-stats', async (req, res) => {
 // GET /api/external/schedule/:guruId - one teacher's weekly teaching schedule
 router.get('/schedule/:guruId', async (req, res, next) => {
   try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     const guruId = String(req.params.guruId || '').trim();
     if (!guruId) return res.status(400).json({ success: false, message: 'guruId wajib diisi.' });
-    const rows = await schedule.getSchedule({ guruId });
-    res.json({ success: true, data: rows });
+    const rows = await schedule.getSchedule({ guruId }, { fresh: true });
+    res.json({ success: true, generatedAt: new Date().toISOString(), data: rows });
   } catch (e) { next(e); }
 });
 
@@ -258,6 +259,7 @@ router.post('/extracurricular-journal-sync', async (req, res, next) => {
 // Lookup guru by nama karena emada tidak menyimpan id master.
 router.get('/schedule-guru', async (req, res, next) => {
   try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     const nama = String(req.query.nama || '').trim();
     const hari = String(req.query.hari || '').trim();
     if (!nama) return res.status(400).json({ success: false, message: 'nama wajib diisi.' });
@@ -277,10 +279,10 @@ router.get('/schedule-guru', async (req, res, next) => {
     }
     if (!guruId) return res.json({ success: true, guruId: null, data: [], message: `Guru tidak ditemukan di master: "${nama}"` });
 
-    let rows = await schedule.getSchedule({ guruId });
+    let rows = await schedule.getSchedule({ guruId }, { fresh: true });
     if (hari) rows = rows.filter(r => String(r.hari || '').toLowerCase() === hari.toLowerCase());
     rows.sort((a, b) => Number(a.jamKe) - Number(b.jamKe));
-    res.json({ success: true, guruId, data: rows });
+    res.json({ success: true, guruId, generatedAt: new Date().toISOString(), data: rows });
   } catch (e) { next(e); }
 });
 
@@ -290,6 +292,7 @@ router.get('/schedule-guru', async (req, res, next) => {
 // di-resolve dulu ke ID — sebelumnya difilter langsung sehingga selalu kosong.
 router.get('/schedule-kelas', async (req, res, next) => {
   try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     const kelas = String(req.query.kelas || '').trim();
     const hari  = String(req.query.hari  || '').trim();
     if (!kelas) return res.status(400).json({ success: false, message: 'kelas wajib diisi.' });
@@ -313,8 +316,8 @@ router.get('/schedule-kelas', async (req, res, next) => {
       }
     }
 
-    const rows = await schedule.getSchedule({ kelas: kelasId, hari: hari || undefined });
-    res.json({ success: true, data: rows });
+    const rows = await schedule.getSchedule({ kelas: kelasId, hari: hari || undefined }, { fresh: true });
+    res.json({ success: true, generatedAt: new Date().toISOString(), data: rows });
   } catch (e) { next(e); }
 });
 
@@ -345,7 +348,8 @@ router.get('/payroll-rekap', async (req, res, next) => {
 // Jadwal hari ini: guru terjadwal + guru tidak hadir/izin
 router.get('/schedule-today', async (req, res, next) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    const today = formatDateToYMD(new Date());
     const payload = await attendance.getScheduleAndAttendance(today);
     const items = payload.items || [];
 
