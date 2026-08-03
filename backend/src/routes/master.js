@@ -95,6 +95,34 @@ router.put('/settings', async (req, res, next) => {
   try { res.json(await master.updateBisyarohSettings(req.body)); } catch (e) { next(e); }
 });
 
+router.get('/bisyaroh-rate-groups', async (req, res, next) => {
+  try { res.json(await master.getBisyarohRateCatalog()); } catch (e) { next(e); }
+});
+
+router.post('/bisyaroh-rate-groups', async (req, res, next) => {
+  try { res.json(await master.addBisyarohRateGroup(req.body)); } catch (e) { next(e); }
+});
+
+router.put('/bisyaroh-rate-groups/:id', async (req, res, next) => {
+  try { res.json(await master.updateBisyarohRateGroup(req.params.id, req.body)); } catch (e) { next(e); }
+});
+
+router.delete('/bisyaroh-rate-groups/:id', async (req, res, next) => {
+  try { res.json(await master.deleteBisyarohRateGroup(req.params.id)); } catch (e) { next(e); }
+});
+
+router.post('/bisyaroh-rate-groups/:groupId/rates', async (req, res, next) => {
+  try { res.json(await master.addBisyarohRate(req.params.groupId, req.body)); } catch (e) { next(e); }
+});
+
+router.put('/bisyaroh-rates/:id', async (req, res, next) => {
+  try { res.json(await master.updateBisyarohRate(req.params.id, req.body)); } catch (e) { next(e); }
+});
+
+router.delete('/bisyaroh-rates/:id', async (req, res, next) => {
+  try { res.json(await master.deleteBisyarohRate(req.params.id)); } catch (e) { next(e); }
+});
+
 router.get('/teacher-tasks', async (req, res, next) => {
   try { res.json(await master.getTeacherTasksWithRates()); } catch (e) { next(e); }
 });

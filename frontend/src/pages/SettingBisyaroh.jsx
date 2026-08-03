@@ -1,281 +1,187 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Clock, DollarSign, Edit3, Plus, Save, Settings, Trash2, X } from 'lucide-react';
 import api from '../api';
-import { Settings, DollarSign, Clock, Save } from 'lucide-react';
 
-const formatRupiah = (value) => {
-  const num = Number(value || 0);
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    maximumFractionDigits: 0
-  }).format(Number.isNaN(num) ? 0 : num);
-};
+const EMPTY_RATE = { name: '', nominal: 0, unit: '', matchValue: '', minYears: '', maxYears: '', configKey: '' };
+
+const formatRupiah = (value) => new Intl.NumberFormat('id-ID', {
+  style: 'currency', currency: 'IDR', maximumFractionDigits: 0
+}).format(Number(value || 0));
+
+const groupIcon = (code) => code === 'wiyathabakti' ? Clock : DollarSign;
 
 export default function SettingBisyaroh() {
-  const [form, setForm] = useState({
-    RATE_HADIR: 0,
-    RATE_HADIR_KETERAMPILAN: 0,
-    RATE_IZIN: 0,
-    RATE_TIDAK_HADIR: 0,
-    RATE_TRANSPORT: 0,
-    RATE_TRANSPORT_PNS: 0,
-    RATE_TRANSPORT_INPASSING: 0,
-    RATE_TRANSPORT_SERTIFIKASI: 0,
-    RATE_TRANSPORT_NON_SERTIFIKASI: 0,
-    RATE_TRANSPORT_KETERAMPILAN: 0,
-    WIYATHA_1_5: 0,
-    WIYATHA_6_10: 0,
-    WIYATHA_11_15: 0,
-    WIYATHA_16_20: 0,
-    WIYATHA_21_25: 0,
-    WIYATHA_26_PLUS: 0
-  });
+  const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const [groupEditor, setGroupEditor] = useState(null);
+  const [groupName, setGroupName] = useState('');
+  const [rateEditor, setRateEditor] = useState(null);
+  const [rateForm, setRateForm] = useState(EMPTY_RATE);
+
+  const activeGroup = useMemo(
+    () => groups.find((group) => Number(group.id) === Number(rateEditor?.groupId)),
+    [groups, rateEditor]
+  );
 
   const load = async () => {
     setLoading(true);
-    const res = await api.get('/master/settings');
-    const data = res.data || {};
-    setForm({
-      RATE_HADIR: Number(data.RATE_HADIR || data.RATE_MENGAJAR || 0),
-      RATE_HADIR_KETERAMPILAN: Number(data.RATE_HADIR_KETERAMPILAN || 0),
-      RATE_IZIN: Number(data.RATE_IZIN || 0),
-      RATE_TIDAK_HADIR: Number(data.RATE_TIDAK_HADIR || 0),
-      RATE_TRANSPORT: Number(data.RATE_TRANSPORT || 0),
-      RATE_TRANSPORT_PNS: Number(data.RATE_TRANSPORT_PNS || 0),
-      RATE_TRANSPORT_INPASSING: Number(data.RATE_TRANSPORT_INPASSING || 0),
-      RATE_TRANSPORT_SERTIFIKASI: Number(data.RATE_TRANSPORT_SERTIFIKASI || 0),
-      RATE_TRANSPORT_NON_SERTIFIKASI: Number(data.RATE_TRANSPORT_NON_SERTIFIKASI || 0),
-      RATE_TRANSPORT_KETERAMPILAN: Number(data.RATE_TRANSPORT_KETERAMPILAN || 0),
-      WIYATHA_1_5: Number(data.WIYATHA_1_5 || 0),
-      WIYATHA_6_10: Number(data.WIYATHA_6_10 || 0),
-      WIYATHA_11_15: Number(data.WIYATHA_11_15 || 0),
-      WIYATHA_16_20: Number(data.WIYATHA_16_20 || 0),
-      WIYATHA_21_25: Number(data.WIYATHA_21_25 || 0),
-      WIYATHA_26_PLUS: Number(data.WIYATHA_26_PLUS || 0)
-    });
-    setLoading(false);
+    try {
+      const res = await api.get('/master/bisyaroh-rate-groups');
+      setGroups(Array.isArray(res.data) ? res.data : []);
+    } catch (error) {
+      setNotice({ type: 'error', text: error.response?.data?.message || error.message || 'Pengaturan gagal dimuat.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
 
-  const updateField = (key, value) => {
-    setForm(prev => ({ ...prev, [key]: value }));
+  const run = async (action, successText) => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await action();
+      setNotice({ type: 'success', text: successText });
+      setGroupEditor(null);
+      setRateEditor(null);
+      setGroupName('');
+      setRateForm(EMPTY_RATE);
+      await load();
+    } catch (error) {
+      setNotice({ type: 'error', text: error.response?.data?.message || error.message || 'Perubahan gagal disimpan.' });
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const save = async () => {
-    setSaving(true);
-    await api.put('/master/settings', form);
-    setSaving(false);
-    load();
+  const openAddRate = (group) => {
+    setRateEditor({ groupId: group.id, id: null });
+    setRateForm({ ...EMPTY_RATE, unit: group.code === 'wiyathabakti' ? 'per bulan' : group.code === 'transport' ? 'per hari' : 'per jam' });
+  };
+
+  const openEditRate = (group, rate) => {
+    setRateEditor({ groupId: group.id, id: rate.id });
+    setRateForm({
+      name: rate.name || '', nominal: Number(rate.nominal || 0), unit: rate.unit || '',
+      matchValue: rate.matchValue || '', minYears: rate.minYears ?? '', maxYears: rate.maxYears ?? '', configKey: rate.configKey || ''
+    });
+  };
+
+  const saveRate = () => {
+    const payload = { ...rateForm, nominal: Number(rateForm.nominal || 0) };
+    const request = rateEditor.id
+      ? () => api.put(`/master/bisyaroh-rates/${rateEditor.id}`, payload)
+      : () => api.post(`/master/bisyaroh-rate-groups/${rateEditor.groupId}/rates`, payload);
+    run(request, rateEditor.id ? 'Rate berhasil diperbarui.' : 'Rate berhasil ditambahkan.');
+  };
+
+  const saveGroup = () => {
+    const request = groupEditor?.id
+      ? () => api.put(`/master/bisyaroh-rate-groups/${groupEditor.id}`, { name: groupName })
+      : () => api.post('/master/bisyaroh-rate-groups', { name: groupName });
+    run(request, groupEditor?.id ? 'Kelompok berhasil diperbarui.' : 'Kelompok berhasil ditambahkan.');
   };
 
   return (
     <div>
       <div className="modern-table-card">
         <div className="modern-table-title"><Settings size={24} /> Setting Bisyaroh</div>
+        <div style={{ color: 'var(--muted)', marginBottom: 20, lineHeight: 1.6 }}>
+          Kelola nominal dan aturan tarif. Perubahan akan dipakai pada perhitungan berikutnya atau setelah bisyaroh digenerate ulang.
+        </div>
 
-        {loading ? (
-          <div style={{ padding: 40 }}>
-            <div className="skeleton-pulse" style={{ height: 300, borderRadius: 12 }}></div>
+        {notice && (
+          <div style={{ padding: '12px 16px', borderRadius: 12, marginBottom: 18, color: notice.type === 'error' ? '#991b1b' : '#166534', background: notice.type === 'error' ? '#fee2e2' : '#dcfce7' }}>
+            {notice.text}
           </div>
-        ) : (
-          <>
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <DollarSign size={20} style={{ color: 'var(--primary-500)' }} />
-                <span style={{ fontWeight: 700, fontSize: 16 }}>Rate Bisyaroh</span>
-              </div>
-              <div className="grid grid-2" style={{ gap: 20 }}>
-                <div className="form-group">
-                  <label className="form-label">Rate Hadir (per jam)</label>
-                  <input
-                    type="number"
-                    value={form.RATE_HADIR}
-                    onChange={e => updateField('RATE_HADIR', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--success-600)', marginTop: 4 }}>{formatRupiah(form.RATE_HADIR)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Rate Hadir Keterampilan (per jam)</label>
-                  <input
-                    type="number"
-                    value={form.RATE_HADIR_KETERAMPILAN}
-                    onChange={e => updateField('RATE_HADIR_KETERAMPILAN', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--success-600)', marginTop: 4 }}>{formatRupiah(form.RATE_HADIR_KETERAMPILAN)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Rate Izin (per jam)</label>
-                  <input
-                    type="number"
-                    value={form.RATE_IZIN}
-                    onChange={e => updateField('RATE_IZIN', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--warning-600)', marginTop: 4 }}>{formatRupiah(form.RATE_IZIN)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Rate Tidak Hadir (per jam)</label>
-                  <input
-                    type="number"
-                    value={form.RATE_TIDAK_HADIR}
-                    onChange={e => updateField('RATE_TIDAK_HADIR', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--danger-600)', marginTop: 4 }}>{formatRupiah(form.RATE_TIDAK_HADIR)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Rate Transport (per hari)</label>
-                  <input
-                    type="number"
-                    value={form.RATE_TRANSPORT}
-                    onChange={e => updateField('RATE_TRANSPORT', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--primary-600)', marginTop: 4 }}>{formatRupiah(form.RATE_TRANSPORT)}</div>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <DollarSign size={20} style={{ color: 'var(--primary-500)' }} />
-                <span style={{ fontWeight: 700, fontSize: 16 }}>Rate Transport Harian (Per Klasifikasi)</span>
-              </div>
-              <div className="grid grid-2" style={{ gap: 20 }}>
-                <div className="form-group">
-                  <label className="form-label">PNS</label>
-                  <input
-                    type="number"
-                    value={form.RATE_TRANSPORT_PNS}
-                    onChange={e => updateField('RATE_TRANSPORT_PNS', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--primary-600)', marginTop: 4 }}>{formatRupiah(form.RATE_TRANSPORT_PNS)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Inpassing</label>
-                  <input
-                    type="number"
-                    value={form.RATE_TRANSPORT_INPASSING}
-                    onChange={e => updateField('RATE_TRANSPORT_INPASSING', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--primary-600)', marginTop: 4 }}>{formatRupiah(form.RATE_TRANSPORT_INPASSING)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Sertifikasi</label>
-                  <input
-                    type="number"
-                    value={form.RATE_TRANSPORT_SERTIFIKASI}
-                    onChange={e => updateField('RATE_TRANSPORT_SERTIFIKASI', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--primary-600)', marginTop: 4 }}>{formatRupiah(form.RATE_TRANSPORT_SERTIFIKASI)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Non Sertifikasi (Default)</label>
-                  <input
-                    type="number"
-                    value={form.RATE_TRANSPORT_NON_SERTIFIKASI}
-                    onChange={e => updateField('RATE_TRANSPORT_NON_SERTIFIKASI', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--primary-600)', marginTop: 4 }}>{formatRupiah(form.RATE_TRANSPORT_NON_SERTIFIKASI)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Keterampilan</label>
-                  <input
-                    type="number"
-                    value={form.RATE_TRANSPORT_KETERAMPILAN}
-                    onChange={e => updateField('RATE_TRANSPORT_KETERAMPILAN', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--primary-600)', marginTop: 4 }}>{formatRupiah(form.RATE_TRANSPORT_KETERAMPILAN)}</div>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <Clock size={20} style={{ color: 'var(--purple-500)' }} />
-                <span style={{ fontWeight: 700, fontSize: 16 }}>Wiyatha Bhakti (Lama Mengajar)</span>
-              </div>
-              <div className="grid grid-2" style={{ gap: 20 }}>
-                <div className="form-group">
-                  <label className="form-label">Pengabdian 1-5 Tahun</label>
-                  <input
-                    type="number"
-                    value={form.WIYATHA_1_5}
-                    onChange={e => updateField('WIYATHA_1_5', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{formatRupiah(form.WIYATHA_1_5)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Pengabdian 6-10 Tahun</label>
-                  <input
-                    type="number"
-                    value={form.WIYATHA_6_10}
-                    onChange={e => updateField('WIYATHA_6_10', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{formatRupiah(form.WIYATHA_6_10)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Pengabdian 11-15 Tahun</label>
-                  <input
-                    type="number"
-                    value={form.WIYATHA_11_15}
-                    onChange={e => updateField('WIYATHA_11_15', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{formatRupiah(form.WIYATHA_11_15)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Pengabdian 16-20 Tahun</label>
-                  <input
-                    type="number"
-                    value={form.WIYATHA_16_20}
-                    onChange={e => updateField('WIYATHA_16_20', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{formatRupiah(form.WIYATHA_16_20)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Pengabdian 21-25 Tahun</label>
-                  <input
-                    type="number"
-                    value={form.WIYATHA_21_25}
-                    onChange={e => updateField('WIYATHA_21_25', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{formatRupiah(form.WIYATHA_21_25)}</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Pengabdian 26+ Tahun</label>
-                  <input
-                    type="number"
-                    value={form.WIYATHA_26_PLUS}
-                    onChange={e => updateField('WIYATHA_26_PLUS', e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{formatRupiah(form.WIYATHA_26_PLUS)}</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="toolbar" style={{ marginTop: 0 }}>
-              <button onClick={save} disabled={saving}>
-                <Save size={18} /> {saving ? 'Menyimpan...' : 'Simpan Pengaturan'}
-              </button>
-            </div>
-          </>
         )}
+
+        <div className="toolbar">
+          <button onClick={() => { setGroupEditor({ id: null }); setGroupName(''); }} disabled={busy}>
+            <Plus size={17} /> Tambah Kelompok Bisyaroh
+          </button>
+        </div>
+
+        {groupEditor && (
+          <div className="card" style={{ padding: 20, marginBottom: 22, border: '2px solid var(--primary-200)' }}>
+            <div style={{ fontWeight: 800, marginBottom: 12 }}>{groupEditor.id ? 'Edit Kelompok' : 'Tambah Kelompok Bisyaroh'}</div>
+            <div className="toolbar" style={{ marginBottom: 0 }}>
+              <input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="Contoh: Bisyaroh Tahfidz" style={{ minWidth: 280 }} />
+              <button onClick={saveGroup} disabled={busy || !groupName.trim()}><Save size={17} /> Simpan</button>
+              <button className="outline" onClick={() => setGroupEditor(null)}><X size={17} /> Batal</button>
+            </div>
+          </div>
+        )}
+
+        {rateEditor && activeGroup && (
+          <div className="card" style={{ padding: 20, marginBottom: 22, border: '2px solid var(--primary-200)' }}>
+            <div style={{ fontWeight: 800, marginBottom: 14 }}>{rateEditor.id ? 'Edit' : 'Tambah'} Rate — {activeGroup.name}</div>
+            <div className="grid grid-2" style={{ gap: 14 }}>
+              <label className="form-group"><span className="form-label">Nama Rate</span><input value={rateForm.name} onChange={(e) => setRateForm((p) => ({ ...p, name: e.target.value }))} /></label>
+              <label className="form-group"><span className="form-label">Nominal</span><input type="number" min="0" value={rateForm.nominal} onChange={(e) => setRateForm((p) => ({ ...p, nominal: e.target.value }))} /><small>{formatRupiah(rateForm.nominal)}</small></label>
+              <label className="form-group"><span className="form-label">Satuan</span><input value={rateForm.unit} onChange={(e) => setRateForm((p) => ({ ...p, unit: e.target.value }))} placeholder="per jam / per hari / per bulan" /></label>
+              {(activeGroup.code === 'bisyaroh' || activeGroup.code === 'transport') && (
+                <label className="form-group">
+                  <span className="form-label">Kode Penerapan</span>
+                  <input disabled={Boolean(rateForm.configKey && !rateForm.configKey.startsWith('CUSTOM_'))} value={rateForm.matchValue} onChange={(e) => setRateForm((p) => ({ ...p, matchValue: e.target.value }))} placeholder="DEFAULT atau klasifikasi guru" />
+                  <small style={{ color: 'var(--muted)' }}>Gunakan DEFAULT untuk tarif umum; lainnya harus sama dengan klasifikasi guru.</small>
+                </label>
+              )}
+              {activeGroup.code === 'wiyathabakti' && (
+                <>
+                  <label className="form-group"><span className="form-label">Minimal Tahun</span><input type="number" min="0" value={rateForm.minYears} onChange={(e) => setRateForm((p) => ({ ...p, minYears: e.target.value }))} /></label>
+                  <label className="form-group"><span className="form-label">Maksimal Tahun</span><input type="number" min="0" value={rateForm.maxYears} onChange={(e) => setRateForm((p) => ({ ...p, maxYears: e.target.value }))} placeholder="Kosongkan jika tanpa batas" /></label>
+                </>
+              )}
+            </div>
+            <div className="toolbar" style={{ marginTop: 18, marginBottom: 0 }}>
+              <button onClick={saveRate} disabled={busy || !rateForm.name.trim()}><Save size={17} /> Simpan Rate</button>
+              <button className="outline" onClick={() => setRateEditor(null)}><X size={17} /> Batal</button>
+            </div>
+          </div>
+        )}
+
+        {loading ? <div className="empty">Memuat pengaturan...</div> : groups.map((group) => {
+          const Icon = groupIcon(group.code);
+          return (
+            <section key={group.id} className="card" style={{ padding: 22, marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                <Icon size={21} color="var(--primary-600)" />
+                <strong style={{ fontSize: 17 }}>{group.name}</strong>
+                {group.isCore && <span className="badge info">Kelompok Utama</span>}
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                  {!group.isCore && <button className="outline sm" onClick={() => { setGroupEditor({ id: group.id }); setGroupName(group.name); }}><Edit3 size={15} /> Edit Kelompok</button>}
+                  {!group.isCore && <button className="danger sm" onClick={() => window.confirm(`Hapus kelompok ${group.name} beserta seluruh ratenya?`) && run(() => api.delete(`/master/bisyaroh-rate-groups/${group.id}`), 'Kelompok berhasil dihapus.')}><Trash2 size={15} /> Hapus</button>}
+                  <button className="sm" onClick={() => openAddRate(group)}><Plus size={15} /> Tambah Rate</button>
+                </div>
+              </div>
+
+              {group.code.startsWith('custom_') && <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 12 }}>Kelompok tambahan adalah katalog tarif. Nominal baru masuk perhitungan setelah mempunyai sumber jumlah dan penerima.</div>}
+              <div style={{ overflowX: 'auto' }}>
+                <table className="table">
+                  <thead><tr><th>Nama Rate</th><th>Aturan</th><th>Satuan</th><th>Nominal</th><th>Aksi</th></tr></thead>
+                  <tbody>
+                    {group.rates.length === 0 && <tr><td colSpan="5" className="empty">Belum ada rate.</td></tr>}
+                    {group.rates.map((rate) => {
+                      const rule = group.code === 'wiyathabakti'
+                        ? `${rate.minYears ?? 0}–${rate.maxYears ?? '∞'} tahun`
+                        : (rate.matchValue || 'Katalog/manual');
+                      return (
+                        <tr key={rate.id}>
+                          <td><strong>{rate.name}</strong></td><td>{rule}</td><td>{rate.unit || '-'}</td><td><strong>{formatRupiah(rate.nominal)}</strong></td>
+                          <td><div style={{ display: 'flex', gap: 7 }}><button className="outline sm" onClick={() => openEditRate(group, rate)}><Edit3 size={14} /> Edit</button><button className="danger sm" onClick={() => window.confirm(`Hapus rate ${rate.name}? Nilainya tidak akan dipakai pada generate berikutnya.`) && run(() => api.delete(`/master/bisyaroh-rates/${rate.id}`), 'Rate berhasil dihapus.')}><Trash2 size={14} /> Hapus</button></div></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          );
+        })}
       </div>
     </div>
   );

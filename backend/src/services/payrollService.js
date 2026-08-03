@@ -3,6 +3,7 @@ const masterPool = pool.master;
 const { monthKey } = require('../utils/date');
 const { TTLCache } = require('../utils/cache');
 const extracurricularJournals = require('./extracurricularJournalService');
+const masterService = require('./masterService');
 
 const configCache = new TTLCache(30000);
 let expenseIdModeCache = null; // 'auto' | 'string'
@@ -1436,6 +1437,7 @@ async function getDisciplineExpenses(startDate, endDate) {
 
 async function getTeacherAttendanceSummary(startDate, endDate) {
   const configMap = await getConfigMap();
+  const rateCatalog = await masterService.getBisyarohRateCatalog();
 
   const TARIFFS = {
     RATE_MENGAJAR: parseFloat(configMap.get('RATE_MENGAJAR')) || 0,
@@ -1468,6 +1470,27 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
   const attendanceRates = {
     KETERAMPILAN: TARIFFS.RATE_HADIR_KETERAMPILAN || TARIFFS.RATE_HADIR || TARIFFS.RATE_MENGAJAR
   };
+  const bisyarohRateGroup = rateCatalog.find((group) => group.code === 'bisyaroh');
+  let defaultAttendanceRate = 0;
+  let izinRate = TARIFFS.RATE_IZIN;
+  let tidakHadirRate = TARIFFS.RATE_TIDAK_HADIR;
+  (bisyarohRateGroup?.rates || []).forEach((rate) => {
+    const match = String(rate.matchValue || '').trim().toUpperCase();
+    if (match === 'DEFAULT') defaultAttendanceRate = Number(rate.nominal || 0);
+    else if (match === 'IZIN') izinRate = Number(rate.nominal || 0);
+    else if (match === 'TIDAK_HADIR') tidakHadirRate = Number(rate.nominal || 0);
+    else if (match) attendanceRates[match] = Number(rate.nominal || 0);
+  });
+  const transportRateGroup = rateCatalog.find((group) => group.code === 'transport');
+  let defaultTransportRate = TARIFFS.RATE_TRANSPORT;
+  (transportRateGroup?.rates || []).forEach((rate) => {
+    const match = String(rate.matchValue || '').trim().toUpperCase();
+    if (match === 'DEFAULT') defaultTransportRate = Number(rate.nominal || 0);
+    else if (match) transportRates[match] = Number(rate.nominal || 0);
+  });
+  const wiyathabaktiRates = (rateCatalog.find((group) => group.code === 'wiyathabakti')?.rates || [])
+    .filter((rate) => rate.minYears !== null)
+    .sort((a, b) => Number(b.minYears) - Number(a.minYears));
 
   const normalizeClassification = (value) => {
     const normalized = String(value || '')
@@ -1481,6 +1504,10 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     if (normalized === 'keterampilan' || normalized.includes('keterampilan')) return 'KETERAMPILAN';
     if (normalized === 'non sertifikasi' || normalized.includes('non sertifikasi')) return 'NON SERTIFIKASI';
     if (normalized === 'sertifikasi' || normalized.includes('sertifikasi')) return 'SERTIFIKASI';
+    const customClassification = normalized.toUpperCase();
+    if (attendanceRates[customClassification] !== undefined || transportRates[customClassification] !== undefined) {
+      return customClassification;
+    }
     return 'NON SERTIFIKASI';
   };
 
@@ -1707,14 +1734,15 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
       if (manual) totalTransportAcara += manual.transportAcara;
     });
 
-    const pengabdian = tmt > 0 ? currentYear - tmt : 0;
+    const pengabdian = tmt > 0 ? Math.max(0, currentYear - tmt) : 0;
     let wiyathabakti = 0;
-    if (pengabdian >= 26) wiyathabakti = TARIFFS.WIYATHA_26_PLUS;
-    else if (pengabdian >= 21) wiyathabakti = TARIFFS.WIYATHA_21_25;
-    else if (pengabdian >= 16) wiyathabakti = TARIFFS.WIYATHA_16_20;
-    else if (pengabdian >= 11) wiyathabakti = TARIFFS.WIYATHA_11_15;
-    else if (pengabdian >= 6) wiyathabakti = TARIFFS.WIYATHA_6_10;
-    else if (pengabdian >= 1) wiyathabakti = TARIFFS.WIYATHA_1_5;
+    if (tmt > 0) {
+      const matchedWiyathabakti = wiyathabaktiRates.find((rate) => (
+        pengabdian >= Number(rate.minYears)
+        && (rate.maxYears === null || pengabdian <= Number(rate.maxYears))
+      ));
+      wiyathabakti = Number(matchedWiyathabakti?.nominal || 0);
+    }
 
     const isPns = classification === 'PNS';
     const payableTotalHadir = isPns ? 0 : totalHadir;
@@ -1724,11 +1752,11 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     const payableTransportAcara = isPns ? 0 : totalTransportAcara;
     if (isPns) wiyathabakti = 0;
 
-    const rateHadir = isPns ? 0 : (attendanceRates[classification] || TARIFFS.RATE_HADIR || TARIFFS.RATE_MENGAJAR);
-    const rateTransport = isPns ? 0 : (transportRates[classification] || TARIFFS.RATE_TRANSPORT);
+    const rateHadir = isPns ? 0 : (attendanceRates[classification] ?? defaultAttendanceRate);
+    const rateTransport = isPns ? 0 : (transportRates[classification] ?? defaultTransportRate);
     const bisyarohJam = payableTotalHadir * rateHadir;
-    const bisyarohIzin = payableTotalIzin * TARIFFS.RATE_IZIN;
-    const bisyarohTidakHadir = payableTotalTidakHadir * TARIFFS.RATE_TIDAK_HADIR;
+    const bisyarohIzin = payableTotalIzin * izinRate;
+    const bisyarohTidakHadir = payableTotalTidakHadir * tidakHadirRate;
     const bisyarohMengajar = bisyarohJam + bisyarohIzin + bisyarohTidakHadir;
     const bisyarohTransport = payableTransportHari * rateTransport;
     const rawJumlahKegiatan = manualActivityMap.has(String(guruId))
@@ -1758,6 +1786,8 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
       tmt,
       classification,
       rateHadir,
+      rateIzin: isPns ? 0 : izinRate,
+      rateTidakHadir: isPns ? 0 : tidakHadirRate,
       transportRate: rateTransport,
       bisyarohMengajar,
       totalHadir: payableTotalHadir,
@@ -2082,10 +2112,10 @@ async function getPayslipData(startDate, endDate, guruId) {
   const configMap = await getConfigMap();
 
   const rateMengajar = parseFloat(configMap.get('RATE_MENGAJAR')) || 0;
-  const rateHadir = teacherData.rateHadir || parseFloat(configMap.get('RATE_HADIR')) || rateMengajar;
+  const rateHadir = Number(teacherData.rateHadir ?? (parseFloat(configMap.get('RATE_HADIR')) || rateMengajar));
   const rateIzin = parseFloat(configMap.get('RATE_IZIN')) || 0;
   const rateTidakHadir = parseFloat(configMap.get('RATE_TIDAK_HADIR')) || 0;
-  const rateTransport = teacherData.transportRate || parseFloat(configMap.get('RATE_TRANSPORT')) || 0;
+  const rateTransport = Number(teacherData.transportRate ?? (parseFloat(configMap.get('RATE_TRANSPORT')) || 0));
   const currentYear = new Date().getFullYear();
   const pengabdianYears = teacherData.tmt ? Math.max(0, currentYear - Number(teacherData.tmt)) : 0;
   const extraCompensationItems = (teacherData.extraCompensationItems || []).map((item) => ({
@@ -2104,8 +2134,8 @@ async function getPayslipData(startDate, endDate, guruId) {
     tugasTambahan3: teacherData.tugasTambahan3 || '',
     pendapatan: [
       { nama: 'Honor Hadir', qty: teacherData.totalHadir, rate: rateHadir, total: teacherData.totalHadir * rateHadir },
-      { nama: 'Honor Izin', qty: teacherData.totalIzin || 0, rate: rateIzin, total: (teacherData.totalIzin || 0) * rateIzin },
-      { nama: 'Honor Tidak Hadir', qty: teacherData.totalTidakHadir || 0, rate: rateTidakHadir, total: (teacherData.totalTidakHadir || 0) * rateTidakHadir },
+      { nama: 'Honor Izin', qty: teacherData.totalIzin || 0, rate: teacherData.rateIzin ?? rateIzin, total: (teacherData.totalIzin || 0) * (teacherData.rateIzin ?? rateIzin) },
+      { nama: 'Honor Tidak Hadir', qty: teacherData.totalTidakHadir || 0, rate: teacherData.rateTidakHadir ?? rateTidakHadir, total: (teacherData.totalTidakHadir || 0) * (teacherData.rateTidakHadir ?? rateTidakHadir) },
       { nama: 'Transport Harian', qty: teacherData.totalTransportHari, rate: rateTransport, total: teacherData.totalTransportHari * rateTransport },
       { nama: 'Transport Acara', qty: teacherData.totalTransportAcara, rate: rateTransport, total: teacherData.totalTransportAcara * rateTransport },
       { nama: 'Wiyathabakti', qty: 1, rate: teacherData.wiyathabakti, total: teacherData.wiyathabakti },
@@ -2139,11 +2169,11 @@ async function getAllPayslipsData(startDate, endDate, options = {}) {
     tugasTambahan2: t.tugasTambahan2 || '',
     tugasTambahan3: t.tugasTambahan3 || '',
     pendapatan: [
-      { nama: 'Honor Hadir', qty: t.totalHadir, rate: t.rateHadir || rateHadir, total: t.totalHadir * (t.rateHadir || rateHadir) },
-      { nama: 'Honor Izin', qty: t.totalIzin || 0, rate: rateIzin, total: (t.totalIzin || 0) * rateIzin },
-      { nama: 'Honor Tidak Hadir', qty: t.totalTidakHadir || 0, rate: rateTidakHadir, total: (t.totalTidakHadir || 0) * rateTidakHadir },
-      { nama: 'Transport Harian', qty: t.totalTransportHari, rate: t.transportRate || 0, total: t.totalTransportHari * (t.transportRate || 0) },
-      { nama: 'Transport Acara', qty: t.totalTransportAcara, rate: t.transportRate || 0, total: t.totalTransportAcara * (t.transportRate || 0) },
+      { nama: 'Honor Hadir', qty: t.totalHadir, rate: t.rateHadir ?? rateHadir, total: t.totalHadir * (t.rateHadir ?? rateHadir) },
+      { nama: 'Honor Izin', qty: t.totalIzin || 0, rate: t.rateIzin ?? rateIzin, total: (t.totalIzin || 0) * (t.rateIzin ?? rateIzin) },
+      { nama: 'Honor Tidak Hadir', qty: t.totalTidakHadir || 0, rate: t.rateTidakHadir ?? rateTidakHadir, total: (t.totalTidakHadir || 0) * (t.rateTidakHadir ?? rateTidakHadir) },
+      { nama: 'Transport Harian', qty: t.totalTransportHari, rate: t.transportRate ?? 0, total: t.totalTransportHari * (t.transportRate ?? 0) },
+      { nama: 'Transport Acara', qty: t.totalTransportAcara, rate: t.transportRate ?? 0, total: t.totalTransportAcara * (t.transportRate ?? 0) },
       { nama: 'Wiyathabakti', qty: 1, rate: t.wiyathabakti, total: t.wiyathabakti },
       ...(t.extraCompensationItems || []).map((item) => ({
         nama: item.label,

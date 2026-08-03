@@ -260,6 +260,298 @@ async function updateBisyarohSettings(settings) {
   return { success: true, message: 'Pengaturan berhasil disimpan.' };
 }
 
+const CORE_RATE_GROUPS = [
+  { code: 'bisyaroh', name: 'Rate Bisyaroh', sortOrder: 10 },
+  { code: 'transport', name: 'Rate Transport Harian', sortOrder: 20 },
+  { code: 'wiyathabakti', name: 'Rate Wiyatabhakti', sortOrder: 30 }
+];
+
+const CORE_RATE_ITEMS = [
+  ['bisyaroh', 'RATE_HADIR', 'Rate Hadir', 'per jam', 'DEFAULT', null, null, 10],
+  ['bisyaroh', 'RATE_HADIR_KETERAMPILAN', 'Rate Hadir Keterampilan', 'per jam', 'KETERAMPILAN', null, null, 20],
+  ['bisyaroh', 'RATE_IZIN', 'Rate Izin', 'per jam', 'IZIN', null, null, 30],
+  ['bisyaroh', 'RATE_TIDAK_HADIR', 'Rate Tidak Hadir', 'per jam', 'TIDAK_HADIR', null, null, 40],
+  ['transport', 'RATE_TRANSPORT', 'Default', 'per hari', 'DEFAULT', null, null, 10],
+  ['transport', 'RATE_TRANSPORT_PNS', 'PNS', 'per hari', 'PNS', null, null, 20],
+  ['transport', 'RATE_TRANSPORT_INPASSING', 'Inpassing', 'per hari', 'INPASSING', null, null, 30],
+  ['transport', 'RATE_TRANSPORT_SERTIFIKASI', 'Sertifikasi', 'per hari', 'SERTIFIKASI', null, null, 40],
+  ['transport', 'RATE_TRANSPORT_NON_SERTIFIKASI', 'Non Sertifikasi', 'per hari', 'NON SERTIFIKASI', null, null, 50],
+  ['transport', 'RATE_TRANSPORT_KETERAMPILAN', 'Keterampilan', 'per hari', 'KETERAMPILAN', null, null, 60],
+  ['wiyathabakti', 'WIYATHA_1_5', 'Pengabdian 0-5 Tahun', 'per bulan', null, 0, 5, 10],
+  ['wiyathabakti', 'WIYATHA_6_10', 'Pengabdian 6-10 Tahun', 'per bulan', null, 6, 10, 20],
+  ['wiyathabakti', 'WIYATHA_11_15', 'Pengabdian 11-15 Tahun', 'per bulan', null, 11, 15, 30],
+  ['wiyathabakti', 'WIYATHA_16_20', 'Pengabdian 16-20 Tahun', 'per bulan', null, 16, 20, 40],
+  ['wiyathabakti', 'WIYATHA_21_25', 'Pengabdian 21-25 Tahun', 'per bulan', null, 21, 25, 50],
+  ['wiyathabakti', 'WIYATHA_26_PLUS', 'Pengabdian 26+ Tahun', 'per bulan', null, 26, null, 60]
+];
+
+let bisyarohCatalogReady = false;
+
+async function ensureBisyarohRateCatalog() {
+  if (bisyarohCatalogReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS bisyaroh_rate_groups (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      code VARCHAR(80) NOT NULL UNIQUE,
+      name VARCHAR(160) NOT NULL,
+      is_core TINYINT(1) NOT NULL DEFAULT 0,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS bisyaroh_rates (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      group_id INT NOT NULL,
+      config_key VARCHAR(120) NOT NULL UNIQUE,
+      name VARCHAR(160) NOT NULL,
+      unit VARCHAR(80) NULL,
+      match_value VARCHAR(120) NULL,
+      min_years INT NULL,
+      max_years INT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_bisyaroh_rates_group (group_id),
+      CONSTRAINT fk_bisyaroh_rates_group FOREIGN KEY (group_id)
+        REFERENCES bisyaroh_rate_groups(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+  for (const group of CORE_RATE_GROUPS) {
+    await pool.query(
+      `INSERT INTO bisyaroh_rate_groups (code, name, is_core, sort_order)
+       VALUES (?, ?, 1, ?)
+       ON DUPLICATE KEY UPDATE is_core=1, sort_order=VALUES(sort_order)`,
+      [group.code, group.name, group.sortOrder]
+    );
+  }
+  const [seedRows] = await pool.query("SELECT config_value FROM konfigurasi WHERE config_key='BISYAROH_RATE_CATALOG_SEEDED' LIMIT 1");
+  if (!seedRows.length) {
+    const [groups] = await pool.query('SELECT id, code FROM bisyaroh_rate_groups WHERE is_core=1');
+    const groupIds = new Map(groups.map((group) => [group.code, group.id]));
+    for (const [groupCode, configKey, name, unit, matchValue, minYears, maxYears, sortOrder] of CORE_RATE_ITEMS) {
+      await pool.query(
+        `INSERT IGNORE INTO bisyaroh_rates
+           (group_id, config_key, name, unit, match_value, min_years, max_years, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [groupIds.get(groupCode), configKey, name, unit, matchValue, minYears, maxYears, sortOrder]
+      );
+    }
+    await pool.query(
+      `INSERT INTO konfigurasi (config_key, config_value) VALUES ('BISYAROH_RATE_CATALOG_SEEDED', '1')
+       ON DUPLICATE KEY UPDATE config_value='1'`
+    );
+  }
+  bisyarohCatalogReady = true;
+}
+
+function rateGroupCode(name) {
+  const slug = String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 55);
+  return `custom_${slug || 'kelompok'}_${Date.now().toString(36)}`;
+}
+
+function rateConfigKey(name) {
+  const slug = String(name || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 28);
+  return `CUSTOM_${slug || 'RATE'}_${Date.now().toString(36).toUpperCase()}`;
+}
+
+async function assertNoWiyathabaktiOverlap(groupId, minYears, maxYears, excludeId = null) {
+  const [rates] = await pool.query(
+    'SELECT id, name, min_years, max_years FROM bisyaroh_rates WHERE group_id=? AND min_years IS NOT NULL',
+    [groupId]
+  );
+  const overlap = rates.find((rate) => {
+    if (excludeId && Number(rate.id) === Number(excludeId)) return false;
+    const existingMax = rate.max_years === null ? Infinity : Number(rate.max_years);
+    const nextMax = maxYears === null ? Infinity : Number(maxYears);
+    return Number(rate.min_years) <= nextMax && Number(minYears) <= existingMax;
+  });
+  if (overlap) throw new Error(`Rentang tahun bertabrakan dengan rate "${overlap.name}".`);
+}
+
+async function getBisyarohRateCatalog() {
+  await ensureBisyarohRateCatalog();
+  const [groups] = await pool.query(
+    `SELECT g.id, g.code, g.name, g.is_core, g.sort_order,
+            r.id AS rate_id, r.config_key, r.name AS rate_name, r.unit,
+            r.match_value, r.min_years, r.max_years, r.sort_order AS rate_sort_order,
+            COALESCE(k.config_value, 0) AS nominal
+     FROM bisyaroh_rate_groups g
+     LEFT JOIN bisyaroh_rates r ON r.group_id = g.id
+     LEFT JOIN konfigurasi k ON k.config_key = r.config_key
+     ORDER BY g.sort_order, g.name, r.sort_order, r.name`
+  );
+  const result = [];
+  const groupMap = new Map();
+  groups.forEach((row) => {
+    if (!groupMap.has(row.id)) {
+      const group = {
+        id: row.id,
+        code: row.code,
+        name: row.name,
+        isCore: Number(row.is_core) === 1,
+        sortOrder: Number(row.sort_order || 0),
+        rates: []
+      };
+      groupMap.set(row.id, group);
+      result.push(group);
+    }
+    if (row.rate_id) {
+      groupMap.get(row.id).rates.push({
+        id: row.rate_id,
+        configKey: row.config_key,
+        name: row.rate_name,
+        unit: row.unit || '',
+        matchValue: row.match_value || '',
+        minYears: row.min_years === null ? null : Number(row.min_years),
+        maxYears: row.max_years === null ? null : Number(row.max_years),
+        sortOrder: Number(row.rate_sort_order || 0),
+        nominal: Number(row.nominal || 0)
+      });
+    }
+  });
+  return result;
+}
+
+async function addBisyarohRateGroup(data) {
+  await ensureBisyarohRateCatalog();
+  const name = String(data?.name || '').trim();
+  if (!name) throw new Error('Nama kelompok wajib diisi.');
+  const [result] = await pool.query(
+    'INSERT INTO bisyaroh_rate_groups (code, name, is_core, sort_order) VALUES (?, ?, 0, 100)',
+    [rateGroupCode(name), name]
+  );
+  return { success: true, id: result.insertId, message: 'Kelompok bisyaroh berhasil ditambahkan.' };
+}
+
+async function updateBisyarohRateGroup(id, data) {
+  await ensureBisyarohRateCatalog();
+  const name = String(data?.name || '').trim();
+  if (!name) throw new Error('Nama kelompok wajib diisi.');
+  const [groups] = await pool.query('SELECT is_core FROM bisyaroh_rate_groups WHERE id=? LIMIT 1', [id]);
+  if (!groups.length || Number(groups[0].is_core) === 1) throw new Error('Kelompok inti tidak dapat diubah atau kelompok tidak ditemukan.');
+  await pool.query('UPDATE bisyaroh_rate_groups SET name=? WHERE id=?', [name, id]);
+  return { success: true, message: 'Kelompok bisyaroh berhasil diperbarui.' };
+}
+
+async function deleteBisyarohRateGroup(id) {
+  await ensureBisyarohRateCatalog();
+  const [groupRows] = await pool.query('SELECT is_core FROM bisyaroh_rate_groups WHERE id=? LIMIT 1', [id]);
+  if (!groupRows.length) throw new Error('Kelompok tidak ditemukan.');
+  if (Number(groupRows[0].is_core) === 1) throw new Error('Tiga kelompok utama tidak dapat dihapus.');
+  const [rateRows] = await pool.query('SELECT config_key FROM bisyaroh_rates WHERE group_id=?', [id]);
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    for (const rate of rateRows) await connection.query('DELETE FROM konfigurasi WHERE config_key=?', [rate.config_key]);
+    await connection.query('DELETE FROM bisyaroh_rate_groups WHERE id=?', [id]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  invalidateSettingsCache();
+  return { success: true, message: 'Kelompok beserta seluruh rate berhasil dihapus.' };
+}
+
+async function addBisyarohRate(groupId, data) {
+  await ensureBisyarohRateCatalog();
+  const name = String(data?.name || '').trim();
+  if (!name) throw new Error('Nama rate wajib diisi.');
+  const [groupRows] = await pool.query('SELECT code FROM bisyaroh_rate_groups WHERE id=? LIMIT 1', [groupId]);
+  if (!groupRows.length) throw new Error('Kelompok tidak ditemukan.');
+  const minYears = data?.minYears === '' || data?.minYears === null || typeof data?.minYears === 'undefined' ? null : Number(data.minYears);
+  const maxYears = data?.maxYears === '' || data?.maxYears === null || typeof data?.maxYears === 'undefined' ? null : Number(data.maxYears);
+  if (groupRows[0].code === 'wiyathabakti' && (!Number.isInteger(minYears) || minYears < 0)) {
+    throw new Error('Batas minimal tahun wajib berupa angka 0 atau lebih.');
+  }
+  if (maxYears !== null && (!Number.isInteger(maxYears) || maxYears < minYears)) {
+    throw new Error('Batas maksimal tahun tidak valid.');
+  }
+  if (groupRows[0].code === 'wiyathabakti') await assertNoWiyathabaktiOverlap(groupId, minYears, maxYears);
+  const configKey = rateConfigKey(name);
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [result] = await connection.query(
+      `INSERT INTO bisyaroh_rates
+         (group_id, config_key, name, unit, match_value, min_years, max_years, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 100)`,
+      [groupId, configKey, name, String(data?.unit || '').trim() || null,
+        String(data?.matchValue || '').trim().toUpperCase() || null, minYears, maxYears]
+    );
+    await connection.query('INSERT INTO konfigurasi (config_key, config_value) VALUES (?, ?)', [configKey, Number(data?.nominal || 0)]);
+    await connection.commit();
+    invalidateSettingsCache();
+    return { success: true, id: result.insertId, message: 'Rate berhasil ditambahkan.' };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function updateBisyarohRate(id, data) {
+  await ensureBisyarohRateCatalog();
+  const name = String(data?.name || '').trim();
+  if (!name) throw new Error('Nama rate wajib diisi.');
+  const [rows] = await pool.query(
+    `SELECT r.config_key, r.group_id, g.code FROM bisyaroh_rates r
+     JOIN bisyaroh_rate_groups g ON g.id=r.group_id WHERE r.id=? LIMIT 1`, [id]
+  );
+  if (!rows.length) throw new Error('Rate tidak ditemukan.');
+  const minYears = data?.minYears === '' || data?.minYears === null || typeof data?.minYears === 'undefined' ? null : Number(data.minYears);
+  const maxYears = data?.maxYears === '' || data?.maxYears === null || typeof data?.maxYears === 'undefined' ? null : Number(data.maxYears);
+  if (rows[0].code === 'wiyathabakti' && (!Number.isInteger(minYears) || minYears < 0)) throw new Error('Batas minimal tahun tidak valid.');
+  if (maxYears !== null && (!Number.isInteger(maxYears) || maxYears < minYears)) throw new Error('Batas maksimal tahun tidak valid.');
+  if (rows[0].code === 'wiyathabakti') await assertNoWiyathabaktiOverlap(rows[0].group_id, minYears, maxYears, id);
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(
+      `UPDATE bisyaroh_rates SET name=?, unit=?, match_value=?, min_years=?, max_years=? WHERE id=?`,
+      [name, String(data?.unit || '').trim() || null, String(data?.matchValue || '').trim().toUpperCase() || null, minYears, maxYears, id]
+    );
+    await connection.query(
+      `INSERT INTO konfigurasi (config_key, config_value) VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE config_value=VALUES(config_value)`,
+      [rows[0].config_key, Number(data?.nominal || 0)]
+    );
+    await connection.commit();
+    invalidateSettingsCache();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  return { success: true, message: 'Rate berhasil diperbarui.' };
+}
+
+async function deleteBisyarohRate(id) {
+  await ensureBisyarohRateCatalog();
+  const [rows] = await pool.query('SELECT config_key FROM bisyaroh_rates WHERE id=? LIMIT 1', [id]);
+  if (!rows.length) throw new Error('Rate tidak ditemukan.');
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query('DELETE FROM konfigurasi WHERE config_key=?', [rows[0].config_key]);
+    await connection.query('DELETE FROM bisyaroh_rates WHERE id=?', [id]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  invalidateSettingsCache();
+  return { success: true, message: 'Rate berhasil dihapus.' };
+}
+
 async function getTeacherTasksWithRates() {
   const [tasks] = await masterPool.query(
     `SELECT tt.id, tt.teacher_id, tt.title, tt.description, tt.start_date, tt.end_date, tt.status,
@@ -349,6 +641,13 @@ module.exports = {
   deleteOtherData,
   getBisyarohSettings,
   updateBisyarohSettings,
+  getBisyarohRateCatalog,
+  addBisyarohRateGroup,
+  updateBisyarohRateGroup,
+  deleteBisyarohRateGroup,
+  addBisyarohRate,
+  updateBisyarohRate,
+  deleteBisyarohRate,
   getTeacherTasksWithRates,
   upsertTeacherTaskRate
 };
