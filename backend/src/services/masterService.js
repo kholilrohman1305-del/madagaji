@@ -379,7 +379,7 @@ async function getBisyarohRateCatalog() {
             COALESCE(k.config_value, 0) AS nominal
      FROM bisyaroh_rate_groups g
      LEFT JOIN bisyaroh_rates r ON r.group_id = g.id
-     LEFT JOIN konfigurasi k ON k.config_key = r.config_key
+     LEFT JOIN konfigurasi k ON BINARY k.config_key = BINARY r.config_key
      ORDER BY g.sort_order, g.name, r.sort_order, r.name`
   );
   const result = [];
