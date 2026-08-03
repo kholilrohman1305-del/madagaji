@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../api';
 import {
   Receipt, Calendar, Plus, Printer, Users, X, Save,
-  Calculator, Lock, Unlock, RefreshCw, CheckCircle2, Clock3, Search
+  Calculator, Lock, Unlock, RefreshCw, CheckCircle2, Clock3, Search,
+  XCircle, ListChecks
 } from 'lucide-react';
 
 const formatRupiah = (value) => {
@@ -34,6 +35,8 @@ export default function RekapBisyaroh() {
   const [payrollAction, setPayrollAction] = useState('');
   const [showGenerateGuide, setShowGenerateGuide] = useState(false);
   const [search, setSearch] = useState('');
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState([]);
+  const [selectionInitialized, setSelectionInitialized] = useState(false);
   const [activityForm, setActivityForm] = useState({
     tanggal: new Date().toISOString().slice(0, 10),
     nama: '',
@@ -192,14 +195,53 @@ export default function RekapBisyaroh() {
     });
   }, [regularTeacherItems, search]);
 
+  useEffect(() => {
+    if (selectionInitialized || regularTeacherItems.length === 0) return;
+    if (sameMonth && (!payrollState || payrollState.period !== selectedPeriod)) return;
+    const availableIds = new Set(regularTeacherItems.map((item) => String(item.guruId)));
+    const generatedIds = payrollState?.status !== 'not_generated' && Array.isArray(payrollState?.teacherIds)
+      ? payrollState.teacherIds.map(String).filter((id) => availableIds.has(id))
+      : null;
+    setSelectedTeacherIds(generatedIds || regularTeacherItems.map((item) => String(item.guruId)));
+    setSelectionInitialized(true);
+  }, [selectionInitialized, regularTeacherItems, payrollState, sameMonth, selectedPeriod]);
+
+  const resetPeriodSelection = () => {
+    setSelectionInitialized(false);
+    setPayrollState(null);
+  };
+
+  const togglePublishedTeacher = (guruId) => {
+    const id = String(guruId);
+    setSelectedTeacherIds((previous) => previous.includes(id)
+      ? previous.filter((item) => item !== id)
+      : [...previous, id]);
+  };
+
+  const visibleTeacherIds = filteredItems.map((item) => String(item.guruId));
+  const allVisibleSelected = visibleTeacherIds.length > 0 && visibleTeacherIds.every((id) => selectedTeacherIds.includes(id));
+  const toggleAllVisibleTeachers = () => {
+    setSelectedTeacherIds((previous) => {
+      const next = new Set(previous);
+      if (allVisibleSelected) visibleTeacherIds.forEach((id) => next.delete(id));
+      else visibleTeacherIds.forEach((id) => next.add(id));
+      return [...next];
+    });
+  };
+
   const executePayrollAction = async (action, reason = '') => {
     setPayrollAction(action);
     try {
-      const response = await api.post(`/payroll/${action}`, { periode: selectedPeriod, reason });
+      const response = await api.post(`/payroll/${action}`, {
+        periode: selectedPeriod,
+        reason,
+        ...(action === 'generate' ? { teacherIds: selectedTeacherIds } : {})
+      });
       setPayrollState(response.data || null);
       await load();
       return true;
-    } catch (_) {
+    } catch (error) {
+      window.alert(error.response?.data?.message || error.message || 'Proses Bisyaroh gagal.');
       return false;
     } finally {
       setPayrollAction('');
@@ -213,14 +255,18 @@ export default function RekapBisyaroh() {
     }
     const labels = {
       lock: 'mengunci',
-      unlock: 'membuka kunci'
+      unlock: 'membuka kunci',
+      'cancel-generate': 'membatalkan generate'
     };
     let reason = '';
     if (action === 'unlock') {
       reason = String(window.prompt('Tuliskan alasan membuka kunci Bisyaroh:') || '').trim();
       if (!reason) return;
     }
-    if (!window.confirm(`Yakin ingin ${labels[action]} Bisyaroh periode ${selectedPeriod}?`)) return;
+    const confirmation = action === 'cancel-generate'
+      ? `Yakin ingin membatalkan generate Bisyaroh periode ${selectedPeriod}?\n\nSnapshot rincian akan dihapus dan guru kembali melihat Rp0 sampai periode digenerate lagi. Data kehadiran dan data sumber tidak ikut dihapus.`
+      : `Yakin ingin ${labels[action]} Bisyaroh periode ${selectedPeriod}?`;
+    if (!window.confirm(confirmation)) return;
     await executePayrollAction(action, reason);
   };
 
@@ -262,10 +308,10 @@ export default function RekapBisyaroh() {
         <div className="toolbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Calendar size={18} style={{ color: 'var(--muted)' }} />
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            <input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); resetPeriodSelection(); }} />
           </div>
           <span style={{ color: 'var(--muted)' }}>s/d</span>
-          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <input type="date" value={endDate} onChange={e => { setEndDate(e.target.value); resetPeriodSelection(); }} />
           <div style={{ position: 'relative', minWidth: 230, flex: '1 1 230px', maxWidth: 340 }}>
             <Search size={17} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
             <input
@@ -362,6 +408,10 @@ export default function RekapBisyaroh() {
                     <Lock size={18} />
                     {payrollAction === 'lock' ? 'Mengunci...' : 'Kunci Bisyaroh'}
                   </button>
+                  <button className="danger" onClick={() => requestPayrollAction('cancel-generate')} disabled={Boolean(payrollAction)}>
+                    <XCircle size={18} />
+                    {payrollAction === 'cancel-generate' ? 'Membatalkan...' : 'Batalkan Generate'}
+                  </button>
                 </>
               )}
               {payrollState.status === 'locked' && (
@@ -380,10 +430,33 @@ export default function RekapBisyaroh() {
           </div>
         )}
 
+        <div style={{
+          display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10,
+          marginBottom: 14, padding: 13, borderRadius: 12,
+          background: 'var(--primary-50)', border: '1px solid var(--primary-200)'
+        }}>
+          <ListChecks size={20} color="var(--primary-700)" />
+          <div style={{ flex: '1 1 260px' }}>
+            <strong>{selectedTeacherIds.length} guru dipilih</strong>
+            <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 2 }}>
+              Hanya guru yang dicentang yang akan melihat rincian bisyaroh setelah generate.
+            </div>
+          </div>
+          <button className="outline sm" onClick={toggleAllVisibleTeachers} disabled={filteredItems.length === 0}>
+            {allVisibleSelected ? 'Batalkan Pilihan Terlihat' : 'Pilih Semua yang Terlihat'}
+          </button>
+          <button className="outline sm" onClick={() => setSelectedTeacherIds([])} disabled={selectedTeacherIds.length === 0}>
+            Kosongkan
+          </button>
+        </div>
+
         <div style={{ overflowX: 'auto' }}>
           <table className="table">
             <thead>
               <tr>
+                <th style={{ width: 54, textAlign: 'center' }}>
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisibleTeachers} aria-label="Pilih semua guru yang terlihat" />
+                </th>
                 <th>Nama</th>
                 <th>TMT</th>
                 <th>Wiyathabakti</th>
@@ -403,6 +476,14 @@ export default function RekapBisyaroh() {
             <tbody>
               {filteredItems.map((it, idx) => (
                 <tr key={idx}>
+                  <td style={{ textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedTeacherIds.includes(String(it.guruId))}
+                      onChange={() => togglePublishedTeacher(it.guruId)}
+                      aria-label={`Tampilkan rincian bisyaroh ${it.nama}`}
+                    />
+                  </td>
                   <td style={{ fontWeight: 600 }}>{it.nama}</td>
                   <td>{it.tmt || '-'}</td>
                   <td>{formatRupiah(it.wiyathabakti)}</td>
@@ -613,6 +694,7 @@ export default function RekapBisyaroh() {
               <div>
                 <strong style={{ display: 'block', marginBottom: 3 }}>Periksa data sebelum melanjutkan</strong>
                 Pastikan kehadiran, transport, kegiatan, tugas tambahan, honor ekstra, dan tarif periode ini sudah benar.
+                <div style={{ marginTop: 5 }}><strong>{selectedTeacherIds.length} guru</strong> akan menerima rincian bisyaroh.</div>
               </div>
             </div>
 
@@ -621,7 +703,7 @@ export default function RekapBisyaroh() {
                 {
                   no: 1,
                   title: 'Sistem menghitung ulang seluruh komponen',
-                  text: 'MadaFlow mengambil data terbaru pada periode yang dipilih dan menghitung Bisyaroh setiap guru.'
+                  text: 'MadaFlow mengambil data terbaru pada periode yang dipilih dan menghitung Bisyaroh guru yang dicentang.'
                 },
                 {
                   no: 2,
@@ -679,7 +761,8 @@ export default function RekapBisyaroh() {
                 <RefreshCw size={18} /> Jika hasilnya salah, bagaimana mengembalikannya?
               </strong>
               <ol style={{ margin: 0, paddingLeft: 20, color: 'var(--muted)', fontSize: 13, lineHeight: 1.7 }}>
-                <li>Jika belum dikunci: perbaiki data sumber, lalu klik <strong>Generate Ulang</strong>.</li>
+                <li>Jika ingin menarik seluruh rincian dari MyMada, klik <strong>Batalkan Generate</strong>. Data sumber tidak ikut terhapus.</li>
+                <li>Jika belum dikunci: perbaiki data sumber atau pilihan guru, lalu klik <strong>Generate Ulang</strong>.</li>
                 <li>Jika sudah dikunci: klik <strong>Buka Kunci</strong> dan tuliskan alasan koreksi.</li>
                 <li>Perbaiki data, lakukan <strong>Generate Ulang</strong>, periksa hasilnya, lalu kunci kembali.</li>
                 <li>Generate ulang akan mengganti snapshot periode tersebut dan memperbarui tampilan MyMada.</li>
@@ -708,7 +791,7 @@ export default function RekapBisyaroh() {
               >
                 Batal
               </button>
-              <button className="secondary" onClick={confirmGenerate} disabled={Boolean(payrollAction)}>
+              <button className="secondary" onClick={confirmGenerate} disabled={Boolean(payrollAction) || selectedTeacherIds.length === 0}>
                 {payrollState?.status === 'generated' ? <RefreshCw size={18} /> : <Calculator size={18} />}
                 {payrollAction === 'generate'
                   ? 'Sedang Memproses...'

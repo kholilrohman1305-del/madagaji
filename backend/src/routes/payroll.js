@@ -22,7 +22,14 @@ router.get('/period-status', requireRole(['admin']), async (req, res, next) => {
 router.post('/generate', requireRole(['admin']), async (req, res, next) => {
   try {
     if (!req.body?.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
-    res.json(await payroll.generatePayrollPeriod(req.body.periode, req.user));
+    res.json(await payroll.generatePayrollPeriod(req.body.periode, req.user, req.body.teacherIds));
+  } catch (e) { next(e); }
+});
+
+router.post('/cancel-generate', requireRole(['admin']), async (req, res, next) => {
+  try {
+    if (!req.body?.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.cancelPayrollGeneration(req.body.periode));
   } catch (e) { next(e); }
 });
 

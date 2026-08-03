@@ -2215,10 +2215,15 @@ async function getPayrollPeriodStatus(periodValue) {
       unlockedBy: null,
       unlockReason: null,
       teacherCount: 0,
+      teacherIds: [],
       grandTotal: 0
     };
   }
   const row = rows[0];
+  const [teacherRows] = await pool.query(
+    'SELECT guru_id FROM payroll_snapshots WHERE period = ? ORDER BY teacher_name, guru_id',
+    [period]
+  );
   return {
     period: row.period,
     status: row.status === 'locked' ? 'locked' : 'generated',
@@ -2230,11 +2235,12 @@ async function getPayrollPeriodStatus(periodValue) {
     unlockedBy: row.unlocked_by || null,
     unlockReason: row.unlock_reason || null,
     teacherCount: Number(row.teacher_count || 0),
+    teacherIds: teacherRows.map((teacher) => String(teacher.guru_id)),
     grandTotal: Number(row.grand_total || 0)
   };
 }
 
-async function generatePayrollPeriod(periodValue, actor) {
+async function generatePayrollPeriod(periodValue, actor, teacherIdsValue) {
   const { period, startDate, endDate } = payrollPeriodRange(periodValue);
   await ensurePayrollSnapshotTables();
   const current = await getPayrollPeriodStatus(period);
@@ -2244,7 +2250,22 @@ async function generatePayrollPeriod(periodValue, actor) {
     throw error;
   }
 
-  const payslips = await getAllPayslipsData(startDate, endDate, { includeZero: true });
+  const allPayslips = await getAllPayslipsData(startDate, endDate, { includeZero: true });
+  const hasTeacherSelection = Array.isArray(teacherIdsValue);
+  const selectedTeacherIds = new Set((teacherIdsValue || []).map((id) => String(id || '').trim()).filter(Boolean));
+  if (hasTeacherSelection && selectedTeacherIds.size === 0) {
+    const error = new Error('Pilih minimal satu guru yang akan ditampilkan rincian bisyarohnya.');
+    error.status = 400;
+    throw error;
+  }
+  const payslips = hasTeacherSelection
+    ? allPayslips.filter((payslip) => selectedTeacherIds.has(String(payslip.guruId)))
+    : allPayslips;
+  if (hasTeacherSelection && payslips.length === 0) {
+    const error = new Error('Guru yang dipilih tidak ditemukan pada rekap periode ini.');
+    error.status = 400;
+    throw error;
+  }
   const actorName = payrollActorName(actor);
   const generatedAt = new Date();
   const connection = await pool.getConnection();
@@ -2296,6 +2317,39 @@ async function generatePayrollPeriod(periodValue, actor) {
     message: current.status === 'generated'
       ? `Bisyaroh ${period} berhasil digenerate ulang.`
       : `Bisyaroh ${period} berhasil digenerate.`,
+    ...(await getPayrollPeriodStatus(period))
+  };
+}
+
+async function cancelPayrollGeneration(periodValue) {
+  const { period } = payrollPeriodRange(periodValue);
+  await ensurePayrollSnapshotTables();
+  const current = await getPayrollPeriodStatus(period);
+  if (current.status === 'not_generated') {
+    const error = new Error('Bisyaroh periode ini belum pernah digenerate.');
+    error.status = 409;
+    throw error;
+  }
+  if (current.status === 'locked') {
+    const error = new Error('Bisyaroh masih terkunci. Buka kunci terlebih dahulu sebelum membatalkan generate.');
+    error.status = 409;
+    throw error;
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query('DELETE FROM payroll_snapshots WHERE period = ?', [period]);
+    await connection.query('DELETE FROM payroll_periods WHERE period = ?', [period]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  return {
+    success: true,
+    message: `Generate Bisyaroh ${period} berhasil dibatalkan. Rincian guru kembali disembunyikan.`,
     ...(await getPayrollPeriodStatus(period))
   };
 }
@@ -2432,6 +2486,7 @@ module.exports = {
   getAllPayslipsData,
   getPayrollPeriodStatus,
   generatePayrollPeriod,
+  cancelPayrollGeneration,
   lockPayrollPeriod,
   unlockPayrollPeriod,
   getPayrollSnapshotPayslip,
