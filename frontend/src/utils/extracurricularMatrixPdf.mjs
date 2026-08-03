@@ -22,9 +22,10 @@ function lineHeight(fontSize, multiplier = 1.15) {
 }
 
 export async function createExtracurricularMatrixPdf(rows = [], period = '') {
-  const scheduledRows = rows.filter((row) => (
-    DAYS.includes(row.day) && row.startTime && row.endTime
-  ));
+  const scheduledRows = rows.flatMap((row) => {
+    const selected = new Set(String(row.day || '').split(',').map((day) => day.trim()).filter(Boolean));
+    return DAYS.filter((day) => selected.has(day)).map((day) => ({ ...row, day }));
+  }).filter((row) => row.startTime && row.endTime);
   const timeSlots = [...new Set(scheduledRows.map(
     (row) => `${row.startTime}-${row.endTime}`
   ))].sort((left, right) => left.localeCompare(right));
@@ -99,7 +100,8 @@ export async function createExtracurricularMatrixPdf(rows = [], period = '') {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(71, 85, 105);
   doc.setFontSize(8.5);
-  doc.text(`Periode ${periodLabel(period)}  |  ${scheduledRows.length} kegiatan aktif`, margin, titleY + 5);
+  const activeExtraCount = new Set(scheduledRows.map((row) => String(row.extracurricularId))).size;
+  doc.text(`Periode ${periodLabel(period)}  |  ${activeExtraCount} kegiatan aktif`, margin, titleY + 5);
   doc.setDrawColor(37, 99, 235);
   doc.setLineWidth(1.1);
   doc.line(margin, titleY + 9, pageWidth - margin, titleY + 9);

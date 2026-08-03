@@ -106,18 +106,27 @@ export default function SettingBisyaroh() {
         </div>
 
         {groupEditor && (
-          <div className="card" style={{ padding: 20, marginBottom: 22, border: '2px solid var(--primary-200)' }}>
-            <div style={{ fontWeight: 800, marginBottom: 12 }}>{groupEditor.id ? 'Edit Kelompok' : 'Tambah Kelompok Bisyaroh'}</div>
-            <div className="toolbar" style={{ marginBottom: 0 }}>
-              <input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="Contoh: Bisyaroh Tahfidz" style={{ minWidth: 280 }} />
-              <button onClick={saveGroup} disabled={busy || !groupName.trim()}><Save size={17} /> Simpan</button>
-              <button className="outline" onClick={() => setGroupEditor(null)}><X size={17} /> Batal</button>
+          <div className="modal-backdrop" onMouseDown={() => !busy && setGroupEditor(null)}>
+            <div className="modal" onMouseDown={(event) => event.stopPropagation()}>
+              <div className="modal-header">
+                <h3 className="modal-title"><Plus size={22} /> {groupEditor.id ? 'Edit Kelompok Bisyaroh' : 'Tambah Kelompok Bisyaroh'}</h3>
+                <button className="modal-close" onClick={() => setGroupEditor(null)} disabled={busy} aria-label="Tutup"><X size={20} /></button>
+              </div>
+              <label className="form-group">
+                <span className="form-label">Nama Kelompok</span>
+                <input autoFocus value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="Contoh: Bisyaroh Tahfidz" style={{ width: '100%' }} />
+              </label>
+              <div className="toolbar" style={{ marginTop: 20, marginBottom: 0, justifyContent: 'flex-end' }}>
+                <button className="outline" onClick={() => setGroupEditor(null)} disabled={busy}>Batal</button>
+                <button onClick={saveGroup} disabled={busy || !groupName.trim()}><Save size={17} /> {busy ? 'Menyimpan...' : 'Simpan Kelompok'}</button>
+              </div>
             </div>
           </div>
         )}
 
         {rateEditor && activeGroup && (
-          <div className="card" style={{ padding: 20, marginBottom: 22, border: '2px solid var(--primary-200)' }}>
+          <div className="modal-backdrop" onMouseDown={() => !busy && setRateEditor(null)}>
+          <div className="modal" style={{ width: 'min(720px, calc(100vw - 24px))' }} onMouseDown={(event) => event.stopPropagation()}>
             <div style={{ fontWeight: 800, marginBottom: 14 }}>{rateEditor.id ? 'Edit' : 'Tambah'} Rate — {activeGroup.name}</div>
             <div className="grid grid-2" style={{ gap: 14 }}>
               <label className="form-group"><span className="form-label">Nama Rate</span><input value={rateForm.name} onChange={(e) => setRateForm((p) => ({ ...p, name: e.target.value }))} /></label>
@@ -141,6 +150,7 @@ export default function SettingBisyaroh() {
               <button onClick={saveRate} disabled={busy || !rateForm.name.trim()}><Save size={17} /> Simpan Rate</button>
               <button className="outline" onClick={() => setRateEditor(null)}><X size={17} /> Batal</button>
             </div>
+          </div>
           </div>
         )}
 

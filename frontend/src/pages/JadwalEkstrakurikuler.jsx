@@ -7,6 +7,13 @@ import { downloadExtracurricularMatrixPdf } from '../utils/extracurricularMatrix
 
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
+function expandScheduleDays(rows) {
+  return rows.flatMap((row) => {
+    const selected = new Set(String(row.day || '').split(',').map((day) => day.trim()).filter(Boolean));
+    return DAYS.filter((day) => selected.has(day)).map((day) => ({ ...row, day }));
+  });
+}
+
 function ScheduleTile({ item, colorMap, compact = false }) {
   const color = colorForExtra(item, colorMap);
   return (
@@ -58,26 +65,27 @@ export default function JadwalEkstrakurikuler() {
     load();
   }, [period]);
 
+  const scheduleRows = useMemo(() => expandScheduleDays(rows), [rows]);
   const grouped = useMemo(() => DAYS.map((day) => ({
     day,
-    items: rows
+    items: scheduleRows
       .filter((row) => row.day === day)
       .sort((a, b) => `${a.startTime}-${a.name}`.localeCompare(`${b.startTime}-${b.name}`, 'id'))
-  })), [rows]);
-  const timeSlots = useMemo(() => [...new Set(rows
+  })), [scheduleRows]);
+  const timeSlots = useMemo(() => [...new Set(scheduleRows
     .filter((row) => row.startTime && row.endTime)
     .map((row) => `${row.startTime}-${row.endTime}`))]
-    .sort((a, b) => a.localeCompare(b)), [rows]);
+    .sort((a, b) => a.localeCompare(b)), [scheduleRows]);
   const matrix = useMemo(() => {
     const result = new Map();
-    rows.forEach((row) => {
+    scheduleRows.forEach((row) => {
       if (!row.startTime || !row.endTime || !DAYS.includes(row.day)) return;
       const key = `${row.day}|${row.startTime}-${row.endTime}`;
       if (!result.has(key)) result.set(key, []);
       result.get(key).push(row);
     });
     return result;
-  }, [rows]);
+  }, [scheduleRows]);
   const totalMeetings = rows.reduce((sum, row) => sum + Number(row.meetings || 0), 0);
   const activeDays = grouped.filter((group) => group.items.length).length;
   const colorMap = useMemo(() => buildExtraColorMap(rows), [rows]);

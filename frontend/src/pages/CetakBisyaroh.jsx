@@ -149,8 +149,11 @@ export default function CetakBisyaroh() {
     it.expenseType === 'discipline' &&
     matchesSearch(it.nama, it.teacherName, it.keterangan)
   );
+  const getDisciplineTotal = (item) => Math.abs(
+    Number(item.jumlah ?? item.jumlahHadir ?? 0) * Number(item.nominal || 0)
+  );
   const totalExtracurricular = extracurricularItems.reduce((sum, it) => sum + Math.abs(Number(it.totalNominal || it.totalBisyaroh || 0)), 0);
-  const totalDiscipline = disciplineItems.reduce((sum, it) => sum + Math.abs(Number(it.totalNominal || it.totalBisyaroh || 0)), 0);
+  const totalDiscipline = disciplineItems.reduce((sum, it) => sum + getDisciplineTotal(it), 0);
   const kepalaMadrasahName = findTeacherByTask(allTeacherItems, 'kepala madrasah');
   const bendaharaName = findTeacherByTask(allTeacherItems, 'bendahara');
   const totalRows = totalData ? [
@@ -394,7 +397,7 @@ export default function CetakBisyaroh() {
                         <td className="text-left">{item.nama}</td>
                         <td>{item.jumlah ?? 0}</td>
                         <td>{formatRupiah(item.nominal)}</td>
-                        <td style={{ fontWeight: 700 }}>{formatRupiah(Math.abs(Number(item.totalNominal || item.totalBisyaroh || 0)))}</td>
+                        <td style={{ fontWeight: 700 }}>{formatRupiah(getDisciplineTotal(item))}</td>
                         <td className="print-ttd text-left">{idx + 1}</td>
                       </tr>
                     ))}

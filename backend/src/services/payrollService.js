@@ -1881,8 +1881,8 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
     honorTugas: '-',
     jumlah: exp.jumlahHadir || 0,
     nominal: exp.nominal || 0,
-    totalNominal: exp.jumlahDiterima || ((exp.jumlahHadir || 0) * (exp.nominal || 0)),
-    totalBisyaroh: -Math.abs(exp.jumlahDiterima || exp.nominal || 0),
+    totalNominal: (Number(exp.jumlahHadir) || 0) * (Number(exp.nominal) || 0),
+    totalBisyaroh: -Math.abs((Number(exp.jumlahHadir) || 0) * (Number(exp.nominal) || 0)),
     isExpense: true,
     expenseType: 'discipline',
     tanggal: exp.tanggal
