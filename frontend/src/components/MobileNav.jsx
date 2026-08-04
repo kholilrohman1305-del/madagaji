@@ -4,7 +4,7 @@ import {
   LayoutDashboard, CalendarCheck, FileText, CalendarClock, LayoutGrid,
   Users, GraduationCap, School, BookOpen, Receipt, Printer, Wallet,
   ClipboardList, PieChart, Settings, UserCog, BarChart3, Wand2,
-  UserCheck, LogOut, X, UserRound
+  UserCheck, LogOut, X, UserRound, WalletCards
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -30,6 +30,7 @@ export default function MobileNav() {
     { to: '/detail-guru',      label: 'Detail Jadwal',    icon: UserCog,         admin: true },
     { to: '/rekap-bisyaroh',   label: 'Rekap Bisyaroh',   icon: Receipt,         admin: true },
     { to: '/cetak-bisyaroh',   label: 'Cetak Bisyaroh',   icon: Printer,         admin: true },
+    { to: '/pembayaran-bisyaroh', label: 'Pembayaran',     icon: WalletCards,     admin: true },
     { to: '/pengeluaran-lain', label: 'Pengeluaran',      icon: Wallet,          admin: true },
     { to: '/ekstrakurikuler',  label: 'Honor Ekstra',      icon: ClipboardList,   admin: true },
     { to: '/kedisiplinan',     label: 'Kedisiplinan',     icon: ClipboardList,   admin: true },

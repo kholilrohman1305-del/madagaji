@@ -15,6 +15,7 @@ export default function PengeluaranLain() {
   const [form, setForm] = useState({
     periode: new Date().toISOString().slice(0, 7),
     kategori: '',
+    penerima: '',
     jumlah: 1,
     nominal: 0
   });
@@ -24,6 +25,7 @@ export default function PengeluaranLain() {
     id: '',
     tanggal: '',
     kategori: '',
+    penerima: '',
     jumlah: 1,
     nominal: 0,
     keterangan: ''
@@ -61,13 +63,13 @@ export default function PengeluaranLain() {
     const payload = {
       tanggal,
       kategori: form.kategori,
-      penerima: '',
+      penerima: form.penerima,
       jumlah: form.jumlah,
       nominal: form.nominal,
       keterangan: `Periode ${form.periode}`
     };
     await api.post('/payroll/expenses', payload);
-    setForm({ ...form, kategori: '', jumlah: 1, nominal: 0 });
+    setForm({ ...form, kategori: '', penerima: '', jumlah: 1, nominal: 0 });
     setShowModal(false);
     const firstDay = `${form.periode}-01`;
     const [y, m] = form.periode.split('-').map(Number);
@@ -82,6 +84,7 @@ export default function PengeluaranLain() {
       id: row.id,
       tanggal: row.tanggal ? String(row.tanggal).slice(0, 10) : '',
       kategori: row.kategori || '',
+      penerima: row.penerima || '',
       jumlah: row.jumlah ?? 1,
       nominal: row.nominal ?? 0,
       keterangan: row.keterangan || ''
@@ -150,6 +153,7 @@ export default function PengeluaranLain() {
       id: it.id,
       tanggal: String(it.tanggal || '').slice(0, 10),
       kategori: it.kategori || '-',
+      penerima: it.penerima || '-',
       jumlah: it.jumlah ?? 1,
       nominal: Number(it.nominal) || 0,
       total: ((Number(it.jumlah) || 0) * (Number(it.nominal) || 0))
@@ -185,6 +189,7 @@ export default function PengeluaranLain() {
             <tr>
               <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">Tanggal</th>
               <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">Kategori</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;">Penerima</th>
               <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Jumlah</th>
               <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Nominal</th>
               <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">Total</th>
@@ -195,6 +200,7 @@ export default function PengeluaranLain() {
               <tr>
                 <td style="border: 1px solid #d1d5db; padding: 8px;">${item.tanggal}</td>
                 <td style="border: 1px solid #d1d5db; padding: 8px;">${item.kategori}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px;">${item.penerima}</td>
                 <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">${item.jumlah}</td>
                 <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">${currency.format(item.nominal)}</td>
                 <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right; font-weight: 700;">${currency.format(item.total)}</td>
@@ -258,6 +264,7 @@ export default function PengeluaranLain() {
               </th>
               <th>Tanggal</th>
               <th>Kategori</th>
+              <th>Penerima</th>
               <th>Jumlah</th>
               <th>Nominal</th>
               <th>Total</th>
@@ -278,6 +285,7 @@ export default function PengeluaranLain() {
                 </td>
                 <td>{String(it.tanggal || '').slice(0, 10)}</td>
                 <td>{it.kategori}</td>
+                <td>{it.penerima || <span style={{ color: 'var(--danger)', fontWeight: 700 }}>Belum diisi</span>}</td>
                 <td>{it.jumlah ?? 1}</td>
                 <td style={{ fontWeight: 600 }}>
                   {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })
@@ -327,6 +335,15 @@ export default function PengeluaranLain() {
                 />
               </div>
               <div className="form-group">
+                <label className="form-label">Nama Penerima</label>
+                <input
+                  value={form.penerima}
+                  onChange={e => setForm({ ...form, penerima: e.target.value })}
+                  placeholder="Nama orang atau instansi tujuan transfer"
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div className="form-group">
                 <label className="form-label">Nominal</label>
                 <input type="number" value={form.nominal} onChange={e => setForm({ ...form, nominal: e.target.value })} style={{ width: '100%' }} />
               </div>
@@ -336,7 +353,7 @@ export default function PengeluaranLain() {
               </div>
             </div>
             <div className="toolbar" style={{ marginTop: 20, marginBottom: 0 }}>
-              <button onClick={add} disabled={!form.periode || !form.kategori}>
+              <button onClick={add} disabled={!form.periode || !form.kategori || !form.penerima.trim()}>
                 <Save size={18} /> Simpan
               </button>
               <button className="outline" onClick={() => setShowModal(false)}>Batal</button>
@@ -369,6 +386,15 @@ export default function PengeluaranLain() {
                 />
               </div>
               <div className="form-group">
+                <label className="form-label">Nama Penerima</label>
+                <input
+                  value={editForm.penerima}
+                  onChange={e => setEditForm({ ...editForm, penerima: e.target.value })}
+                  placeholder="Nama orang atau instansi tujuan transfer"
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div className="form-group">
                 <label className="form-label">Nominal</label>
                 <input type="number" value={editForm.nominal} onChange={e => setEditForm({ ...editForm, nominal: e.target.value })} style={{ width: '100%' }} />
               </div>
@@ -382,7 +408,7 @@ export default function PengeluaranLain() {
               </div>
             </div>
             <div className="toolbar" style={{ marginTop: 20, marginBottom: 0 }}>
-              <button onClick={saveEdit} disabled={!editForm.tanggal || !editForm.kategori}>
+              <button onClick={saveEdit} disabled={!editForm.tanggal || !editForm.kategori || !editForm.penerima.trim()}>
                 <Save size={18} /> Simpan
               </button>
               <button className="outline" onClick={() => setShowEditModal(false)}>Batal</button>

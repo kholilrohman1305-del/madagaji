@@ -1,5 +1,6 @@
 const express = require('express');
 const payroll = require('../services/payrollService');
+const payrollPayments = require('../services/payrollPaymentService');
 const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
@@ -45,6 +46,33 @@ router.post('/unlock', requireRole(['admin']), async (req, res, next) => {
     if (!req.body?.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
     if (!String(req.body?.reason || '').trim()) return res.status(400).json({ success: false, message: 'Alasan membuka kunci wajib diisi.' });
     res.json(await payroll.unlockPayrollPeriod(req.body.periode, req.user, req.body.reason));
+  } catch (e) { next(e); }
+});
+
+router.get('/payments', requireRole(['admin']), async (req, res, next) => {
+  try {
+    if (!req.query.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payrollPayments.getPaymentBatch(req.query.periode));
+  } catch (e) { next(e); }
+});
+
+router.post('/payments/prepare', requireRole(['admin']), async (req, res, next) => {
+  try {
+    if (!req.body?.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payrollPayments.preparePaymentBatch(req.body.periode, req.user));
+  } catch (e) { next(e); }
+});
+
+router.put('/payments/account', requireRole(['admin']), async (req, res, next) => {
+  try {
+    res.json(await payrollPayments.saveRecipientAccount(req.body || {}, req.user));
+  } catch (e) { next(e); }
+});
+
+router.put('/payments/status', requireRole(['admin']), async (req, res, next) => {
+  try {
+    if (!req.body?.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payrollPayments.updatePaymentRecipients(req.body.periode, req.body.items, req.user));
   } catch (e) { next(e); }
 });
 

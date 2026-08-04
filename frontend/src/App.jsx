@@ -38,6 +38,7 @@ import DetailGuru from './pages/DetailGuru.jsx';
 import DetailMapel from './pages/DetailMapel.jsx';
 import LandingHub from './pages/LandingHub.jsx';
 import JadwalEkstrakurikuler from './pages/JadwalEkstrakurikuler.jsx';
+import PembayaranBisyaroh from './pages/PembayaranBisyaroh.jsx';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -100,6 +101,7 @@ export default function App() {
                     <Route path="/jadwal-kelas" element={<JadwalKelas />} />
                     <Route path="/setting-bisyaroh" element={<RoleRoute roles={['admin']}><SettingBisyaroh /></RoleRoute>} />
                     <Route path="/cetak-bisyaroh" element={<RoleRoute roles={['admin']}><CetakBisyaroh /></RoleRoute>} />
+                    <Route path="/pembayaran-bisyaroh" element={<RoleRoute roles={['admin']}><PembayaranBisyaroh /></RoleRoute>} />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/users" element={<RoleRoute roles={['admin']}><Users /></RoleRoute>} />
                   </Routes>

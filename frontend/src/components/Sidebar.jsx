@@ -24,7 +24,8 @@ import {
   PanelLeftClose,
   LayoutGrid,
   UserCog,
-  CalendarDays
+  CalendarDays,
+  WalletCards
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -92,6 +93,7 @@ export default function Sidebar({ hidden, onToggle }) {
         <div className="nav-title">Bisyaroh</div>
         {user?.role === 'admin' && <LinkItem to="/rekap-bisyaroh" label="Rekap Bisyaroh" icon={Receipt} />}
         {user?.role === 'admin' && <LinkItem to="/cetak-bisyaroh" label="Cetak Bisyaroh" icon={Printer} />}
+        {user?.role === 'admin' && <LinkItem to="/pembayaran-bisyaroh" label="Pembayaran Bisyaroh" icon={WalletCards} />}
         <LinkItem to="/slip-gaji" label="Slip Gaji" icon={FileText} />
         {user?.role === 'admin' && <LinkItem to="/pengeluaran-lain" label="Pengeluaran Lain" icon={Wallet} />}
         {user?.role === 'admin' && <LinkItem to="/ekstrakurikuler" label="Honor Ekstrakurikuler" icon={ClipboardList} />}

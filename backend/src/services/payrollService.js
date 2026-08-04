@@ -2242,6 +2242,8 @@ async function getPayrollPeriodStatus(periodValue) {
 
 async function generatePayrollPeriod(periodValue, actor, teacherIdsValue) {
   const { period, startDate, endDate } = payrollPeriodRange(periodValue);
+  const payrollPayments = require('./payrollPaymentService');
+  await payrollPayments.assertPaymentCanReset(period);
   await ensurePayrollSnapshotTables();
   const current = await getPayrollPeriodStatus(period);
   if (current.status === 'locked') {
@@ -2323,6 +2325,8 @@ async function generatePayrollPeriod(periodValue, actor, teacherIdsValue) {
 
 async function cancelPayrollGeneration(periodValue) {
   const { period } = payrollPeriodRange(periodValue);
+  const payrollPayments = require('./payrollPaymentService');
+  await payrollPayments.assertPaymentCanReset(period);
   await ensurePayrollSnapshotTables();
   const current = await getPayrollPeriodStatus(period);
   if (current.status === 'not_generated') {
@@ -2338,6 +2342,9 @@ async function cancelPayrollGeneration(periodValue) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    await connection.query('DELETE FROM payroll_payment_items WHERE period = ?', [period]);
+    await connection.query('DELETE FROM payroll_payment_statuses WHERE period = ?', [period]);
+    await connection.query('DELETE FROM payroll_payment_batches WHERE period = ?', [period]);
     await connection.query('DELETE FROM payroll_snapshots WHERE period = ?', [period]);
     await connection.query('DELETE FROM payroll_periods WHERE period = ?', [period]);
     await connection.commit();
