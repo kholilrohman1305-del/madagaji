@@ -1812,6 +1812,9 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
 
   const otherExpenses = await getOtherExpenses(startDate, endDate);
   const expenseItems = otherExpenses.map(exp => ({
+    rowId: exp.rowId,
+    penerima: exp.penerima,
+    keterangan: exp.keterangan,
     nama: exp.kategori,
     tmt: '-',
     bisyarohMengajar: '-',
@@ -1837,6 +1840,8 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
 
   const extracurricularExpenses = await getExtracurricularExpenses(startDate, endDate);
   const extracurricularItems = extracurricularExpenses.map(exp => ({
+    rowId: exp.id,
+    teacherId: exp.teacherId,
     nama: `Ekstrakurikuler - ${exp.namaEkstra} (${exp.teacherName})`,
     teacherName: exp.teacherName,
     namaEkstra: exp.namaEkstra,
@@ -1865,6 +1870,10 @@ async function getTeacherAttendanceSummary(startDate, endDate) {
 
   const disciplineExpenses = await getDisciplineExpenses(startDate, endDate);
   const disciplineItems = disciplineExpenses.map(exp => ({
+    rowId: exp.id,
+    teacherId: exp.teacherId,
+    teacherName: exp.teacherName,
+    keterangan: exp.keterangan,
     nama: `Kedisiplinan (${exp.teacherName})`,
     tmt: '-',
     bisyarohMengajar: '-',
@@ -1938,7 +1947,10 @@ async function getTotalBisyarohBreakdown(startDate, endDate) {
     .filter((i) => i.expenseType === 'discipline')
     .reduce((t, i) => t + Math.abs(Number(i.totalNominal || i.totalBisyaroh || 0)), 0);
 
-  const totalHonorarium = wiyathabakti + bisyarohMengajar + bisyarohKehadiran + bisyarohTugasTambahan + extraCompensation;
+  // Honor ekstrakurikuler dan kedisiplinan sudah memiliki tabel/rincian sendiri
+  // pada Cetak Bisyaroh. Jangan memasukkannya lagi ke subtotal guru karena akan
+  // membuat Ringkasan Akhir dan nominal transfer menghitung komponen dua kali.
+  const totalHonorarium = wiyathabakti + bisyarohMengajar + bisyarohKehadiran + bisyarohTugasTambahan;
   const totalPengeluaran = pengeluaranLain + pengeluaranEkstrakurikuler + pengeluaranKedisiplinan;
   const total = totalHonorarium + totalPengeluaran;
 

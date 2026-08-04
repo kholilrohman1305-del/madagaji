@@ -219,7 +219,7 @@ export default function PembayaranBisyaroh() {
         <div className="payment-alert danger"><CircleAlert size={20} /><span>Bisyaroh {period} belum digenerate. Lakukan generate di menu Rekap Bisyaroh terlebih dahulu.</span></div>
       )}
       {data?.batch?.sourceChanged && (
-        <div className="payment-alert warning"><CircleAlert size={20} /><span>Bisyaroh sudah digenerate ulang setelah data transfer dibuat. Klik <strong>Buat Ulang Data</strong> sebelum melakukan transfer.</span></div>
+        <div className="payment-alert warning"><CircleAlert size={20} /><span>Data transfer belum memakai hasil terbaru yang sama dengan Rekap/Cetak Bisyaroh. Klik <strong>Buat Ulang Data</strong> sebelum melakukan transfer.</span></div>
       )}
 
       <section className="payment-stats">

@@ -55,12 +55,18 @@ async function ensurePaymentTables() {
       period CHAR(7) PRIMARY KEY,
       status VARCHAR(30) NOT NULL DEFAULT 'draft',
       source_generated_at DATETIME NULL,
+      calculation_version INT NOT NULL DEFAULT 1,
       prepared_at DATETIME NOT NULL,
       prepared_by VARCHAR(100) NOT NULL,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_payment_batch_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`
   );
+  try {
+    await pool.query('ALTER TABLE payroll_payment_batches ADD COLUMN calculation_version INT NOT NULL DEFAULT 1');
+  } catch (error) {
+    if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+  }
   await pool.query(
     `CREATE TABLE IF NOT EXISTS payroll_payment_items (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -144,102 +150,82 @@ function baseTeacherAmount(payload) {
 }
 
 async function collectPaymentItems(periodValue) {
-  const { period, startDate, endDate } = periodRange(periodValue);
-  const [snapshotRows] = await pool.query(
-    `SELECT guru_id, teacher_name, payload_json
-     FROM payroll_snapshots WHERE period=? ORDER BY teacher_name`,
-    [period]
-  );
+  const { startDate, endDate } = periodRange(periodValue);
+  // Gunakan satu-satunya sumber perhitungan yang juga dipakai oleh menu
+  // Rekap dan Cetak Bisyaroh. Snapshot generate tetap menjadi gerbang periode,
+  // tetapi pilihan guru untuk publikasi slip tidak boleh mengurangi daftar transfer.
+  const payrollService = require('./payrollService');
+  const summaryRows = await payrollService.getTeacherAttendanceSummary(startDate, endDate);
   const items = [];
-  snapshotRows.forEach((row) => {
-    const guruId = Number(row.guru_id);
+  summaryRows.filter((row) => !row.isExpense).forEach((row) => {
+    const guruId = Number(row.guruId || 0);
     if (guruId <= -1000000000) return;
-    const payload = JSON.parse(row.payload_json || '{}');
     items.push({
-      recipientKey: `teacher:${row.guru_id}`,
+      recipientKey: `teacher:${row.guruId}`,
       recipientType: 'teacher',
-      recipientName: row.teacher_name || payload.nama || '-',
+      recipientName: row.nama || '-',
       componentType: 'kbm',
       componentLabel: 'Bisyaroh Guru KBM',
-      amount: baseTeacherAmount(payload),
+      amount: baseTeacherAmount(row),
       payload: {
-        mengajar: Number(payload.bisyarohMengajar || 0),
-        transportKehadiran: Number(payload.bisyarohTransport || 0),
-        transportKegiatan: Number(payload.bisyarohTransportKegiatan || 0),
-        tugasTambahan: Number(payload.honorTugas || 0),
-        wiyatabhakti: Number(payload.wiyathabakti || 0)
+        mengajar: Number(row.bisyarohMengajar || 0),
+        transportKehadiran: Number(row.bisyarohTransport || 0),
+        transportKegiatan: Number(row.bisyarohTransportKegiatan || 0),
+        tugasTambahan: Number(row.honorTugas || 0),
+        wiyatabhakti: Number(row.wiyathabakti || 0)
       }
     });
   });
 
-  const [extraRows] = await pool.query(
-    `SELECT id, teacher_id, teacher_name, nama_ekstra, teacher_type, jumlah_hadir, nominal
-     FROM pengeluaran_ekstrakurikuler
-     WHERE tanggal BETWEEN ? AND ?
-     ORDER BY nama_ekstra, teacher_name, id`,
-    [startDate, endDate]
-  );
+  const extraRows = summaryRows.filter((row) => row.isExpense && row.expenseType === 'extracurricular');
   extraRows.forEach((row) => {
-    const recipient = resolveExtraRecipient(row);
+    const recipient = resolveExtraRecipient({ teacher_id: row.teacherId, teacher_name: row.teacherName });
     items.push({
       recipientKey: recipient.key,
       recipientType: recipient.type,
-      recipientName: row.teacher_name || '-',
+      recipientName: row.teacherName || '-',
       componentType: 'extracurricular',
-      componentLabel: `Ekstrakurikuler - ${row.nama_ekstra || 'Ekstra'}`,
-      amount: (Number(row.jumlah_hadir) || 0) * (Number(row.nominal) || 0),
+      componentLabel: `Ekstrakurikuler - ${row.namaEkstra || 'Ekstra'}`,
+      amount: Math.abs(Number(row.totalNominal || row.totalBisyaroh || 0)),
       payload: {
-        rowId: row.id,
-        namaEkstra: row.nama_ekstra || '',
-        jenis: row.teacher_type || '',
-        jumlahHadir: Number(row.jumlah_hadir || 0),
+        rowId: row.rowId,
+        namaEkstra: row.namaEkstra || '',
+        jenis: row.teacherType || '',
+        jumlahHadir: Number(row.jumlah || 0),
         tarif: Number(row.nominal || 0)
       }
     });
   });
 
-  try {
-    const [disciplineRows] = await pool.query(
-      `SELECT id, teacher_id, teacher_name, jumlah_hadir, nominal
-       FROM pengeluaran_kedisiplinan
-       WHERE tanggal BETWEEN ? AND ? ORDER BY teacher_name, id`,
-      [startDate, endDate]
-    );
-    disciplineRows.forEach((row) => {
-      const recipient = resolveExtraRecipient(row);
-      items.push({
-        recipientKey: recipient.key,
-        recipientType: recipient.type,
-        recipientName: row.teacher_name || '-',
-        componentType: 'discipline',
-        componentLabel: 'Kedisiplinan',
-        amount: (Number(row.jumlah_hadir) || 0) * (Number(row.nominal) || 0),
-        payload: {
-          rowId: row.id,
-          jumlah: Number(row.jumlah_hadir || 0),
-          tarif: Number(row.nominal || 0)
-        }
-      });
+  const disciplineRows = summaryRows.filter((row) => row.isExpense && row.expenseType === 'discipline');
+  disciplineRows.forEach((row) => {
+    const recipient = resolveExtraRecipient({ teacher_id: row.teacherId, teacher_name: row.teacherName });
+    items.push({
+      recipientKey: recipient.key,
+      recipientType: recipient.type,
+      recipientName: row.teacherName || '-',
+      componentType: 'discipline',
+      componentLabel: 'Kedisiplinan',
+      amount: Math.abs(Number(row.totalNominal || row.totalBisyaroh || 0)),
+      payload: {
+        rowId: row.rowId,
+        jumlah: Number(row.jumlah || 0),
+        tarif: Number(row.nominal || 0)
+      }
     });
-  } catch (error) {
-    if (error.code !== 'ER_NO_SUCH_TABLE') throw error;
-  }
+  });
 
-  const [expenseRows] = await pool.query(
-    `SELECT id, kategori, penerima, jumlah, nominal, keterangan
-     FROM pengeluaran_lain WHERE tanggal BETWEEN ? AND ? ORDER BY tanggal, id`,
-    [startDate, endDate]
-  );
+  const expenseRows = summaryRows.filter((row) => row.isExpense && row.expenseType === 'other');
   expenseRows.forEach((row) => {
     items.push({
-      recipientKey: expenseRecipientKey(row.penerima, row.id),
+      recipientKey: expenseRecipientKey(row.penerima, row.rowId),
       recipientType: 'expense',
       recipientName: String(row.penerima || '').trim() || 'Penerima belum diisi',
       componentType: 'other_expense',
-      componentLabel: row.kategori || 'Pengeluaran Lain',
-      amount: (Number(row.jumlah) || 0) * (Number(row.nominal) || 0),
+      componentLabel: row.nama || 'Pengeluaran Lain',
+      amount: Math.abs(Number(row.totalNominal || row.totalBisyaroh || 0)),
       payload: {
-        rowId: row.id,
+        rowId: row.rowId,
         jumlah: Number(row.jumlah || 0),
         nominal: Number(row.nominal || 0),
         keterangan: row.keterangan || ''
@@ -278,10 +264,10 @@ async function preparePaymentBatch(periodValue, actor) {
     await connection.query('DELETE FROM payroll_payment_statuses WHERE period=?', [period]);
     await connection.query(
       `INSERT INTO payroll_payment_batches
-         (period, status, source_generated_at, prepared_at, prepared_by)
-       VALUES (?, 'draft', ?, ?, ?)
+         (period, status, source_generated_at, calculation_version, prepared_at, prepared_by)
+       VALUES (?, 'draft', ?, 2, ?, ?)
        ON DUPLICATE KEY UPDATE status='draft', source_generated_at=VALUES(source_generated_at),
-         prepared_at=VALUES(prepared_at), prepared_by=VALUES(prepared_by)`,
+         calculation_version=2, prepared_at=VALUES(prepared_at), prepared_by=VALUES(prepared_by)`,
       [period, payrollRow.generated_at, preparedAt, preparedBy]
     );
     if (items.length) {
@@ -337,7 +323,7 @@ async function getPaymentBatch(periodValue) {
   await ensurePaymentTables();
   const payrollRow = await getPayrollPeriodRow(period);
   const [batchRows] = await pool.query(
-    'SELECT period, status, source_generated_at, prepared_at, prepared_by, updated_at FROM payroll_payment_batches WHERE period=? LIMIT 1',
+    'SELECT period, status, source_generated_at, calculation_version, prepared_at, prepared_by, updated_at FROM payroll_payment_batches WHERE period=? LIMIT 1',
     [period]
   );
   if (!batchRows.length) {
@@ -440,7 +426,10 @@ async function getPaymentBatch(periodValue) {
       sourceGeneratedAt: batchRows[0].source_generated_at,
       preparedAt: batchRows[0].prepared_at,
       preparedBy: batchRows[0].prepared_by,
+      calculationVersion: Number(batchRows[0].calculation_version || 1),
       sourceChanged: Boolean(
+        Number(batchRows[0].calculation_version || 1) < 2
+        ||
         payrollRow?.generated_at && batchRows[0].source_generated_at
         && new Date(payrollRow.generated_at).getTime() !== new Date(batchRows[0].source_generated_at).getTime()
       )
