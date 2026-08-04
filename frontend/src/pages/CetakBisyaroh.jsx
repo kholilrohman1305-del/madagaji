@@ -342,9 +342,10 @@ export default function CetakBisyaroh() {
             {extracurricularItems.length > 0 && (
               <>
                 <div className="cetak-section-title"><Wallet size={18} /> Ekstrakurikuler</div>
-                <table className="table print-show cetak-bisyaroh-expense">
+                <table className="table print-show cetak-bisyaroh-expense cetak-bisyaroh-extra">
                   <thead>
                     <tr>
+                      <th className="center extra-no">No.</th>
                       <th className="text-left">Nama Guru</th>
                       <th className="text-left">Nama Ekstra</th>
                       <th className="text-left">Jenis</th>
@@ -357,6 +358,7 @@ export default function CetakBisyaroh() {
                   <tbody>
                     {extracurricularItems.map((item, idx) => (
                       <tr key={`extra-${idx}`}>
+                        <td className="center extra-no">{idx + 1}</td>
                         <td className="text-left">{item.teacherName || '-'}</td>
                         <td className="text-left">{item.namaEkstra || '-'}</td>
                         <td className="text-left">{EXTRACURRICULAR_TYPE_LABELS[item.teacherType] || '-'}</td>
@@ -367,7 +369,7 @@ export default function CetakBisyaroh() {
                       </tr>
                     ))}
                     <tr className="cetak-grand-row">
-                      <td colSpan="5">TOTAL EKSTRAKURIKULER</td>
+                      <td colSpan="6">TOTAL EKSTRAKURIKULER</td>
                       <td>{formatRupiah(totalExtracurricular)}</td>
                       <td></td>
                     </tr>
