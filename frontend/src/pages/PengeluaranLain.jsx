@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
-import { Wallet, Calendar, Plus, Save, Trash2, X, Edit3, Printer } from 'lucide-react';
+import { Wallet, Calendar, Plus, Save, Trash2, X, Edit3, Printer, Copy } from 'lucide-react';
 import { showConfirm } from '../utils/confirm';
 import { toast } from '../utils/toast';
 
@@ -20,6 +20,8 @@ export default function PengeluaranLain() {
     nominal: 0
   });
   const [showModal, setShowModal] = useState(false);
+  const [copyPrevious, setCopyPrevious] = useState(false);
+  const [copyingPrevious, setCopyingPrevious] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
     id: '',
@@ -59,6 +61,36 @@ export default function PengeluaranLain() {
   };
 
   const add = async () => {
+    if (copyPrevious) {
+      const [year, month] = form.periode.split('-').map(Number);
+      const previousPeriod = `${month === 1 ? year - 1 : year}-${String(month === 1 ? 12 : month - 1).padStart(2, '0')}`;
+      const approved = await showConfirm({
+        title: 'Samakan dengan Bulan Lalu',
+        message: `Salin seluruh pengeluaran periode ${previousPeriod} ke ${form.periode}? Data yang sudah sama tidak akan diduplikasi.`,
+        confirmLabel: 'Ya, Salin Data',
+        icon: 'copy'
+      });
+      if (!approved) return;
+      setCopyingPrevious(true);
+      try {
+        const response = await api.post('/payroll/expenses/copy-previous', { periode: form.periode });
+        const result = response.data || {};
+        if (result.copiedCount > 0) toast.success('Pengeluaran berhasil disalin', result.message);
+        else toast.info('Tidak ada data yang ditambahkan', result.message);
+        const firstDay = `${form.periode}-01`;
+        const lastDay = new Date(year, month, 0).toISOString().slice(0, 10);
+        setStartDate(firstDay);
+        setEndDate(lastDay);
+        setShowModal(false);
+        setCopyPrevious(false);
+        await load({ startDate: firstDay, endDate: lastDay });
+      } catch (error) {
+        toast.error('Pengeluaran gagal disalin', error.response?.data?.message || error.message);
+      } finally {
+        setCopyingPrevious(false);
+      }
+      return;
+    }
     const tanggal = `${form.periode}-01`;
     const payload = {
       tanggal,
@@ -240,7 +272,7 @@ export default function PengeluaranLain() {
           <button className="danger" onClick={bulkDelete} disabled={selectedIds.size === 0}>
             <Trash2 size={18} /> Hapus Terpilih ({selectedIds.size})
           </button>
-          <button className="secondary" onClick={() => setShowModal(true)}>
+          <button className="secondary" onClick={() => { setCopyPrevious(false); setShowModal(true); }}>
             <Plus size={18} /> Tambah Pengeluaran
           </button>
           <button className="outline" onClick={() => printExpenses('selected')} disabled={selectedIds.size === 0}>
@@ -316,7 +348,7 @@ export default function PengeluaranLain() {
           <div className="modal">
             <div className="modal-header">
               <h3 className="modal-title"><Plus size={24} /> Tambah Pengeluaran</h3>
-              <button className="modal-close" onClick={() => setShowModal(false)}>
+              <button className="modal-close" onClick={() => { setShowModal(false); setCopyPrevious(false); }}>
                 <X size={20} />
               </button>
             </div>
@@ -325,6 +357,15 @@ export default function PengeluaranLain() {
                 <label className="form-label">Periode (Bulan)</label>
                 <input type="month" value={form.periode} onChange={e => setForm({ ...form, periode: e.target.value })} style={{ width: '100%' }} />
               </div>
+              <label className={`expense-copy-option${copyPrevious ? ' active' : ''}`}>
+                <input type="checkbox" checked={copyPrevious} onChange={(e) => setCopyPrevious(e.target.checked)} />
+                <span className="expense-copy-icon"><Copy size={19} /></span>
+                <span>
+                  <strong>Samakan dengan bulan lalu</strong>
+                  <small>Salin semua pengeluaran dan abaikan data yang sudah sama.</small>
+                </span>
+              </label>
+              {!copyPrevious && <>
               <div className="form-group">
                 <label className="form-label">Jenis Pengeluaran</label>
                 <input
@@ -351,12 +392,14 @@ export default function PengeluaranLain() {
                 <label className="form-label">Jumlah</label>
                 <input type="number" value={form.jumlah} onChange={e => setForm({ ...form, jumlah: e.target.value })} style={{ width: '100%' }} />
               </div>
+              </>}
             </div>
             <div className="toolbar" style={{ marginTop: 20, marginBottom: 0 }}>
-              <button onClick={add} disabled={!form.periode || !form.kategori || !form.penerima.trim()}>
-                <Save size={18} /> Simpan
+              <button onClick={add} disabled={!form.periode || copyingPrevious || (!copyPrevious && (!form.kategori || !form.penerima.trim()))}>
+                {copyPrevious ? <Copy size={18} /> : <Save size={18} />}
+                {copyingPrevious ? 'Menyalin…' : copyPrevious ? 'Salin Bulan Lalu' : 'Simpan'}
               </button>
-              <button className="outline" onClick={() => setShowModal(false)}>Batal</button>
+              <button className="outline" onClick={() => { setShowModal(false); setCopyPrevious(false); }}>Batal</button>
             </div>
           </div>
         </div>

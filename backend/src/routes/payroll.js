@@ -262,6 +262,13 @@ router.post('/expenses', async (req, res, next) => {
   try { res.json(await payroll.addOtherExpense(req.body)); } catch (e) { next(e); }
 });
 
+router.post('/expenses/copy-previous', requireRole(['admin']), async (req, res, next) => {
+  try {
+    if (!req.body?.periode) return res.status(400).json({ success: false, message: 'periode wajib (YYYY-MM).' });
+    res.json(await payroll.copyPreviousMonthExpenses(req.body.periode));
+  } catch (e) { next(e); }
+});
+
 router.put('/expenses/:id', async (req, res, next) => {
   try { res.json(await payroll.updateOtherExpense({ ...req.body, id: req.params.id })); } catch (e) { next(e); }
 });

@@ -188,7 +188,7 @@ async function ensureRecurringExpensesForMonth(monthStartDate) {
     [monthStart]
   );
   const prevMonthStart = prevMonthStartRows[0]?.prev_month_start;
-  if (!prevMonthStart) return;
+  if (!prevMonthStart) return { sourceCount: 0, existingCount: 0, copiedCount: 0 };
 
   const [prevRows] = await pool.query(
     `SELECT kategori, penerima, jumlah, nominal, keterangan
@@ -196,7 +196,7 @@ async function ensureRecurringExpensesForMonth(monthStartDate) {
      WHERE tanggal BETWEEN ? AND LAST_DAY(?)`,
     [prevMonthStart, prevMonthStart]
   );
-  if (!prevRows.length) return;
+  if (!prevRows.length) return { sourceCount: 0, existingCount: 0, copiedCount: 0 };
 
   const [currentRows] = await pool.query(
     `SELECT kategori, penerima, jumlah, nominal, keterangan
@@ -207,9 +207,31 @@ async function ensureRecurringExpensesForMonth(monthStartDate) {
 
   const currentKeys = new Set(currentRows.map(expenseKey));
   const missingRows = prevRows.filter((row) => !currentKeys.has(expenseKey(row)));
-  if (!missingRows.length) return;
+  if (!missingRows.length) {
+    return { sourceCount: prevRows.length, existingCount: currentRows.length, copiedCount: 0 };
+  }
 
   await clonePrevMonthExpensesTo(monthStart, missingRows);
+  return {
+    sourceCount: prevRows.length,
+    existingCount: currentRows.length,
+    copiedCount: missingRows.length
+  };
+}
+
+async function copyPreviousMonthExpenses(periodValue) {
+  const { period, startDate } = payrollPeriodRange(periodValue);
+  const result = await ensureRecurringExpensesForMonth(startDate);
+  return {
+    success: true,
+    period,
+    ...result,
+    message: result.sourceCount === 0
+      ? 'Bulan sebelumnya belum memiliki data pengeluaran yang dapat disalin.'
+      : result.copiedCount === 0
+        ? 'Seluruh data bulan sebelumnya sudah ada di bulan tujuan. Tidak ada data ganda yang ditambahkan.'
+        : `${result.copiedCount} pengeluaran bulan sebelumnya berhasil disalin ke periode ${period}.`
+  };
 }
 
 async function getOtherExpenses(startDate, endDate) {
@@ -2524,6 +2546,7 @@ module.exports = {
   addOtherExpense,
   updateOtherExpense,
   deleteOtherExpense,
+  copyPreviousMonthExpenses,
   addExtracurricularExpense,
   saveExtracurricularBulk,
   updateExtracurricularExpense,
