@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../api';
-import { Printer, Calendar, Wallet, FileText, Search } from 'lucide-react';
+import { Printer, Calendar, Wallet, FileText, Search, FileSpreadsheet } from 'lucide-react';
+import { exportXlsx } from '../utils/reportExport';
 
 const formatRupiah = (value) => {
   const num = Number(value || 0);
@@ -65,6 +66,7 @@ export default function CetakBisyaroh() {
   const [expenses, setExpenses] = useState([]);
   const [totalData, setTotalData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [exportingXlsx, setExportingXlsx] = useState(false);
   const [search, setSearch] = useState('');
   const debounceRef = useRef(null);
 
@@ -180,6 +182,107 @@ export default function CetakBisyaroh() {
     ? displayedTotalRows.reduce((sum, row) => sum + Number(row.value || 0), 0)
     : (totalData?.total ?? totalRows.reduce((sum, row) => sum + Number(row.value || 0), 0));
 
+  const handleExportXlsx = async () => {
+    if (loading || exportingXlsx) return;
+    setExportingXlsx(true);
+    try {
+      const teacherRows = teacherItems.map((item, index) => {
+        const taskDetails = getTaskDetails(item);
+        return [
+          index + 1,
+          item.nama || '-',
+          item.tmt || '-',
+          Number(item.totalHadir || 0),
+          Number(item.bisyarohMengajar || 0),
+          Number(item.totalTransportHari || 0),
+          Number(item.bisyarohTransport || 0),
+          Number(item.jumlahKegiatan || 0),
+          Number(item.bisyarohTransportKegiatan || 0),
+          taskDetails.map((task) => `${task.title}${task.nominal === null ? '' : ` (${task.nominal})`}`).join('; ') || '-',
+          Number(item.honorTugas || 0),
+          Number(item.wiyathabakti || 0),
+          getTeacherReceivedTotal(item),
+        ];
+      });
+      if (teacherItems.length) {
+        teacherRows.push([
+          '', 'TOTAL', '', totalJamMengajar, totalMengajar,
+          teacherItems.reduce((sum, item) => sum + Number(item.totalTransportHari || 0), 0),
+          teacherItems.reduce((sum, item) => sum + Number(item.bisyarohTransport || 0), 0),
+          teacherItems.reduce((sum, item) => sum + Number(item.jumlahKegiatan || 0), 0),
+          teacherItems.reduce((sum, item) => sum + Number(item.bisyarohTransportKegiatan || 0), 0),
+          '', totalTugas, totalWiyathabakti, totalDiterima,
+        ]);
+      }
+
+      const expenseRows = filteredExpenses.map((item, index) => {
+        const quantity = Number(item.jumlah ?? 1);
+        const nominal = Number(item.nominal || 0);
+        return [index + 1, item.kategori || '-', quantity, nominal, Number(item.totalNominal || (quantity * nominal))];
+      });
+      if (filteredExpenses.length) expenseRows.push(['', 'TOTAL', '', '', totalExpense]);
+
+      const extraRows = extracurricularItems.map((item, index) => [
+        index + 1,
+        item.teacherName || '-',
+        item.namaEkstra || '-',
+        EXTRACURRICULAR_TYPE_LABELS[item.teacherType] || '-',
+        Number(item.jumlah || 0),
+        Number(item.nominal || 0),
+        Math.abs(Number(item.totalNominal || item.totalBisyaroh || 0)),
+      ]);
+      if (extracurricularItems.length) extraRows.push(['', 'TOTAL', '', '', '', '', totalExtracurricular]);
+
+      const disciplineRows = disciplineItems.map((item, index) => [
+        index + 1,
+        item.nama || item.teacherName || '-',
+        Number(item.jumlah ?? item.jumlahHadir ?? 0),
+        Number(item.nominal || 0),
+        getDisciplineTotal(item),
+      ]);
+      if (disciplineItems.length) disciplineRows.push(['', 'TOTAL', '', '', totalDiscipline]);
+
+      const filterLabel = searchNeedle ? search : 'Semua data';
+      await exportXlsx(`cetak-bisyaroh-${startDate}-${endDate}.xlsx`, [
+        {
+          name: 'Informasi',
+          rows: [
+            ['Keterangan', 'Nilai'],
+            ['Periode Mulai', formatDate(startDate)],
+            ['Periode Selesai', formatDate(endDate)],
+            ['Filter Pencarian', filterLabel],
+            ['Tanggal Export', formatDate(new Date().toISOString().slice(0, 10))],
+          ],
+        },
+        {
+          name: 'Penerima Bisyaroh',
+          rows: [[
+            'No.', 'Nama', 'TMT', 'Jam Mengajar', 'Bisyaroh Mengajar',
+            'Hari Transport', 'Transport Kehadiran', 'Jumlah Kegiatan',
+            'Transport Kegiatan', 'Rincian Tugas Tambahan', 'Total Tugas Tambahan',
+            'Wiyatabhakti', 'Jumlah Diterima',
+          ], ...teacherRows],
+        },
+        { name: 'Pengeluaran Lain', rows: [['No.', 'Kategori', 'Jumlah', 'Nominal', 'Total'], ...expenseRows] },
+        { name: 'Ekstrakurikuler', rows: [['No.', 'Nama Guru', 'Nama Ekstra', 'Jenis', 'Jumlah', 'Nominal', 'Total'], ...extraRows] },
+        { name: 'Kedisiplinan', rows: [['No.', 'Nama Guru atau Kategori', 'Jumlah', 'Nominal', 'Total'], ...disciplineRows] },
+        {
+          name: 'Ringkasan Akhir',
+          rows: [
+            ['No.', 'Komponen', 'Nominal'],
+            ...displayedTotalRows.map((row) => [row.no, row.label, Number(row.value || 0)]),
+            ['', 'JUMLAH TOTAL', Number(totalBisyarohValue || 0)],
+          ],
+        },
+      ]);
+    } catch (error) {
+      console.error('Export XLSX Cetak Bisyaroh gagal:', error);
+      window.alert(`Export XLSX gagal: ${error.message || 'Terjadi kesalahan.'}`);
+    } finally {
+      setExportingXlsx(false);
+    }
+  };
+
   return (
     <div>
       <div className="modern-table-card">
@@ -203,6 +306,9 @@ export default function CetakBisyaroh() {
           </div>
           <button onClick={print}>
             <Printer size={18} /> Cetak PDF (Landscape)
+          </button>
+          <button onClick={handleExportXlsx} disabled={loading || exportingXlsx || !totalData}>
+            <FileSpreadsheet size={18} /> {exportingXlsx ? 'Menyiapkan XLSX…' : 'Export XLSX'}
           </button>
         </div>
 
